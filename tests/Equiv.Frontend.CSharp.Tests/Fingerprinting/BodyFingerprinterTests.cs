@@ -1215,8 +1215,9 @@ public sealed class BodyFingerprinterTests
     /// reference that is handed it (<c>Activator.CreateInstance&lt;T&gt;()</c>, <c>Lazy&lt;T&gt;</c>), whose text no fingerprint
     /// holds. Creating the type runs the code it inherits, which reads a type argument of its base list. So the
     /// declaration of that argument is in the text of a body that hands the type to a member of a reference: through
-    /// an interface, a base type, a base type of a base type and a type the base type is nested in. A member that does
-    /// not create the type is no exception: what a member of a reference does with its type parameter is in no text.
+    /// an interface, a base type, a base type of a base type and a type the base type is nested in, and the same for a
+    /// generic type of the solution that is created itself. A member that does not create the type is no exception:
+    /// what a member of a reference does with its type parameter is in no text.
     /// </summary>
     [Theory]
     [InlineData("public int M() => ((W)System.Activator.CreateInstance<K>()).Width();")]
@@ -1227,6 +1228,7 @@ public sealed class BodyFingerprinterTests
     [InlineData("public object M() => System.Activator.CreateInstance<F>();")]
     [InlineData("public object M() => new System.Lazy<System.Tuple<K>>();")]
     [InlineData("public int M(K k) => System.Linq.Enumerable.Count(System.Linq.Enumerable.Repeat(k, 1));")]
+    [InlineData("public object M() => System.Activator.CreateInstance<Box<S>>();")]
     public void ATypeArgumentInABaseListIsInTheTextOfABodyThatHandsTheTypeToAReference(string member)
     {
         AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; }", member + Inheriting);

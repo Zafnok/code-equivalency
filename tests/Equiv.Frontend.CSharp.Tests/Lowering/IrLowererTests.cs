@@ -2713,13 +2713,14 @@ public sealed class IrLowererTests
     /// Ticket P2-168: a reference that hands a member of a reference a class whose base type or interface list hands a
     /// generic type of the solution a type with a layout is the opaque a reference that hands such a class to a member
     /// of the solution is (ticket P2-162): the member can create the class, and the code it inherits reads that type's
-    /// declaration. A class whose base list hands over a class with no layout, or nothing, is handed over in a call, as
-    /// it was.
+    /// declaration, as a generic type of the solution that is created itself does. A class whose base list hands over a
+    /// class with no layout, or nothing, is handed over in a call, as it was.
     /// </summary>
     [Theory]
     [InlineData("static Made M() => Activator.CreateInstance<Made>();", true)]
     [InlineData("static Based M() => Activator.CreateInstance<Based>();", true)]
     [InlineData("static Made M() => new Lazy<Made>().Value;", true)]
+    [InlineData("static object M() => Activator.CreateInstance<Outer<S>>();", true)]
     [InlineData("static Plainest M() => Activator.CreateInstance<Plainest>();", false)]
     [InlineData("static Plainly M() => Activator.CreateInstance<Plainly>();", false)]
     public void AReferenceThatHandsAMemberOfAReferenceAClassIsAnOpaqueWhereItsBaseListHandsOverATypeWithALayout(string member, bool expected)

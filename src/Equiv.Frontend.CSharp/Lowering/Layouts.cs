@@ -84,15 +84,16 @@ internal static class Layouts
     }
 
     /// <summary>
-    /// The type arguments that the base lists of the types <paramref name="operation"/> hands a member of a reference
-    /// hand generic types of the solution, and the types those are nested in (ADR 0024 as clarified by ticket P2-168):
-    /// for a call, an object creation or a reference to a member that a type from a reference declares, a method's own
-    /// type arguments, and those of the type that declares the member and of the types it is nested in, and the types
-    /// each of them is made of. Such a member hands the solution none of the types themselves (<see cref="TypeArguments"/>),
-    /// but it can create one (<c>Activator.CreateInstance&lt;T&gt;()</c>, <c>new Lazy&lt;T&gt;().Value</c>) with no
-    /// reference to its constructor in any text, and creating the type runs the code it inherits, which no body names
-    /// (ticket P2-152). The member's own text is in no fingerprint, so the body that hands it the type holds what the
-    /// type's base types and interfaces are handed.
+    /// The type arguments that the types <paramref name="operation"/> hands a member of a reference, and their base
+    /// lists, hand generic types of the solution, and the types those are nested in (ADR 0024 as clarified by ticket
+    /// P2-168): for a call, an object creation or a reference to a member that a type from a reference declares, a
+    /// method's own type arguments, and those of the type that declares the member and of the types it is nested in,
+    /// and the types each of them is made of. Such a member hands the solution none of the types themselves
+    /// (<see cref="TypeArguments"/>), but it can create one (<c>Activator.CreateInstance&lt;T&gt;()</c>,
+    /// <c>new Lazy&lt;T&gt;().Value</c>) with no reference to its constructor in any text, and creating the type runs
+    /// its own code and the code it inherits, which no body names (ticket P2-152). The member's own text is in no
+    /// fingerprint, so the body that hands it the type holds what the type, its base types and its interfaces are
+    /// handed.
     /// </summary>
     public static ImmutableArray<ITypeSymbol> Inherited(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called)
     {
@@ -105,7 +106,7 @@ internal static class Layouts
         }
 
         IEnumerable<ITypeSymbol> handed = ((member as IMethodSymbol)?.TypeArguments ?? []).Concat(Nesting(declaring));
-        return [.. Arguments(handed.SelectMany(Named).SelectMany(Listed))];
+        return [.. Arguments(handed.SelectMany(Named).SelectMany(static type => Listed(type).Prepend(type)))];
     }
 
     /// <summary>The member a call, a reference to a member or an object creation names; for a call, <paramref name="called"/> says which.</summary>
