@@ -123,6 +123,10 @@
               }
             },
             "divergenceKind": "removed-failures-only",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "ParameterReference"
+            },
             "reviewGroup": "calls:System.String::Concat(string,string)|System.String::ToUpper()"
           }
         },
@@ -181,6 +185,10 @@
               }
             },
             "divergenceKind": "new-failures-only",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Conditional"
+            },
             "reviewGroup": "proofMethod:none"
           }
         }

@@ -104,6 +104,10 @@
                 "detail": "no loop or self-call; every input checked"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            },
             "lowering": "il"
           }
         },
@@ -143,6 +147,10 @@
                 "detail": "no loop or self-call; every input checked"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Return"
+            },
             "lowering": "il"
           }
         }

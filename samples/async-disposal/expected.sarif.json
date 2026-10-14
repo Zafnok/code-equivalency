@@ -103,7 +103,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            }
           }
         },
         {
@@ -155,6 +159,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "constant",
+              "identity": "Literal"
+            },
             "reviewGroup": "proofMethod:none"
           }
         },
@@ -198,7 +206,11 @@
                 "outcome": "proved",
                 "detail": "base and 1 step obligations hold"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            }
           }
         },
         {
@@ -256,6 +268,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            },
             "reviewGroup": "proofMethod:none"
           }
         }

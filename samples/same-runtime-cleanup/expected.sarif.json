@@ -165,7 +165,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Conditional"
+            }
           }
         }
       ],

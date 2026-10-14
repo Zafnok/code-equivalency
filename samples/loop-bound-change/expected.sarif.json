@@ -117,6 +117,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            },
             "reviewGroup": "proofMethod:none"
           }
         }

@@ -105,6 +105,10 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "legacy, modern"
+            },
             "reviewGroup": "runtime-change:System.IO.BinaryReader::ReadString("
           }
         },

@@ -105,6 +105,10 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/switch-expression#non-exhaustive-switch-expressions",
+            "notCongruent": {
+              "component": "context",
+              "identity": "SwitchExpression"
+            },
             "reviewGroup": "runtime-change:System.Runtime.CompilerServices.SwitchExpressionException::.ctor("
           }
         },

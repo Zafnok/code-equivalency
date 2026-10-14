@@ -136,6 +136,10 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "legacy, modern"
+            },
             "reviewGroup": "runtime-change:System.String::IndexOf("
           }
         }

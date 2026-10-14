@@ -133,6 +133,10 @@
                 "detail": "an input reaches an opaque node: new: Binary"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            },
             "reviewGroup": "opaque:Binary"
           }
         },
@@ -201,6 +205,10 @@
                 "detail": "an input reaches an opaque node: new: Conversion"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Return"
+            },
             "reviewGroup": "opaque:Conversion"
           }
         }

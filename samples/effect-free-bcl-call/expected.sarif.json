@@ -103,7 +103,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "type",
+              "identity": "System.Collections.Generic.List`1<System.Int32>"
+            }
           }
         },
         {
@@ -172,7 +176,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Return"
+            }
           }
         },
         {
@@ -231,6 +239,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Return"
+            },
             "reviewGroup": "proofMethod:none"
           }
         }

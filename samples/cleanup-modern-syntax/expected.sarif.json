@@ -103,7 +103,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "MethodBodyOperation"
+            }
           }
         },
         {
@@ -141,7 +145,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Conditional"
+            }
           }
         },
         {
@@ -194,6 +202,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Invocation"
+            },
             "reviewGroup": "calls:System.String::Concat(string,string)|System.String::Format(string,object,object)"
           }
         },
@@ -232,7 +244,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Conditional"
+            }
           }
         },
         {
@@ -270,7 +286,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Conditional"
+            }
           }
         },
         {
@@ -308,7 +328,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "IsType"
+            }
           }
         },
         {
@@ -346,7 +370,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "VariableDeclarationGroup"
+            }
           }
         },
         {
@@ -402,6 +430,10 @@
                 "detail": "a divergence within 3 iterations depends on an abstraction"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "VariableDeclarationGroup"
+            },
             "reviewGroup": "abstraction"
           }
         }

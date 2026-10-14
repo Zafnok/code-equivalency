@@ -154,6 +154,10 @@
                 "factsAdded": "1"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Literal"
+            },
             "reviewGroup": "timeout"
           }
         }

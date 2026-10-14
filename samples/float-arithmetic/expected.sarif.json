@@ -112,7 +112,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            }
           }
         },
         {
@@ -173,6 +177,10 @@
               }
             },
             "divergenceKind": "undetermined",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            },
             "reviewGroup": "proofMethod:none"
           }
         },
@@ -233,6 +241,10 @@
               }
             },
             "divergenceKind": "undetermined",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            },
             "reviewGroup": "proofMethod:none"
           }
         },
@@ -280,7 +292,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            }
           }
         },
         {
@@ -356,6 +372,10 @@
                 "detail": "a divergence within 3 iterations depends on an abstraction"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            },
             "reviewGroup": "abstraction"
           }
         },

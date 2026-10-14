@@ -106,7 +106,11 @@
             ],
             "equivalencesApplied": [
               "bcl.string-format-provider-params-span"
-            ]
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.String::Format(System.IFormatProvider,string,object[])"
+            }
           }
         },
         {
@@ -147,7 +151,11 @@
             ],
             "equivalencesApplied": [
               "bcl.string-join-char-params-span"
-            ]
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.String::Join(char,string[])"
+            }
           }
         },
         {
@@ -188,7 +196,11 @@
             ],
             "equivalencesApplied": [
               "bcl.string-builder-append-format-provider-params-span"
-            ]
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.Text.StringBuilder::AppendFormat(System.IFormatProvider,string,object[])"
+            }
           }
         },
         {
@@ -229,7 +241,11 @@
             ],
             "equivalencesApplied": [
               "bcl.path-combine-params-span"
-            ]
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.IO.Path::Combine(string[])"
+            }
           }
         },
         {
@@ -286,6 +302,10 @@
             "equivalencesApplied": [
               "bcl.string-join-char-params-span"
             ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.String::Join(char,string[])"
+            },
             "reviewGroup": "proofMethod:none"
           }
         },

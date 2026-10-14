@@ -153,7 +153,11 @@
               "webapi.type.action-result",
               "webapi.type.not-found-result",
               "webapi.type.ok-content-result"
-            ]
+            ],
+            "notCongruent": {
+              "component": "type",
+              "identity": "Microsoft.AspNetCore.Mvc.OkObjectResult<System.Int32>"
+            }
           }
         }
       ],

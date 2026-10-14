@@ -153,6 +153,10 @@
               }
             },
             "divergenceKind": "undetermined",
+            "notCongruent": {
+              "component": "callee",
+              "identity": "Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)"
+            },
             "reviewGroup": "calls:Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)|System.String::IsNullOrWhiteSpace(string)"
           }
         },

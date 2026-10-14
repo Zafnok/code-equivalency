@@ -118,6 +118,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "VariableDeclarationGroup"
+            },
             "reviewGroup": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)"
           }
         },
@@ -171,6 +175,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Invocation"
+            },
             "reviewGroup": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)"
           }
         },
