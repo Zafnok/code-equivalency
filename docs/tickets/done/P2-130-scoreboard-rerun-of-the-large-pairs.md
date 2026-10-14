@@ -1,5 +1,5 @@
 # P2-130 Scoreboard rerun: the three migration pairs on one commit, and the README scoreboard from every large pair
-Status: in-progress
+Status: done (PR #492)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-073, P2-074, P2-075, P2-103, P2-117, P2-118, P2-122, P2-087, P2-095, P2-093, P2-104, P1-028, P2-127, P2-077, P1-032, P2-124, P2-110
