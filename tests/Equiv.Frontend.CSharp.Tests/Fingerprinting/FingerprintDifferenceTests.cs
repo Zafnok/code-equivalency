@@ -103,15 +103,31 @@ public sealed class FingerprintDifferenceTests
             BodyFingerprinter.Difference(old ? fingerprint : null, @new ? fingerprint : null, NeverRead, NeverRead));
     }
 
-    /// <summary>Equal texts are kept out of congruence by a runtime rule only, and the lines are not read to say so.</summary>
+    /// <summary>
+    /// Ticket P2-181: equal texts are kept out of congruence by the runtime rules that apply to them, named each once in
+    /// the order the text meets them, the legacy side's first: a callee a row flags, or a built-in rule.
+    /// </summary>
     [Theory]
-    [InlineData(true, true, "legacy, modern")]
-    [InlineData(true, false, "legacy")]
-    [InlineData(false, true, "modern")]
-    public void EqualTextsARuntimeRuleAppliesToAreNamedByTheSide(bool old, bool @new, string sides) =>
+    [InlineData("bool M(char c) => char.IsLetterOrDigit(c) && char.IsLetterOrDigit(c);", "net48", false, "System.Char::IsLetterOrDigit(char)")]
+    [InlineData("int M(double d) => (int)d;", "net8.0", false, BoundSerialiser.FloatToInteger)]
+    [InlineData("double M(double d) => d + 1;", "net10.0", true, BoundSerialiser.X87)]
+    [InlineData("double M(char c, double d) => char.IsLetterOrDigit(c) ? d : 0;", "net48", true, "x87, System.Char::IsLetterOrDigit(char)")]
+    [InlineData("int M() { return F(); " + Import + "static extern int F(); }", "net48", false, BoundSerialiser.Extern)]
+    public void EqualTextsAreNamedByTheRuntimeRulesThatApply(string member, string legacy, bool x87, string rules)
+    {
+        Compilation compilation = Compile(member);
+        IMethodSymbol method = Method(compilation);
+        SideRuntime old = Runtimes.Between(legacy, "net10.0", x87);
+        SideRuntime @new = Runtimes.Between(legacy, "net10.0");
+
         Assert.Equal(
-            new FingerprintDifference(FingerprintDifference.RuntimeRule, sides),
-            BodyFingerprinter.Difference(new BodyFingerprint("ab", old), new BodyFingerprint("ab", @new), NeverRead, NeverRead));
+            new FingerprintDifference(FingerprintDifference.RuntimeRule, rules),
+            BodyFingerprinter.Difference(
+                BodyFingerprinter.Compute(method, compilation, EquivConfig.Default, legacy: false, old),
+                BodyFingerprinter.Compute(method, compilation, EquivConfig.Default, legacy: false, @new),
+                () => BodyFingerprinter.Bound(method, compilation, EquivConfig.Default, legacy: false, old),
+                () => BodyFingerprinter.Bound(method, compilation, EquivConfig.Default, legacy: false, @new)));
+    }
 
     [Fact]
     public void ACongruentPairHasNoDifference()
@@ -148,17 +164,19 @@ public sealed class FingerprintDifferenceTests
         Assert.Equal(text.Count(static c => c == '\n'), lines.Count);
     }
 
-    private static ImmutableArray<BoundLine> NeverRead() => throw new InvalidOperationException("the lines are read only when the hashes differ");
+    private static BoundText NeverRead() => throw new InvalidOperationException("the text is read only when the pair is not congruent");
 
     private static FingerprintDifference? Difference(Compilation legacy, Compilation modern) =>
         BodyFingerprinter.Difference(
             BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, legacy: true, OneRuntime),
             BodyFingerprinter.Compute(Method(modern), modern, EquivConfig.Default, legacy: false, OneRuntime),
-            () => Lines(legacy),
-            () => Lines(modern));
+            () => Bound(legacy),
+            () => Bound(modern));
 
-    private static ImmutableArray<BoundLine> Lines(Compilation compilation) =>
-        BodyFingerprinter.Lines(Method(compilation), compilation, EquivConfig.Default, legacy: false, OneRuntime);
+    private static ImmutableArray<BoundLine> Lines(Compilation compilation) => Bound(compilation).Lines;
+
+    private static BoundText Bound(Compilation compilation) =>
+        BodyFingerprinter.Bound(Method(compilation), compilation, EquivConfig.Default, legacy: false, OneRuntime);
 
     private static IMethodSymbol Method(Compilation compilation) =>
         compilation.GetTypeByMetadataName("N.C")!.GetMembers("M").OfType<IMethodSymbol>().First();

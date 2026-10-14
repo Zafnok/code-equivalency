@@ -50,14 +50,13 @@ internal static class BodyFingerprinter
     /// What keeps a pair with the fingerprints <paramref name="old"/> and <paramref name="new"/> out of congruence
     /// (ADR 0024 decision 1; ticket P2-173); null when they are equal and not runtime-sensitive. A side with no
     /// fingerprint comes first. Then the first component on which the two texts differ, read from
-    /// <paramref name="oldLines"/> and <paramref name="newLines"/>, which are asked for only when the hashes differ.
-    /// Equal texts are kept out by a runtime rule.
+    /// <paramref name="oldText"/> and <paramref name="newText"/>, which are asked for only when the pair is not congruent.
+    /// Equal texts are kept out by the runtime rules that apply to them, the legacy side's first (ticket P2-181).
     /// </summary>
-    public static FingerprintDifference? Difference(
-        BodyFingerprint? old, BodyFingerprint? @new, Func<ImmutableArray<BoundLine>> oldLines, Func<ImmutableArray<BoundLine>> newLines)
+    public static FingerprintDifference? Difference(BodyFingerprint? old, BodyFingerprint? @new, Func<BoundText> oldText, Func<BoundText> newText)
     {
-        ArgumentNullException.ThrowIfNull(oldLines);
-        ArgumentNullException.ThrowIfNull(newLines);
+        ArgumentNullException.ThrowIfNull(oldText);
+        ArgumentNullException.ThrowIfNull(newText);
         if (old is null || @new is null)
         {
             return new FingerprintDifference(FingerprintDifference.NoFingerprint, FingerprintDifference.Sides(old is null, @new is null));
@@ -68,17 +67,19 @@ internal static class BodyFingerprinter
             return null;
         }
 
-        FingerprintDifference? textual = string.Equals(old.Sha256Hex, @new.Sha256Hex, StringComparison.Ordinal) ? null : BoundLine.First(oldLines(), newLines());
-        return textual ?? new FingerprintDifference(FingerprintDifference.RuntimeRule, FingerprintDifference.Sides(old.RuntimeSensitive, @new.RuntimeSensitive));
+        (BoundText legacy, BoundText modern) = (oldText(), newText());
+        FingerprintDifference? textual = string.Equals(old.Sha256Hex, @new.Sha256Hex, StringComparison.Ordinal) ? null : BoundLine.First(legacy.Lines, modern.Lines);
+        return textual ?? new FingerprintDifference(FingerprintDifference.RuntimeRule, string.Join(", ", legacy.Rules.Union(modern.Rules, StringComparer.Ordinal)));
     }
 
-    /// <summary>The text a fingerprint of <paramref name="method"/> hashes, as its lines; empty when there is no body.</summary>
-    public static ImmutableArray<BoundLine> Lines(IMethodSymbol method, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders = null)
+    /// <summary>The text a fingerprint of <paramref name="method"/> hashes, as its lines and the runtime rules that apply to it; empty when there is no body.</summary>
+    public static BoundText Bound(IMethodSymbol method, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         List<BoundLine> lines = [];
-        _ = Text(method, compilation, config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime, keptForwarders, lines);
-        return [.. lines];
+        List<string> rules = [];
+        _ = Text(method, compilation, Settings(config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime, keptForwarders) with { Lines = lines, Rules = rules });
+        return new BoundText([.. lines], [.. rules]);
     }
 
     /// <summary>
@@ -92,10 +93,20 @@ internal static class BodyFingerprinter
         ImmutableArray<ApiEquivalence> equivalences,
         SideRuntime runtime,
         ImmutableHashSet<string>? keptForwarders = null,
-        List<BoundLine>? lines = null)
+        List<BoundLine>? lines = null) =>
+        Text(method, compilation, Settings(config, equivalences, runtime, keptForwarders) with { Lines = lines });
+
+    /// <summary>How <paramref name="config"/>, <paramref name="equivalences"/> and <paramref name="runtime"/> have a side's text spelled.</summary>
+    private static BoundSerialiser.Settings Settings(EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders)
     {
         ArgumentNullException.ThrowIfNull(config);
-        BoundSerialiser.Settings settings = new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime) { KeptForwarders = keptForwarders ?? [], Lines = lines };
+        return new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime) { KeptForwarders = keptForwarders ?? [] };
+    }
+
+    /// <summary>The serialisation of <paramref name="method"/>'s body with <paramref name="settings"/>, which say where its lines and rules are also written.</summary>
+    private static (string? Text, bool RuntimeSensitive) Text(IMethodSymbol method, Compilation compilation, BoundSerialiser.Settings settings)
+    {
+        SideRuntime runtime = settings.Runtime;
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
 

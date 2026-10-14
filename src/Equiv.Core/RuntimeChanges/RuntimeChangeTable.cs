@@ -209,6 +209,7 @@ public sealed class RuntimeChangeTable
             "twoDigitYearFormat" => RuntimeChangePrecondition.TwoDigitYearFormat,
             "cultureSensitiveText" => RuntimeChangePrecondition.CultureSensitiveText,
             "invalidPath" => RuntimeChangePrecondition.InvalidPath,
+            "trimEntries" => RuntimeChangePrecondition.TrimEntries,
             _ => throw new InvalidDataException($"runtime-changes row '{member}' has unknown precondition '{precondition}'"),
         };
     }

@@ -401,12 +401,13 @@ public sealed class RuntimeChangeTableTests
         Assert.Empty(tableMembers.Except(reviewed, StringComparer.Ordinal));
     }
 
-    /// <summary>Ticket P2-073: <c>precondition</c> is optional, and one of four names.</summary>
+    /// <summary>Tickets P2-073 and P2-181: <c>precondition</c> is optional, and one of five names.</summary>
     [Theory]
     [InlineData("caseInsensitivePattern", RuntimeChangePrecondition.CaseInsensitivePattern)]
     [InlineData("twoDigitYearFormat", RuntimeChangePrecondition.TwoDigitYearFormat)]
     [InlineData("cultureSensitiveText", RuntimeChangePrecondition.CultureSensitiveText)]
     [InlineData("invalidPath", RuntimeChangePrecondition.InvalidPath)]
+    [InlineData("trimEntries", RuntimeChangePrecondition.TrimEntries)]
     public void PreconditionIsParsed(string name, RuntimeChangePrecondition precondition)
     {
         RuntimeChangeTable table = Parse($$"""

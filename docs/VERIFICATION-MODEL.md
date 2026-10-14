@@ -609,13 +609,21 @@ Migration-specific normalisations (applied to both sides before matching):
   A row may carry a `precondition` on the call's arguments (ticket P2-073): `caseInsensitivePattern`
   on the `Regex` row, `twoDigitYearFormat` on the `DateTime` and `DateTimeOffset` parsing rows,
   `cultureSensitiveText` on the `String` comparison and search rows, `invalidPath` on the
-  path-validation rows. The header of `runtime-changes.json` defines each. A precondition reads the
+  path-validation rows, and `trimEntries` on the two `String.Split` rows with a `StringSplitOptions`
+  (ticket P2-181), met by any option but `None` and `RemoveEmptyEntries`, the only two .NET Framework
+  accepts. The header of `runtime-changes.json` defines each. A precondition reads the
   operands it names, and only compile-time constants: a call whose constants cannot reach the row's
   change (the pattern `\s+`, the format `yyyy-MM-dd`, `"abc"` compared with `"abd"`, the path
   literal `"C:\\data"`) is not a call to a runtime-changed member under that row, in the lowered
   body and in the bound fingerprint alike. A call with an operand the precondition reads that is not
   a constant, or with no such operand (an instance `Regex` method, `DateTime.Parse`), is flagged as
   a row without a precondition flags it. The IL lowering reads no constants and always flags.
+  A search for a character never meets `cultureSensitiveText`, whatever its receiver (ticket P2-181):
+  a call whose every argument but the receiver is a `char` or an `int` (`s.IndexOf('/')`,
+  `s.LastIndexOf(c, i, n)`) is an ordinal search on .NET Framework and on .NET alike, so the ICU
+  change cannot reach it. An unedited body all of whose calls their arguments keep from every row's
+  change is congruent; one with a call that can reach a row stays out of congruence, and the solver
+  gives that call's member a function per side as before.
   An operand that is not a constant still does not meet `invalidPath` when the method that makes the
   call shows it to be a valid path (ticket P2-074). The table's `validPaths` lists say how: the
   operand is the result of one of its `sources` (`Assembly.Location`, `AppContext.BaseDirectory`,
@@ -1018,7 +1026,7 @@ body that does not bind. It says where the two texts first part, which is one ca
 | `import` | what an `extern` function imports | `method`, or the local function's number in the text |
 | `attribute` | an attribute the text holds: of the method, its return value, a parameter or a local function, or a marshalling attribute of the assembly or the declaring type | what carries it (`method return`, `method assembly`) |
 | `type-layout` | the declaration of a type the body reads the layout of or hands over (ADR 0024's clarifications) | the type |
-| `runtime-rule` | nothing in the text: a runtime rule applies between the pair's runtimes | the side or sides it applies to |
+| `runtime-rule` | nothing in the text: a runtime rule applies between the pair's runtimes | every rule that applies, each once, the legacy side's first, joined by `, `: the callee, field or event a `runtime-changes.json` row flags, or `x87`, `float-to-integer` or `extern` (P2-181) |
 | `unbound` | nothing in the text: a body does not bind (ADR 0029 decision 2) | the side or sides |
 
 Where one side has a line of a type's declaration, an attribute or an import and the other has an operation or nothing

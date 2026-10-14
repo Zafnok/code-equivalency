@@ -88,6 +88,43 @@ public sealed class RuntimeChangeReachTests
         Assert.False(Reaches(RuntimeChangePrecondition.CultureSensitiveText, Constant("strA", "abc"), Constant("strB", "abd"), comparison));
     }
 
+    /// <summary>
+    /// Ticket P2-181: a call whose every argument but the receiver is a character, a position or a count searches for a
+    /// character, ordinally on every runtime, and cannot reach the ICU rows whatever its receiver. A call with nothing
+    /// but a receiver, or with any other argument, is read as before.
+    /// </summary>
+    [Fact]
+    public void ASearchForACharacterNeverReachesTheIcuRows()
+    {
+        CallArgument character = new("value", IsString: false, IsConstant: false, Value: null) { IsCharOrIndex = true };
+        CallArgument index = new("startIndex", IsString: false, IsConstant: true, 3) { IsCharOrIndex = true };
+        CallArgument comparison = new("comparisonType", IsString: false, IsConstant: false, Value: null);
+
+        Assert.False(Reaches(RuntimeChangePrecondition.CultureSensitiveText, Variable(CallArgument.Receiver), character));
+        Assert.False(Reaches(RuntimeChangePrecondition.CultureSensitiveText, Variable(CallArgument.Receiver), character, index));
+        Assert.True(Reaches(RuntimeChangePrecondition.CultureSensitiveText, Variable(CallArgument.Receiver)));
+        Assert.True(Reaches(RuntimeChangePrecondition.CultureSensitiveText, Variable(CallArgument.Receiver), character, comparison));
+        Assert.True(Reaches(RuntimeChangePrecondition.CultureSensitiveText, Variable(CallArgument.Receiver), Variable("value"), index));
+        Assert.True(Reaches(RuntimeChangePrecondition.InvalidPath, Variable("path"), index));
+    }
+
+    /// <summary>Ticket P2-181: .NET Framework accepts only <c>None</c> and <c>RemoveEmptyEntries</c>; any other constant, or options that are no constant, reach the <c>TrimEntries</c> rows.</summary>
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(2, true)]
+    [InlineData(3, true)]
+    [InlineData(4, true)]
+    public void SplitOptionsReachTheTrimEntriesRowsUnlessTheFrameworkAcceptsThem(int options, bool reaches) =>
+        Assert.Equal(reaches, Reaches(RuntimeChangePrecondition.TrimEntries, Variable(CallArgument.Receiver), Options(options)));
+
+    [Fact]
+    public void ASplitWithoutConstantOptionsReachesTheTrimEntriesRows()
+    {
+        Assert.True(Reaches(RuntimeChangePrecondition.TrimEntries, Variable(CallArgument.Receiver), new CallArgument("options", IsString: false, IsConstant: false, Value: null)));
+        Assert.True(Reaches(RuntimeChangePrecondition.TrimEntries, Variable(CallArgument.Receiver)));
+    }
+
     [Theory]
     [InlineData(@"C:\data", false)]
     [InlineData("Images/cache_1.png", false)]
@@ -114,7 +151,10 @@ public sealed class RuntimeChangeReachTests
         Assert.False(Reaches(RuntimeChangePrecondition.InvalidPath, Constant("path", "a.txt"), new CallArgument("append", IsString: false, IsConstant: false, Value: null)));
     }
 
-    /// <summary>Criterion 1: the four families of rows the ticket names carry a precondition, and no other row does.</summary>
+    /// <summary>
+    /// P2-073 criterion 1: the four families of rows that ticket names carry a precondition, and so do the two
+    /// <c>Split</c> rows P2-181 gave one; no other row does.
+    /// </summary>
     [Fact]
     public void TheShippedTableGivesTheFourRowFamiliesAPrecondition()
     {
@@ -131,9 +171,16 @@ public sealed class RuntimeChangeReachTests
         Assert.All(members[RuntimeChangePrecondition.CultureSensitiveText], static member => Assert.StartsWith("System.String::", member, StringComparison.Ordinal));
         Assert.Equal(31, members[RuntimeChangePrecondition.InvalidPath].Count());
         Assert.Contains("System.IO.Path::Combine(string,string)", members[RuntimeChangePrecondition.InvalidPath], StringComparer.Ordinal);
+        Assert.Equal(
+            ["System.String::Split(char[],System.StringSplitOptions)", "System.String::Split(string[],System.StringSplitOptions)"],
+            members[RuntimeChangePrecondition.TrimEntries],
+            StringComparer.Ordinal);
     }
 
-    /// <summary>A measured row's witness is an input that shows the change, so as constants its strings must meet the row's precondition.</summary>
+    /// <summary>
+    /// A measured row's witness is an input that shows the change, so as constants its strings and its integers (an
+    /// enum's value, as options) must meet the row's precondition.
+    /// </summary>
     [Fact]
     public void EveryMeasuredWitnessMeetsItsRowsPrecondition()
     {
@@ -142,7 +189,11 @@ public sealed class RuntimeChangeReachTests
         Assert.NotEmpty(rows);
         Assert.All(rows, static row =>
         {
-            CallArgument[] arguments = [.. row.Witness!.Input.Select(Text).OfType<string>().Select(static text => Constant("path", text))];
+            CallArgument[] arguments =
+            [
+                .. row.Witness!.Input.Select(Text).OfType<string>().Select(static text => Constant("path", text)),
+                .. row.Witness.Input.Select(Integer).OfType<int>().Select(Options),
+            ];
             Assert.True(Reaches(row.Precondition!.Value, arguments), row.Member);
         });
     }
@@ -153,6 +204,15 @@ public sealed class RuntimeChangeReachTests
         using JsonDocument document = JsonDocument.Parse(raw);
         return document.RootElement.ValueKind == JsonValueKind.String ? document.RootElement.GetString() : null;
     }
+
+    /// <summary>A witness input's integer, or null when the input is not one.</summary>
+    private static int? Integer(string raw)
+    {
+        using JsonDocument document = JsonDocument.Parse(raw);
+        return document.RootElement.ValueKind == JsonValueKind.Number ? document.RootElement.GetInt32() : null;
+    }
+
+    private static CallArgument Options(int options) => new("options", IsString: false, IsConstant: true, options);
 
     private static bool Reaches(RuntimeChangePrecondition precondition, params CallArgument[] arguments) =>
         RuntimeChangeReach.CanReach(precondition, [.. arguments]);

@@ -558,6 +558,14 @@ of how much of the cleanup result each explains:
   Done 2026-10-13: the 17 read members that two generators of PowerShell's build declare and the
   corpus steps did not run. Three more steps in `tools/corpus/README.md` and the count is 0; an
   `unbound` result now names its diagnostic ids in `properties.unboundDiagnostics`.
+- P2-194 (M) A constant array whose default is not a value is printed for cvc5 exactly wherever it is
+  used: `SecondSolver.Print` declines the queries of 76 of gitextensions-9860's 302 solver
+  Equivalents, so neither the second solver nor a certificate reaches them. Found by P1-026. Needs
+  P1-033.
+- P2-195 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
+  of giving Unknown(Timeout): the arithmetic refinement reads a model between checks, and nothing
+  catches the interrupt there. Three `Z3BackendTests` failed on a loaded Windows runner. Found by
+  P2-168's CI. Needs P2-112.
 - P2-176 (S) A project whose source generator is missing or throws loads without a word: the bodies
   that read what it declares are `unbound` and nothing says a generator did not run. Found by
   P2-172. Needs P2-172.
@@ -852,6 +860,13 @@ Found by P2-162 (2026-10-12, by reading its own rule; not reproduced):
   (`Activator.CreateInstance<K>()`, `new Lazy<K>().Value`) names a type argument only in its base
   list, and the body references no constructor and hands the solution nothing. The first step is
   the repro. Needs P2-162.
+  Done: reproduced as equal fingerprints for a body that hands such a type to
+  `Activator.CreateInstance<T>()` or `Lazy<T>`, through an interface, a base type or a type the
+  base type is nested in. An operation that hands a type to any member of a reference is now also
+  followed by the declarations of the type arguments the type's base list, and a generic type of
+  the solution itself, hand over, and the lowering makes it the `Layout` opaque where one has a
+  layout (ADR 0024, clarification of 2026-10-14 (P2-168)); no result on `gitextensions-8522`
+  changed.
 
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
@@ -1186,6 +1201,17 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   fall from 148 to 80, and no pair is proved (`docs/runs/2026-10-05-positional-trace.md`).
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
+  Done 2026-10-14: 171 of the 302 `bounded` and `lockstep-induction` Equivalents have every query
+  proved by cvc5 1.4.1 and accepted by Carcara with no hole, at a median 170 ms a pair; 25 more only
+  with holes (bit-blasting steps), 12 stop at a missing bit-vector rewrite rule, no proof is
+  rejected, and no lockstep proof can be written in Alethe (`seq.unit`)
+  (`docs/runs/2026-10-14-proof-certificate-spike.md`). ADR 0057, P1-041, P1-042, P2-194.
+- P1-041 (L) Under `--certify`, a solver Equivalent carries cvc5's Alethe proof of each of its
+  queries, checked by Carcara, in `properties.certificate` (`certified`, `holey`, `uncertified`,
+  `rejected`); no verdict, rule id or exit code changes (ADR 0057). Needs P1-026, P1-033.
+- P1-042 (M) Rungs 2 and 3 compare the call traces by position, as rung 1 does since P1-038: none of
+  gitextensions-9860's 17 `lockstep-induction` Equivalents can be certified while their obligations
+  hold sequences. Found by P1-026. Needs P1-038.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
   counting over the parameter bits. Needs P2-047. Done 2026-10-04: 12 of 80 EQ002 results counted
   (15.0%), every share 1, so no ADR (`docs/runs/2026-10-04-divergent-count-spike.md`).
@@ -1251,6 +1277,43 @@ find a larger lever, and are the first candidates for the milestone after this o
 found none in the solver: no other tactic pipeline proves a pair). That orders
 the work; it leaves none of it out (ADR 0049 decision 7).
 
+Done 2026-10-14 by P2-130, at equiv `e98fd1b9` (the three migrations; the two upgrades are P2-124's at
+`1d767f54`), verdict `docs/runs/2026-10-14-migrations-verdict.md`. All five large pairs run to a result
+with no crashed pair. Over them the solver proves 25.8% of changed pairs (from 24.9%), 58.4% are Unknown
+(from 57.8%: Duplicati and OpenRA join at 49.8% and 83.2%), and Divergent precision on migrations is
+1.4% (1 of 69): the fixes removed most of the false positives P2-047 counted, and today's samples found
+68 more with eleven causes. Half the migrations' changed pairs (1,004 of 1,966) are unedited bodies a
+runtime rule keeps out of congruence, and they are 680 of the 1,222 Unknowns and 319 of the 411
+Divergent; the solver proves 5.
+
+### Scoreboard milestone 2 (2026-10-14)
+
+From P2-130's criteria 5 and 6, ranked by what each moves on the Unknown and Divergent precision rows.
+They come before any other open ticket, in this order:
+
+1. P2-181 (L) an unedited body a runtime rule keeps out of congruence is proved where the rule's change
+   cannot be reached: 680 of the migrations' 1,222 Unknowns and 319 of their 411 Divergent.
+2. Divergent precision, the EQ006 rows' reach (37 of the 68 false positives): P2-188 (M, 13, valid
+   paths P2-074 does not follow), P2-190 (M, 13, rows that match calls their change does not affect),
+   P2-189 (S, 11, rows with no precondition on a constant argument).
+3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
+   migrations.
+4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same.
+5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs: P2-179 (`rebound-call`, 12.9%
+   of `gitextensions-8522`'s), P2-182 (`DelegateCreation`, 9.7% of OpenRA's), P2-183
+   (`ArrayElementReference`, 5.9% of OpenRA's), P2-180 (`CaughtException`, 5.2% of Duplicati's), P2-165
+   (`no-body`, 5.4% of `gitextensions-8522`'s).
+6. The other false-positive causes, one or two results each: P2-185, P2-186, P2-187, P2-191, P2-097.
+   From P2-181's count: P2-194 (S, 69 OpenRA bodies under the .NET 9 float rule because its mods count
+   as unhosted) and P2-195 (M, the 347 `abstraction` Unknowns that name a shared function, not the
+   runtime-changed call).
+7. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates the same samples again,
+   and names the milestone after this one. Not filed until the tickets above are done.
+
+Not on it: `timeout` (401) and `abstraction` (478) are 56% of the scoreboard's Unknowns, and P2-181's
+count says most of both are the unedited bodies; what is left of them after P2-181 is the next
+measurement, with P1-034 (Bitwuzla), which decided 103 of 142 rung 1 queries and proved no pair.
+
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
 Moved from M4 by the 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`): each unlocks
@@ -1286,9 +1349,9 @@ From the 2026-09-24 second-oracle review, unticketed until a result above asks f
   surface beyond SARIF, so it needs an ADR against ADR 0006.
 - Coverage-guided generation for P1-008 (SharpFuzz): an ADR 0002 row, once plain generation's
   discovery probability visibly plateaus.
-- A second solver (cvc5, BSD-3-Clause, as a separate process) cross-checking Equivalent
-  verdicts, with Alethe proof certificates checked by Carcara. Low priority: M0-012 and M4-009
-  catch encoding bugs, which are far likelier than solver bugs.
+- Proof certificates for solver Equivalents: measured by P1-026 (171 of 302 certified with no hole
+  on gitextensions-9860), decided by ADR 0057 and built by P1-041. A certificate covers the query
+  only: M0-012 and M4-009 catch encoding bugs, which are far likelier than solver bugs.
 - Stronger string solving (cvc5 strings, OSTRICH) for string-heavy line-of-business code, if
   M4-007 shows string opaques dominating the residual.
 - ARDiff-style refinement (Badihi et al., FSE 2020): start with unchanged fragments as

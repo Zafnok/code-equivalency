@@ -54,7 +54,11 @@ public sealed record FingerprintDifference(string Component, string Identity)
     /// <summary>A side has no fingerprint: its declaration holds no code to compare. <see cref="Identity"/> is the side or sides.</summary>
     public const string NoFingerprint = "no-fingerprint";
 
-    /// <summary>The two texts are equal and a runtime rule applies between the pair's runtimes. <see cref="Identity"/> is the side or sides it applies to.</summary>
+    /// <summary>
+    /// The two texts are equal and a runtime rule applies between the pair's runtimes. <see cref="Identity"/> is every rule that
+    /// applies, the legacy side's first, each once, joined by <c>, </c>: a callee, field or event a <c>runtime-changes.json</c> row
+    /// flags, <c>x87</c>, <c>float-to-integer</c> or <c>extern</c> (ticket P2-181).
+    /// </summary>
     public const string RuntimeRule = "runtime-rule";
 
     /// <summary>The two texts are equal and a body does not bind (ADR 0029 decision 2). <see cref="Identity"/> is the side or sides.</summary>

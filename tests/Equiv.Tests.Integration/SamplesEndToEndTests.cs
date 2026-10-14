@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Equiv.Cli;
 using Equiv.Core;
 using Equiv.Core.Ir;
+using Equiv.Core.Matching;
 using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
@@ -437,6 +438,42 @@ public sealed partial class SamplesEndToEndTests
 
         Assert.Contains("Paths::Under(", result.Message.Text, StringComparison.Ordinal);
         Assert.Contains("invalid path characters", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-181 criterion 3: a body nobody edited whose runtime-sensitive calls cannot reach their rows' change by
+    /// their arguments (a path literal, a search for a character, split options .NET Framework accepts) is Equivalent by
+    /// congruence from .NET Framework 4.8 to .NET 10, and its runtime-rule identity is gone with it.
+    /// </summary>
+    [Theory]
+    [InlineData("Calls::Cache(")]
+    [InlineData("Calls::Slash(")]
+    [InlineData("Calls::Fields(")]
+    public void RuntimeRowUnreachableChange_ACallThatCannotReachItsRowsChangeIsCongruent(string method)
+    {
+        Result result = Single("runtime-row-unreachable-change", method);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>
+    /// Ticket P2-181's soundness test: the same three calls with a parameter in place of the constant can reach their rows'
+    /// change, so none of the three bodies is Equivalent. Each is EQ006, and its <c>notCongruent</c> names the callee the
+    /// runtime rule applies to.
+    /// </summary>
+    [Theory]
+    [InlineData("Calls::Under(", "System.IO.Path::Combine(string,string)")]
+    [InlineData("Calls::Find(", "System.String::IndexOf(string)")]
+    [InlineData("Calls::FieldsBy(", "System.String::Split(char[],System.StringSplitOptions)")]
+    public void RuntimeRowUnreachableChange_ACallThatCanReachItsRowsChangeIsNotEquivalent(string method, string rule)
+    {
+        Result result = Single("runtime-row-unreachable-change", method);
+
+        Assert.Equal("EQ006", result.RuleId);
+        Assert.Contains("between net48 and net10.0", result.Message.Text, StringComparison.Ordinal);
+        FingerprintDifference notCongruent = result.GetProperty<FingerprintDifference>("notCongruent");
+        Assert.Equal(new FingerprintDifference(FingerprintDifference.RuntimeRule, rule), notCongruent);
     }
 
     /// <summary>

@@ -1186,7 +1186,7 @@ public sealed class BodyFingerprinterTests
     [InlineData("public int M(K k) => k.Own() + Taken(k);")]
     [InlineData("public int M(K[] ks) => ((W)ks[0]).Width();")]
     [InlineData("public int M(S s) => Make<Plain>().Width() + s.B;")]
-    [InlineData("public int M(K k) => System.Linq.Enumerable.Count(System.Linq.Enumerable.Repeat(k, 1));")]
+    [InlineData("public int M(K k) => System.Linq.Enumerable.Count(System.Linq.Enumerable.Repeat<object>(k, 1));")]
     public void ABodyThatIsHandedAnObjectOfSuchAClassKeepsItsText(string member)
     {
         Compilation plain = Interop("public struct S { public byte A; public int B; } " + member + Created);
@@ -1209,6 +1209,61 @@ public sealed class BodyFingerprinterTests
         + " static int Count<T>() where T : W => T.Count();"
         + " static int Made<T>() => 1;"
         + " static int Taken(K k) => 1;";
+
+    /// <summary>
+    /// Ticket P2-168: a type of the solution is created with no reference to its constructor by a generic member of a
+    /// reference that is handed it (<c>Activator.CreateInstance&lt;T&gt;()</c>, <c>Lazy&lt;T&gt;</c>), whose text no fingerprint
+    /// holds. Creating the type runs the code it inherits, which reads a type argument of its base list. So the
+    /// declaration of that argument is in the text of a body that hands the type to a member of a reference: through
+    /// an interface, a base type, a base type of a base type and a type the base type is nested in, and the same for a
+    /// generic type of the solution that is created itself. A member that does not create the type is no exception:
+    /// what a member of a reference does with its type parameter is in no text.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => ((W)System.Activator.CreateInstance<K>()).Width();")]
+    [InlineData("public int M() => System.Activator.CreateInstance<D>().Instance;")]
+    [InlineData("public int M() => ((W)new System.Lazy<K>().Value).Width();")]
+    [InlineData("public int M() => ((I)System.Activator.CreateInstance<D>()).Size();")]
+    [InlineData("public int M() => ((I)new System.Lazy<E>().Value).Size();")]
+    [InlineData("public object M() => System.Activator.CreateInstance<F>();")]
+    [InlineData("public object M() => new System.Lazy<System.Tuple<K>>();")]
+    [InlineData("public int M(K k) => System.Linq.Enumerable.Count(System.Linq.Enumerable.Repeat(k, 1));")]
+    [InlineData("public object M() => System.Activator.CreateInstance<Box<S>>();")]
+    public void ATypeArgumentInABaseListIsInTheTextOfABodyThatHandsTheTypeToAReference(string member)
+    {
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; }", member + Inheriting);
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "public struct S { public byte A; public int B; public int C; }", member + Inheriting);
+    }
+
+    /// <summary>
+    /// Ticket P2-168 criterion 3: a body that hands a member of a reference a type with no generic base type or
+    /// interface of the solution keeps the text it has, whatever layout the types beside it have: the type has no base
+    /// list, its base type is a generic type of a reference, its base type is handed a type from a reference or a type
+    /// parameter, or it is the struct itself, or a tuple of the struct, which is a type from a reference though Roslyn
+    /// gives it a declaration. So does a body that is handed an object of a type whose base list names the struct, and
+    /// hands the type to no member.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => System.Activator.CreateInstance<Plain>().Run() + new System.Lazy<Plain>().Value.A;")]
+    [InlineData("public int M(S s) => new System.Collections.Generic.List<S> { s }.Count + System.Activator.CreateInstance<Listed>().Count;")]
+    [InlineData("public int M() => new System.Lazy<G>().Value.Run();")]
+    [InlineData("public int M<U>() where U : unmanaged => System.Activator.CreateInstance<H<U>>().Run();")]
+    [InlineData("public int M(D d) => ((I)d).Size() + d.Own;")]
+    [InlineData("public int M(S s) => new System.Collections.Generic.List<(S, Plain)> { (s, new Plain()) }.Count;")]
+    public void ATypeWithNoGenericBaseHandedToAReferenceKeepsItsText(string member)
+    {
+        const string Others = " public class Plain { public int A; public int Run() => A; }"
+            + " public class Listed : System.Collections.Generic.List<S> { }"
+            + " public class G : Box<int>, System.IEquatable<S> { public bool Equals(S other) => true; public int Run() => 1; }"
+            + " public class H<U> : Box<U> where U : unmanaged { public int Run() => 1; }";
+        Compilation plain = Interop("public struct S { public byte A; public int B; } " + member + Inheriting + Others);
+        Compilation laid = Interop("[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; } " + member + Inheriting + Others);
+
+        Assert.Empty(laid.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(OneRuntimeText(plain), OneRuntimeText(laid));
+        Assert.Equal(Text(plain), Text(laid));
+        Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
+    }
 
     /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
     [Theory]
