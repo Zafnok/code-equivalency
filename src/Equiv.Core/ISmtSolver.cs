@@ -16,4 +16,12 @@ public interface ISmtSolver
 
     /// <summary>Answers <paramref name="script"/>, giving up after <paramref name="limit"/> of wall-clock time.</summary>
     SmtAnswer Ask(string script, TimeSpan limit);
+
+    /// <summary>
+    /// Answers <paramref name="script"/>, which <see cref="Ask"/> answered unknown, by asking the solver to split it into
+    /// <paramref name="partitions"/> partitions and answering each on its own, under the limits <see cref="Ask"/> gives a
+    /// script (ADR 0049 decision 7; ticket P1-039): <c>sat</c> with a satisfiable partition's values, <c>unsat</c> when
+    /// every partition is unsatisfiable and together they cover every case, and unknown otherwise.
+    /// </summary>
+    SmtAnswer AskInPartitions(string script, int partitions, TimeSpan limit);
 }

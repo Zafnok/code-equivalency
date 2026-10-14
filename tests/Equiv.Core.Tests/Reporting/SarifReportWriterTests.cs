@@ -903,6 +903,26 @@ public sealed class SarifReportWriterTests
     }
 
     /// <summary>
+    /// Ticket P1-039 criterion 4: a result one of whose queries a partition answered has <c>proofMethod</c> suffixed
+    /// <c>+cvc5</c> as any other cvc5 answer, and its <c>ladderTrace</c> step says how many partitions were asked for.
+    /// </summary>
+    [Fact]
+    public Task APartitionsAnswer_SaysInItsStepHowManyPartitionsWereAskedFor()
+    {
+        LadderStep refuted = new(ProofMethod.Bounded, RungOutcome.Refuted, "a divergence within 3 iterations") { Solver = new SolverUse("cvc5", "1.4.1") { Partitions = 24 } };
+        VerificationResult divergent = Fixtures.Result(new Divergent(Fixtures.Counterexample()) { Ladder = [refuted] });
+
+        Result result = SarifReportWriter.Write([divergent]).Runs[0].Results[0];
+
+        Assert.Equal("bounded+cvc5", result.GetProperty<string>("proofMethod"));
+        Dictionary<string, string> step = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("ladderTrace"));
+        Assert.Equal(["rung", "outcome", "detail", "solver", "partitions"], step.Keys, StringComparer.Ordinal);
+        Assert.Equal(("cvc5 1.4.1", "24"), (step["solver"], step["partitions"]));
+        Assert.NotEqual(new SolverUse("cvc5", "1.4.1"), refuted.Solver);
+        return VerifyJson(Serialize(divergent));
+    }
+
+    /// <summary>
     /// Ticket P1-030 criterion 2 (ADR 0053 decision 8): a result decided after refinement has <c>proofMethod</c> suffixed
     /// <c>+refined</c>, whatever its verdict, and carries <c>properties.refined</c>, the functions the last refined round
     /// interpreted, sorted. A result no round refined has neither.

@@ -116,6 +116,58 @@ public sealed class Cvc5IntegrationTests
         Assert.Equal("cvc5 interrupted by timeout.", Assert.IsType<SmtUnknown>(new Cvc5Solver(Executable()) { ResourceLimit = 1_000_000_000_000 }.Ask(Hard, TimeSpan.FromMilliseconds(1))).Reason);
     }
 
+    /// <summary>
+    /// Ticket P1-039: a query split into partitions gets the answer plain cvc5 gives it, satisfiable with a value for the
+    /// constant asked for and unsatisfiable through the cover check. The queries put pigeons in holes, as equalities over
+    /// an uninterpreted sort: cvc5 writes partitions at a theory check, and a query with no theory atom has none, so an
+    /// answer here is one the partitions gave.
+    /// </summary>
+    [Theory]
+    [InlineData(8, "sat")]
+    [InlineData(9, "unsat")]
+    public void AQuerySplitIntoPartitions_GetsThePlainAnswer(int pigeons, string expected)
+    {
+        Cvc5Solver solver = new(Executable()) { Processes = 4 };
+        string script = Pigeons(pigeons, holes: 8);
+
+        SmtAnswer plain = solver.Ask(script, TimeSpan.FromSeconds(60));
+        SmtAnswer split = solver.AskInPartitions(script, 8, TimeSpan.FromSeconds(60));
+
+        Assert.Equal(expected, plain is SmtSat ? "sat" : plain is SmtUnsat ? "unsat" : plain.ToString());
+        Assert.Equal(plain.GetType(), split.GetType());
+        if (split is SmtSat sat)
+        {
+            Assert.Contains("@Hole_", sat.Values["|pigeon 0|"], StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Every pigeon in one of the holes, and no two in the same one.</summary>
+    private static string Pigeons(int pigeons, int holes)
+    {
+        System.Text.StringBuilder script = new("(set-option :produce-models true)\n(set-logic QF_UF)\n(declare-sort Hole 0)\n");
+        for (int h = 0; h < holes; h++)
+        {
+            script.Append(System.Globalization.CultureInfo.InvariantCulture, $"(declare-fun hole{h} () Hole)\n");
+        }
+
+        for (int p = 0; p < pigeons; p++)
+        {
+            script.Append(System.Globalization.CultureInfo.InvariantCulture, $"(declare-fun |pigeon {p}| () Hole)\n(assert (or");
+            for (int h = 0; h < holes; h++)
+            {
+                script.Append(System.Globalization.CultureInfo.InvariantCulture, $" (= |pigeon {p}| hole{h})");
+            }
+
+            script.Append("))\n");
+            for (int q = 0; q < p; q++)
+            {
+                script.Append(System.Globalization.CultureInfo.InvariantCulture, $"(assert (not (= |pigeon {p}| |pigeon {q}|)))\n");
+            }
+        }
+
+        return script.Append("(check-sat)\n(get-value (|pigeon 0|))\n").ToString();
+    }
+
     /// <summary>The configured executable; the test is skipped when none is, and fails when the one named is not there.</summary>
     private static string Executable()
     {

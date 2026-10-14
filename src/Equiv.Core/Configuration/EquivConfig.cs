@@ -82,6 +82,19 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     /// </summary>
     public string? Cvc5Path { get; init; }
 
+    /// <summary>The fewest partitions <see cref="Cvc5Partitions"/> asks for: cvc5 computes none below two.</summary>
+    public const int MinCvc5Partitions = 2;
+
+    /// <summary>The most partitions <see cref="Cvc5Partitions"/> asks for (ticket P1-039).</summary>
+    public const int MaxCvc5Partitions = 64;
+
+    /// <summary>
+    /// <c>solvers.cvc5.partitions</c> (ADR 0049 decision 7; ticket P1-039): in thorough mode, a rung 1 query plain cvc5
+    /// gave up on is split into this many partitions, each solved by a cvc5 process of its own. Null when unset, and then
+    /// nothing is split.
+    /// </summary>
+    public int? Cvc5Partitions { get; init; }
+
     /// <summary><c>mode</c> (ADR 0049, ADR 0052; ticket P1-032): quick unless set. The command line's <c>--mode</c> wins over it.</summary>
     public CompareMode Mode { get; init; }
 
@@ -123,10 +136,11 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
             & (ResourceLimit == other.ResourceLimit) // NOSONAR
             & (Jobs == other.Jobs) // NOSONAR
             & string.Equals(Cvc5Path, other.Cvc5Path, StringComparison.Ordinal) // NOSONAR
+            & (Cvc5Partitions == other.Cvc5Partitions) // NOSONAR
             & (Mode == other.Mode) // NOSONAR
             & (Escalation == other.Escalation) // NOSONAR
             & IrEquality.SequenceEqual(Explicit, other.Explicit); // NOSONAR
 
     public override int GetHashCode() =>
-        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit, Cvc5Path, Jobs, Mode, Escalation, IrEquality.Hash(Explicit));
+        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit, HashCode.Combine(Cvc5Path, Cvc5Partitions), Jobs, Mode, Escalation, IrEquality.Hash(Explicit));
 }

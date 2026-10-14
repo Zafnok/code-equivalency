@@ -323,6 +323,98 @@ public sealed class SecondSolverLadderTests
             checks);
     }
 
+    /// <summary>
+    /// Ticket P1-039 criterion 3, the options thorough mode gives a pass that splits: a rung 1 query is split only after Z3
+    /// and then plain cvc5 gave up on it, and the step that splits it is a stage of its own. A partition's <c>sat</c> is
+    /// read back as any other, and the rung's step says how many partitions were asked for.
+    /// </summary>
+    [Fact]
+    public void Thorough_AQueryIsSplitOnlyAfterZ3AndThenPlainCvc5GaveUp()
+    {
+        RecordingRunLog log = new(isDebug: true);
+        ScriptedSolver solver = new(static _ => new SmtUnknown("unknown"), ScriptedSolver.Solve);
+
+        Divergent divergent = Assert.IsType<Divergent>(Verify(Factoring, solver, Starved with { Partitions = 8, Log = log }));
+
+        Assert.Equal(
+            [
+                "detail stage=check:divergence result=unknown",
+                "detail stage=check:divergence:cvc5 result=unknown",
+                "detail stage=check:divergence:cvc5-partitions result=sat",
+                "detail stage=check:divergence-read-back result=sat",
+            ],
+            Checks(log));
+        Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.Refuted, "a divergence within 3 iterations") { Solver = Cvc5 with { Partitions = 8 } }, Assert.Single(divergent.Ladder));
+        (string script, int partitions, TimeSpan limit) = Assert.Single(solver.Splits);
+        Assert.Equal((Assert.Single(solver.Scripts), 8, TimeSpan.FromMilliseconds(600_000)), (script, partitions, limit));
+    }
+
+    /// <summary>Ticket P1-039 criterion 3, the options quick mode gives every pass: no partitions, so no query is split and there is no such step.</summary>
+    [Fact]
+    public void Quick_NoQueryIsSplit()
+    {
+        RecordingRunLog log = new(isDebug: true);
+        ScriptedSolver solver = new(static _ => new SmtUnknown("unknown"), ScriptedSolver.Solve);
+
+        AssertTimeout(Verify(Factoring, solver, Starved with { Log = log }));
+
+        Assert.Equal(["detail stage=check:divergence result=unknown", "detail stage=check:divergence:cvc5 result=unknown"], Checks(log));
+        Assert.Empty(solver.Splits);
+    }
+
+    /// <summary>A query plain cvc5 answered is not split, whatever the answer was worth after.</summary>
+    [Fact]
+    public void AQueryPlainCvc5Answered_IsNotSplit()
+    {
+        ScriptedSolver zeros = new(ScriptedSolver.Zeros, static _ => throw new InvalidOperationException("not split"));
+        ScriptedSolver unsat = new(static _ => new SmtUnsat(), static _ => throw new InvalidOperationException("not split"));
+
+        AssertTimeout(Verify(Factoring, zeros, Starved with { Partitions = 8 }));
+        Assert.Equal(Cvc5, Assert.Single(Verify(HardBesideAnOpaque, unsat, Starved with { Partitions = 8 }).Ladder).Solver);
+
+        Assert.Empty(zeros.Splits);
+        Assert.Empty(unsat.Splits);
+    }
+
+    /// <summary>
+    /// The partitions' <c>unsat</c> ends the query as plain cvc5's does; their <c>unknown</c>, a <c>sat</c> Z3 cannot
+    /// complete, or a split that throws leaves it the timeout it was, and names no solver.
+    /// </summary>
+    [Fact]
+    public void ThePartitionsAnswer_IsReadAsPlainCvc5sIs()
+    {
+        ScriptedSolver unsat = new(static _ => new SmtUnknown("unknown"), static _ => new SmtUnsat());
+
+        Unknown opaque = Assert.IsType<Unknown>(Verify(HardBesideAnOpaque, unsat, Starved with { Partitions = 24 }));
+
+        Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, "an input reaches an opaque node: old: Throw") { Solver = Cvc5 with { Partitions = 24 } }, Assert.Single(opaque.Ladder));
+        AssertTimeout(Verify(Factoring, new ScriptedSolver(static _ => new SmtUnknown("unknown")), Starved with { Partitions = 8 }));
+        AssertTimeout(Verify(Factoring, new ScriptedSolver(static _ => new SmtUnknown("unknown"), ScriptedSolver.Zeros), Starved with { Partitions = 8 }));
+        AssertTimeout(Verify(Factoring, new ScriptedSolver(static _ => new SmtUnknown("unknown"), static _ => throw new InvalidOperationException("the executable is gone")), Starved with { Partitions = 8 }));
+    }
+
+    /// <summary>A query that is not printed is not split either: the split is as unknown as the plain query was.</summary>
+    [Fact]
+    public void AQueryThatIsNotPrinted_IsNotSplit()
+    {
+        ScriptedSolver solver = new(static _ => new SmtUnsat(), static _ => new SmtUnsat());
+
+        Assert.Equal("not sent: a constant array cannot be rewritten exactly", Assert.IsType<SmtUnknown>(SecondSolver.AskInPartitions(solver, printed: null, partitions: 8, timeoutMs: 1_000)).Reason);
+        Assert.Empty(solver.Splits);
+        Assert.IsType<SmtUnsat>(SecondSolver.AskInPartitions(solver, new SecondSolver.Printed("(check-sat)", []), partitions: 8, timeoutMs: 1_000));
+        Assert.Equal([("(check-sat)", 8, TimeSpan.FromSeconds(1))], solver.Splits);
+    }
+
+    /// <summary>Rung 1's checks at <c>debug</c>, without their times.</summary>
+    private static string[] Checks(RecordingRunLog log) =>
+        [.. log.Events.Where(static e => e.Contains("stage=check:divergence", StringComparison.Ordinal) || e.Contains("stage=check:opaque", StringComparison.Ordinal)).Select(static e => e[..e.IndexOf(" took=", StringComparison.Ordinal)] + e[e.IndexOf(" result=", StringComparison.Ordinal)..])];
+
+    private static Verdict Verify(string pair, ScriptedSolver solver, VerificationOptions options)
+    {
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair(pair);
+        return new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(old, @new, options with { Solver = solver });
+    }
+
     private static Verdict Verify(string pair, ScriptedSolver? solver)
     {
         (IrProcedure old, IrProcedure @new) = Fixture.Pair(pair);

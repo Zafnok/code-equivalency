@@ -804,7 +804,8 @@ internal static class CompareCommand
 
     /// <summary>
     /// The backend's knobs for this run: the config's bound, timeout, resource limit and renames, the command line's rung
-    /// options, and cvc5 as the second solver when the config names its executable (ADR 0050; ticket P1-033).
+    /// options, and cvc5 as the second solver when the config names its executable (ADR 0050; ticket P1-033). A query cvc5
+    /// splits runs its partitions within the run's <c>jobs</c> processes at once (ticket P1-039).
     /// </summary>
     private static VerificationOptions Verification(EquivConfig config, CompareOptions options, IRunLog runLog) =>
         new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
@@ -812,7 +813,7 @@ internal static class CompareCommand
             ResourceLimit = config.ResourceLimit,
             ChcIntMode = options.ChcIntMode,
             InvariantModel = options.InvariantModel,
-            Solver = config.Cvc5Path is { } cvc5 ? new Cvc5Solver(cvc5) : null,
+            Solver = config.Cvc5Path is { } cvc5 ? new Cvc5Solver(cvc5) { Processes = config.Jobs } : null,
             Log = runLog,
         };
 

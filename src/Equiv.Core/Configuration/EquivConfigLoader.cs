@@ -48,6 +48,7 @@ public static class EquivConfigLoader
         ImmutableArray<string> suppressRuntimeChanges = ReadStringArray(root, "suppressRuntimeChanges", EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, diagnostics);
         ImmutableArray<string> suppressApiEquivalences = ReadStringArray(root, "suppressApiEquivalences", EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry, diagnostics);
         (TargetRuntime? legacyRuntime, TargetRuntime? modernRuntime) = ReadRuntimes(root, diagnostics);
+        (string? Path, int? Partitions) cvc5 = ReadCvc5(root, diagnostics);
 
         EquivConfig config = new(renames, callIdentityRenames, bound, timeoutMs)
         {
@@ -57,7 +58,8 @@ public static class EquivConfigLoader
             ModernRuntime = modernRuntime,
             ResourceLimit = resourceLimit,
             Jobs = jobs,
-            Cvc5Path = ReadCvc5Path(root, diagnostics),
+            Cvc5Path = cvc5.Path,
+            Cvc5Partitions = cvc5.Partitions,
             Mode = ReadMode(root, diagnostics),
             Escalation = ReadEscalation(root, diagnostics),
         };
@@ -210,26 +212,28 @@ public static class EquivConfigLoader
     }
 
     /// <summary>
-    /// <c>"solvers": { "cvc5": { "path": "&lt;executable&gt;" } }</c> (ADR 0050 decision 6; ticket P1-033). Anything else
-    /// under <c>solvers</c> is a diagnostic and configures no solver.
+    /// <c>"solvers": { "cvc5": { "path": "&lt;executable&gt;", "partitions": n } }</c> (ADR 0050 decision 6, ADR 0049
+    /// decision 7; tickets P1-033 and P1-039). Anything else under <c>solvers</c> is a diagnostic and configures no
+    /// solver; a <c>partitions</c> that is not an integer from <see cref="EquivConfig.MinCvc5Partitions"/> to
+    /// <see cref="EquivConfig.MaxCvc5Partitions"/> is one too, and splits nothing.
     /// </summary>
-    private static string? ReadCvc5Path(JsonElement root, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    private static (string? Path, int? Partitions) ReadCvc5(JsonElement root, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
     {
         const string Property = "solvers";
         const string Solver = "cvc5";
         const string Path = "path";
         if (!root.TryGetProperty(Property, out JsonElement solvers))
         {
-            return null;
+            return (null, null);
         }
 
         if (solvers.ValueKind != JsonValueKind.Object)
         {
             diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, Property, $"\"{Property}\" must be an object with \"{Solver}\""));
-            return null;
+            return (null, null);
         }
 
-        string? path = null;
+        (string? Path, int? Partitions) cvc5 = (null, null);
         foreach (JsonProperty solver in solvers.EnumerateObject())
         {
             string at = $"{Property}/{solver.Name}";
@@ -243,23 +247,31 @@ public static class EquivConfigLoader
             }
             else
             {
-                path = ReadSolverPath(solver.Value, at, diagnostics);
+                cvc5 = ReadSolver(solver.Value, at, diagnostics);
             }
         }
 
-        return path;
+        return cvc5;
     }
 
-    private static string? ReadSolverPath(JsonElement solver, string at, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    private static (string? Path, int? Partitions) ReadSolver(JsonElement solver, string at, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
     {
         const string Path = "path";
+        const string Partitions = "partitions";
         string? path = null;
+        int? partitions = null;
         foreach (JsonProperty entry in solver.EnumerateObject())
         {
+            if (string.Equals(entry.Name, Partitions, StringComparison.Ordinal))
+            {
+                partitions = ReadPartitions(entry.Value, $"{at}/{Partitions}", diagnostics);
+                continue;
+            }
+
             string? value = entry.Value.ValueKind == JsonValueKind.String ? entry.Value.GetString() : null;
             if (!string.Equals(entry.Name, Path, StringComparison.Ordinal))
             {
-                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, $"{at}/{entry.Name}", $"unknown property \"{entry.Name}\" (expected \"{Path}\")"));
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, $"{at}/{entry.Name}", $"unknown property \"{entry.Name}\" (expected \"{Path}\" or \"{Partitions}\")"));
             }
             else if (string.IsNullOrWhiteSpace(value))
             {
@@ -271,7 +283,21 @@ public static class EquivConfigLoader
             }
         }
 
-        return path;
+        return (path, partitions);
+    }
+
+    private static int? ReadPartitions(JsonElement element, string at, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    {
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out int partitions) && partitions is >= EquivConfig.MinCvc5Partitions and <= EquivConfig.MaxCvc5Partitions)
+        {
+            return partitions;
+        }
+
+        diagnostics.Add(Diagnostic(
+            EquivConfigDiagnosticIds.InvalidCvc5Partitions,
+            at,
+            string.Create(CultureInfo.InvariantCulture, $"value must be an integer from {EquivConfig.MinCvc5Partitions} to {EquivConfig.MaxCvc5Partitions}")));
+        return null;
     }
 
     /// <summary>
