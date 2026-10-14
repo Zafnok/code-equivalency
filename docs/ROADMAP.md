@@ -562,7 +562,7 @@ of how much of the cleanup result each explains:
   used: `SecondSolver.Print` declines the queries of 76 of gitextensions-9860's 302 solver
   Equivalents, so neither the second solver nor a certificate reaches them. Found by P1-026. Needs
   P1-033.
-- P2-195 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
+- P2-198 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
   of giving Unknown(Timeout): the arithmetic refinement reads a model between checks, and nothing
   catches the interrupt there. Three `Z3BackendTests` failed on a loaded Windows runner. Found by
   P2-168's CI. Needs P2-112.
@@ -1316,7 +1316,7 @@ They come before any other open ticket, in this order:
    (`ArrayElementReference`, 5.9% of OpenRA's), P2-180 (`CaughtException`, 5.2% of Duplicati's), P2-165
    (`no-body`, 5.4% of `gitextensions-8522`'s).
 6. The other false-positive causes, one or two results each: P2-185, P2-186, P2-187, P2-191, P2-097.
-   From P2-181's count: P2-194 (S, 69 OpenRA bodies under the .NET 9 float rule because its mods count
+   From P2-181's count: P2-197 (S, 69 OpenRA bodies under the .NET 9 float rule because its mods count
    as unhosted) and P2-195 (M, the 347 `abstraction` Unknowns that name a shared function, not the
    runtime-changed call).
 7. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates the same samples again,
