@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    P1-039 criterion 5: a measurement, not a product. It is not in Equiv.slnx, so no CI gate builds it. It runs the
+    product's Cvc5Solver on P1-025's exported files, and takes the assembly name of Equiv.Verify.Cvc5's test project for
+    that project's InternalsVisibleTo grant, so it can read how each partition ended (Cvc5Solver.Split) and src/ is
+    unchanged. No lock file: it adds no package, and cvc5 is run as a process, never referenced. Style analyzers are off:
+    this is measurement code, not product code; compiler warnings stay errors.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Cvc5PartitionsMeasure</RootNamespace>
+    <AssemblyName>Equiv.Verify.Cvc5.Tests</AssemblyName>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Equiv.Verify.Cvc5\Equiv.Verify.Cvc5.csproj" />
+  </ItemGroup>
+
+</Project>

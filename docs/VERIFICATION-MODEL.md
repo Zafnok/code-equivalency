@@ -1040,7 +1040,8 @@ ticket P1-033) has `proofMethod` suffixed with `+` and the solver's name, after 
 apply: `bounded+cvc5`. That holds for a Divergent and an Unknown too, which otherwise carry no
 `proofMethod`, and names the rung the solver answered for; a Divergent the real runtimes showed stays
 `observed`. The `ladderTrace` step of that rung carries `solver`, the solver's name and version
-(`cvc5 1.4.1`). A result Z3 decided alone is named as before. An Equivalent or a Divergent that a round of rung 1 on
+(`cvc5 1.4.1`), and `partitions`, the number of partitions asked for, when an answer it kept came from a query split
+into partitions (section 6; ticket P1-039). A result Z3 decided alone is named as before. An Equivalent or a Divergent that a round of rung 1 on
 the product with its hard arithmetic abstracted decided (section 5.1; ticket P1-031) has `proofMethod` suffixed
 `+abstracted`, after the other suffixes: `bounded+abstracted`. Each such round is a `ladderTrace` step of rung
 `bounded` whose detail starts `arithmetic abstracted, round <n>:` and which carries `factsAdded`, the number of
@@ -1198,6 +1199,7 @@ never Equivalent or Divergent where thorough would not.
 | Failure refinement (ADR 0037) on a `timeout` Unknown | no | yes, at the budget pass's budgets |
 | Loop ladder rungs 1 to 4 | yes | yes |
 | Rung 5's local proposer (runs only after a rung 4 timeout) | no | yes |
+| cvc5 splits a rung 1 query it gave up on into partitions, each solved by a process of its own (ADR 0049 decision 7; ticket P1-039) | no | yes, when `solvers.cvc5.partitions` is set, in the pass that refines timeouts |
 | Contracts pass (ADR 0036 decision 2) | no; the Equivalent keeps its `unprovenAssumptions` | yes |
 | IL lowering (ADR 0039) | no | yes, as a pass: a pair still Unknown that meets ADR 0039's condition is verified again from its IL bodies |
 | `--execute`, when given: replay of every Divergent | yes | yes |
@@ -1285,6 +1287,27 @@ ends most of its queries too.
   makes a Divergent or an Unknown(abstraction).
 - Anything else leaves the query the timeout it was: an `unknown`, a script cvc5 cannot read, values that
   are missing or are not literals of the constant's sort, a model Z3 cannot complete, a process that fails.
+
+In thorough mode, `"solvers": { "cvc5": { "path": "<executable>", "partitions": <n> } }`, an integer from 2 to
+64 (CFG015 otherwise, and nothing is split), splits a rung 1 query cvc5 also gave up on (ADR 0049 decision 7;
+ticket P1-039). The split happens in the pass that asks rung 5's local proposer and refines timeouts: the budget
+pass, or the first pass when there is none. One more cvc5 process, under the same `--rlimit` and `--tlimit`, is asked
+for `n` partitions at its first check with the `decision-scatter` strategy (`--compute-partitions=<n>
+--partition-strategy=decision-scatter --partition-when=climit --checks-before-partition=1
+--checks-between-partitions=1`). Its own answer is never read: after it writes partitions cvc5 prints `unsat`
+whatever the query is. Each partition is the query with one more assertion, asked as a plain query in a process of
+its own; at most `jobs` such processes run at once over the whole run. A `sat` partition stops the partitions written
+after it, and every partition written before it runs to its end, so the answer does not depend on which process ends
+first:
+- one or more `sat`: the query is `sat` with the values of the first one written, read back and replayed as above;
+- every one `unsat`, and the declarations with the negation of the partitions' disjunction `unsat` too (the cover
+  check): the query is `unsat`;
+- anything else, and no partition written: the query is the timeout it was.
+
+The `ladderTrace` step of a rung whose answer came from partitions says how many were asked for. On
+`gitextensions-8522` partitioning decides queries plain cvc5 does not and loses none of plain cvc5's answers, since
+it is asked only after them (`docs/runs/2026-10-04-cvc5-partitioning.md`, `docs/runs/2026-10-14-cvc5-partitions.md`).
+Quick mode, and a run without the key, splits nothing.
 
 Induction obligations (rungs 2 and 3), Horn clauses (rungs 4 and 5), contract queries and ADR 0037's
 queries are asked of Z3 alone. With no solver configured nothing above happens and every result is what it

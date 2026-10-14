@@ -123,6 +123,8 @@ Notes). Running Z3 and cvc5 at once.
 - Decision: the criterion 5 harness is `tools/spikes/cvc5-partitions/` (not in `Equiv.slnx`), which runs the product's
   `Cvc5Solver` and takes the test project's assembly name to read how each partition ended (`Cvc5Solver.Split`). It
   asks each query as the product does: plain first, split only if plain gave up.
-- Decision: the 34 queries are the indices P1-036's own `partitioned.tsv` lists for the set `timeouts`. P1-025's
-  `results.tsv` was written again after P1-036 read it, and now lists 33 timeouts, 5 of them different.
+- Decision: the 34 queries are the indices P1-036's own `partitioned.tsv` lists for the set `timeouts`. P1-025 left
+  four output folders; P1-036 read `20261004-p1025-final3` (34 timeouts, 59 answered). The `results.tsv` of
+  `20261004-p1025-final` lists 33 timeouts: there cvc5 could not read 69, 97 and 100 ("Cannot handle assertion"), and
+  73 and 87 timed out. The 34 files are byte-identical in both folders, so the measurement asks exactly P1-036's queries.
 - `tools/spikes/cvc5-budget/` implements `ISmtSolver`; it gains a pass-through `AskInPartitions` so it still builds.
