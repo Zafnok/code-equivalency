@@ -1251,6 +1251,40 @@ find a larger lever, and are the first candidates for the milestone after this o
 found none in the solver: no other tactic pipeline proves a pair). That orders
 the work; it leaves none of it out (ADR 0049 decision 7).
 
+Done 2026-10-14 by P2-130, at equiv `e98fd1b9` (the three migrations; the two upgrades are P2-124's at
+`1d767f54`), verdict `docs/runs/2026-10-14-migrations-verdict.md`. All five large pairs run to a result
+with no crashed pair. Over them the solver proves 25.8% of changed pairs (from 24.9%), 58.4% are Unknown
+(from 57.8%: Duplicati and OpenRA join at 49.8% and 83.2%), and Divergent precision on migrations is
+1.4% (1 of 69): the fixes removed most of the false positives P2-047 counted, and today's samples found
+68 more with eleven causes. Half the migrations' changed pairs (1,004 of 1,966) are unedited bodies a
+runtime rule keeps out of congruence, and they are 680 of the 1,222 Unknowns and 319 of the 411
+Divergent; the solver proves 5.
+
+### Scoreboard milestone 2 (2026-10-14)
+
+From P2-130's criteria 5 and 6, ranked by what each moves on the Unknown and Divergent precision rows.
+They come before any other open ticket, in this order:
+
+1. P2-181 (L) an unedited body a runtime rule keeps out of congruence is proved where the rule's change
+   cannot be reached: 680 of the migrations' 1,222 Unknowns and 319 of their 411 Divergent.
+2. Divergent precision, the EQ006 rows' reach (37 of the 68 false positives): P2-188 (M, 13, valid
+   paths P2-074 does not follow), P2-190 (M, 13, rows that match calls their change does not affect),
+   P2-189 (S, 11, rows with no precondition on a constant argument).
+3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
+   migrations.
+4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same.
+5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs: P2-179 (`rebound-call`, 12.9%
+   of `gitextensions-8522`'s), P2-182 (`DelegateCreation`, 9.7% of OpenRA's), P2-183
+   (`ArrayElementReference`, 5.9% of OpenRA's), P2-180 (`CaughtException`, 5.2% of Duplicati's), P2-165
+   (`no-body`, 5.4% of `gitextensions-8522`'s).
+6. The other false-positive causes, one or two results each: P2-185, P2-186, P2-187, P2-191, P2-097.
+7. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates the same samples again,
+   and names the milestone after this one. Not filed until the tickets above are done.
+
+Not on it: `timeout` (401) and `abstraction` (478) are 56% of the scoreboard's Unknowns, and P2-181's
+count says most of both are the unedited bodies; what is left of them after P2-181 is the next
+measurement, with P1-034 (Bitwuzla), which decided 103 of 142 rung 1 queries and proved no pair.
+
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
 Moved from M4 by the 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`): each unlocks
