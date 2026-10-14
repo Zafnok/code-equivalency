@@ -1312,10 +1312,13 @@ first:
   check): the query is `unsat`;
 - anything else, and no partition written: the query is the timeout it was.
 
-The `ladderTrace` step of a rung whose answer came from partitions says how many were asked for. On
-`gitextensions-8522` partitioning decides queries plain cvc5 does not and loses none of plain cvc5's answers, since
-it is asked only after them (`docs/runs/2026-10-04-cvc5-partitioning.md`, `docs/runs/2026-10-14-cvc5-partitions.md`).
-Quick mode, and a run without the key, splits nothing.
+The `ladderTrace` step of a rung whose answer came from partitions says how many were asked for. A split is asked
+only after plain cvc5 gave up, so it loses none of plain cvc5's answers. Its answers repeat: P1-036's 34 queries, split
+twice at 8 and at 24 partitions, end the same way both times, with the resource limit ending all but a few partitions.
+On them it decides 7 at 8 and 9 at 24, all satisfiable. In a thorough run of `gitextensions-8522` it changes no result
+and adds about 3,500 s, most of it one query cvc5 runs to the clock (`docs/runs/2026-10-14-cvc5-partitions.md`). 8 is
+the measured count: 24 does no more there for three times the processes. Quick mode, and a run without the key,
+splits nothing.
 
 Induction obligations (rungs 2 and 3), Horn clauses (rungs 4 and 5), contract queries and ADR 0037's
 queries are asked of Z3 alone. With no solver configured nothing above happens and every result is what it

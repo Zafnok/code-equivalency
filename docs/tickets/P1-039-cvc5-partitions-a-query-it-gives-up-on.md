@@ -128,3 +128,19 @@ Notes). Running Z3 and cvc5 at once.
   `20261004-p1025-final` lists 33 timeouts: there cvc5 could not read 69, 97 and 100 ("Cannot handle assertion"), and
   73 and 87 timed out. The 34 files are byte-identical in both folders, so the measurement asks exactly P1-036's queries.
 - `tools/spikes/cvc5-budget/` implements `ISmtSolver`; it gains a pass-through `AskInPartitions` so it still builds.
+- Decision: the harness gives each process 600 s, the budget pass's `timeoutMs`, where the product splits. On these 34
+  queries cvc5's `--rlimit` 2,000,000 takes minutes: the first plain query ran its whole 600 s. So the harness does
+  not ask the plain query again (P1-036 measured that cvc5 gives up on each), and runs queries side by side within
+  24 processes.
+- Criterion 5 (`docs/runs/2026-10-14-cvc5-partitions.md`): 0 of 34 queries differ between two runs, at 8 and at 24
+  partitions, in answer and in every partition's ending. The clock ends 2 of 178 partitions at 8 and 3 of 530 at 24,
+  the same ones in both runs. 7 sat at 8, 9 at 24, no unsat.
+- Criterion 6: in thorough mode on `gitextensions-8522` the key changes no result at 8 or 24: 22 `timeout` Unknowns in
+  each, every result equal. Runs: 6,026 s without, 9,503 s at 8, 9,562 s at 24, the difference all in the budget pass.
+  Decision: the count is 8, the same yield there for a third of the partitions.
+- The box shut down mid-way through the first thorough run at 24 and the harness's second run at 24. That run was
+  discarded and run again; the harness's two rows written as its processes were killed were dropped and asked again.
+- Finding, ticketed: plain cvc5 runs `ImpactControl::UpdatePathsAndLabels()`'s query to the clock (3,600 s on 24
+  threads) in every run, never to its resource limit, and its split takes another 3,600 s: P2-196.
+- Finding, ticketed: 7 of the 22 `timeout` Unknowns have a rung 1 query plain cvc5 answers `sat` whose model Z3 cannot
+  complete, and the one `sat` from partitions is lost the same way: P1-043.
