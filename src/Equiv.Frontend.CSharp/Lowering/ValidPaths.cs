@@ -35,7 +35,7 @@ internal static class ValidPaths
         IPropertyReferenceOperation property => property.Property.GetMethod is { } getter && RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), []),
         IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
             Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, seen))),
-        ILocalReferenceOperation local => IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, Root(value), seen),
+        ILocalReferenceOperation local => IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen),
         IParameterReferenceOperation parameter => IsGuarded(parameter.Parameter, value),
         _ => false,
     };
@@ -45,43 +45,15 @@ internal static class ValidPaths
     /// <summary>Whether <paramref name="local"/> is declared with a valid path and every later assignment gives it one.</summary>
     private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen) =>
         !seen.Contains(local)
-        && Initializer(local, root) is { } initial
-        && Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local)));
-
-    private static IOperation? Initializer(ILocalSymbol local, IOperation root) =>
-        root.DescendantsAndSelf().OfType<IVariableDeclaratorOperation>().FirstOrDefault(d => SymbolEqualityComparer.Default.Equals(d.Symbol, local))?.Initializer?.Value;
-
-    /// <summary>
-    /// What is written to <paramref name="symbol"/> under <paramref name="root"/> after its declaration: the value of each
-    /// assignment, or null for a write whose value is not known (a compound assignment, a <c>ref</c> or <c>out</c>
-    /// argument, a tuple it is part of).
-    /// </summary>
-    private static ImmutableArray<IOperation?> Writes(ISymbol symbol, IOperation root) =>
-        [.. root.DescendantsAndSelf().Where(o => SymbolEqualityComparer.Default.Equals(Symbol(o), symbol)).Select(Write).Where(static w => w.Written).Select(static w => w.Value)];
-
-    private static (bool Written, IOperation? Value) Write(IOperation reference) => reference.Parent switch
-    {
-        ISimpleAssignmentOperation assignment when assignment.Target == reference => (true, assignment.Value),
-        IAssignmentOperation assignment when assignment.Target == reference => (true, null),
-        IArgumentOperation { Parameter.RefKind: not RefKind.None } or ITupleOperation => (true, null),
-        _ => (false, null),
-    };
-
-    private static ISymbol? Symbol(IOperation operation) => operation switch
-    {
-        ILocalReferenceOperation local => local.Local,
-        IParameterReferenceOperation parameter => parameter.Parameter,
-        _ => null,
-    };
-
-    private static IOperation Root(IOperation operation) => operation.Parent is { } parent ? Root(parent) : operation;
+        && LocalValues.Initializer(local, root) is { } initial
+        && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local)));
 
     /// <summary>
     /// Whether a validating guard has returned true for <paramref name="symbol"/> wherever <paramref name="use"/> runs.
     /// Nothing may assign the symbol after its declaration, so the guard and the use read one value.
     /// </summary>
     private static bool IsGuarded(ISymbol symbol, IOperation use) =>
-        Writes(symbol, Root(use)).IsEmpty && Ancestors(use).Any(step => Guards(step.Outer, step.Inner, symbol));
+        LocalValues.Writes(symbol, LocalValues.Root(use)).IsEmpty && Ancestors(use).Any(step => Guards(step.Outer, step.Inner, symbol));
 
     /// <summary>Each operation from <paramref name="operation"/> up, with its parent.</summary>
     private static IEnumerable<(IOperation Outer, IOperation Inner)> Ancestors(IOperation operation)
@@ -119,7 +91,7 @@ internal static class ValidPaths
             Holds(binary.LeftOperand, whenTrue, symbol) || Holds(binary.RightOperand, whenTrue, symbol),
         IInvocationOperation call => whenTrue
             && RuntimeChangeTable.Load().ValidatesPath(Identity(call.TargetMethod))
-            && call.Arguments.Any(argument => SymbolEqualityComparer.Default.Equals(Symbol(argument.Value), symbol)),
+            && call.Arguments.Any(argument => SymbolEqualityComparer.Default.Equals(LocalValues.Symbol(argument.Value), symbol)),
         _ => false,
     };
 }

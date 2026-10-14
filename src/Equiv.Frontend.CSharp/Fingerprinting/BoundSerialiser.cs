@@ -156,7 +156,7 @@ internal sealed class BoundSerialiser : OperationWalker
         ImmutableArray<IOperation> operations,
         Settings settings)
     {
-        BoundSerialiser serialiser = new(method, compilation, WithRowPreconditions(settings, operations));
+        BoundSerialiser serialiser = new(method, compilation, WithRowPreconditions(settings, operations, compilation));
         serialiser.Signature();
         if (operations.IsEmpty)
         {
@@ -176,8 +176,8 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <paramref name="settings"/> with the rows whose <see cref="Equiv.Core.RuntimeChanges.RowPrecondition"/> the method made of
     /// <paramref name="operations"/> does not meet suppressed, as the lowering does (ticket P2-114).
     /// </summary>
-    private static Settings WithRowPreconditions(Settings settings, IEnumerable<IOperation> operations) =>
-        settings with { SuppressedRuntimeChanges = RowPreconditions.Suppress(settings.SuppressedRuntimeChanges, operations) };
+    private static Settings WithRowPreconditions(Settings settings, IEnumerable<IOperation> operations, Compilation compilation) =>
+        settings with { SuppressedRuntimeChanges = RowPreconditions.Suppress(settings.SuppressedRuntimeChanges, operations, compilation) };
 
     /// <summary>
     /// The serialisation of a partial method by its <paramref name="implementation"/>, whose <paramref name="body"/> is its
@@ -191,7 +191,7 @@ internal sealed class BoundSerialiser : OperationWalker
         Compilation compilation,
         Settings settings)
     {
-        BoundSerialiser serialiser = new(implementation, compilation, WithRowPreconditions(settings, [body]));
+        BoundSerialiser serialiser = new(implementation, compilation, WithRowPreconditions(settings, [body], compilation));
         serialiser.Signature();
         serialiser.text.Append("ImplementingPart");
         serialiser.End(FingerprintDifference.BodyKind, "ImplementingPart");
