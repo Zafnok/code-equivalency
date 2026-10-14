@@ -1,5 +1,5 @@
 # P1-039 In thorough mode, cvc5 splits a rung 1 query it gives up on into partitions solved a process each
-Status: in-progress
+Status: done (PR #493)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-033, P1-032, P2-100
