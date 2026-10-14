@@ -451,6 +451,8 @@ public sealed class RuntimeChangeTableTests
     [InlineData("cultureSensitiveText", RuntimeChangePrecondition.CultureSensitiveText)]
     [InlineData("invalidPath", RuntimeChangePrecondition.InvalidPath)]
     [InlineData("trimEntries", RuntimeChangePrecondition.TrimEntries)]
+    [InlineData("absentFolder", RuntimeChangePrecondition.AbsentFolder)]
+    [InlineData("blankFormat", RuntimeChangePrecondition.BlankFormat)]
     public void PreconditionIsParsed(string name, RuntimeChangePrecondition precondition)
     {
         RuntimeChangeTable table = Parse($$"""
@@ -501,6 +503,31 @@ public sealed class RuntimeChangeTableTests
     private static string RepoRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     /// <summary>Parses <paramref name="rows"/>, a JSON array of rows, as a table covering .NET from <c>netcoreapp3.0</c>.</summary>
+    /// <summary>Ticket P2-189: <c>fieldValues</c> gives a framework field's documented value; a table without it lists none.</summary>
+    [Fact]
+    public void FieldValuesAreParsed()
+    {
+        RuntimeChangeTable table = ParseDocument("""{ "coveredFrom": "netcoreapp3.0", "rows": [], "fieldValues": { "A.B::C": "c" } }""");
+
+        Assert.True(table.TryGetFieldValue("A.B::C", out string? value));
+        Assert.Equal("c", value);
+        Assert.False(table.TryGetFieldValue("A.B::D", out _));
+        Assert.False(Parse("[]").TryGetFieldValue("A.B::C", out _));
+    }
+
+    /// <summary>Ticket P2-189: the shipped table reads the <c>DataFormats</c> fields whose value .NET Framework and .NET share, and no other.</summary>
+    [Fact]
+    public void TheShippedFieldValuesAreTheDataFormatsNames()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+
+        Assert.True(table.TryGetFieldValue("System.Windows.Forms.DataFormats::UnicodeText", out string? unicode));
+        Assert.Equal("UnicodeText", unicode);
+        Assert.True(table.TryGetFieldValue("System.Windows.Forms.DataFormats::Html", out string? html));
+        Assert.Equal("HTML Format", html);
+        Assert.False(table.TryGetFieldValue("System.Windows.Forms.DataFormats::Serializable", out _));
+    }
+
     private static RuntimeChangeTable Parse(string rows) => ParseDocument($$"""{ "coveredFrom": "netcoreapp3.0", "rows": {{rows}} }""");
 
     private static RuntimeChangeTable ParseDocument(string json)

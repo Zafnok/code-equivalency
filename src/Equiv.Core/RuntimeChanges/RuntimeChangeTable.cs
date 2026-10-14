@@ -1,4 +1,6 @@
+using System.Collections.Frozen;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
@@ -22,15 +24,18 @@ public sealed class RuntimeChangeTable
     /// <summary>The oldest runtime a compared project can target (ADR 0040): .NET Framework 4.0, older than every change point.</summary>
     private static readonly TargetRuntime Oldest = new(TargetRuntime.RuntimeFamily.NetFramework, new Version(4, 0));
 
-    private RuntimeChangeTable(TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows, ValidPaths validPaths)
+    private RuntimeChangeTable(TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows, ValidPaths validPaths, FrozenDictionary<string, string> fieldValues)
     {
         CoveredFrom = coveredFrom;
         Rows = rows;
         this.validPaths = validPaths;
+        this.fieldValues = fieldValues;
         Coverage = new RuntimeInterval(Oldest, rows.Select(static row => row.ChangedIn).OfType<TargetRuntime>().Append(coveredFrom).Max()!);
     }
 
     private readonly ValidPaths validPaths;
+
+    private readonly FrozenDictionary<string, string> fieldValues;
 
     /// <summary>The oldest .NET version whose changes the table lists; see <see cref="RuntimeInterval.UncoveredRange(TargetRuntime)"/>.</summary>
     public TargetRuntime CoveredFrom { get; }
@@ -66,6 +71,13 @@ public sealed class RuntimeChangeTable
         ArgumentNullException.ThrowIfNull(member);
         return Lists(validPaths.Guards, member);
     }
+
+    /// <summary>
+    /// The documented <paramref name="value"/> of the framework <c>static readonly</c> field <paramref name="field"/>
+    /// (<c>Namespace.Type::Name</c>), which a precondition reads as a constant's (ticket P2-189); false when the table's
+    /// <c>fieldValues</c> does not list it.
+    /// </summary>
+    public bool TryGetFieldValue(string field, [NotNullWhen(true)] out string? value) => fieldValues.TryGetValue(field, out value);
 
     private static bool Lists(ImmutableArray<string> members, CallIdentity member) =>
         members.Any(listed => member.Value.StartsWith(listed, StringComparison.Ordinal));
@@ -142,7 +154,7 @@ public sealed class RuntimeChangeTable
     /// <summary>
     /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c>, <c>rows</c> and, optionally,
     /// <c>validPaths</c> (its <c>sources</c>, <c>transforms</c> and <c>guards</c>, each a list of member prefixes; ticket
-    /// P2-074). A row whose
+    /// P2-074) and <c>fieldValues</c> (a field's identity to its documented string value; ticket P2-189). A row whose
     /// <c>source</c> is missing, or is not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), or whose
     /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
     /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c>, a <c>precondition</c>
@@ -178,8 +190,13 @@ public sealed class RuntimeChangeTable
             });
         }
 
-        return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable(), ParseValidPaths(root));
+        return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable(), ParseValidPaths(root), ParseFieldValues(root));
     }
+
+    private static FrozenDictionary<string, string> ParseFieldValues(JsonElement root) =>
+        root.TryGetProperty("fieldValues", out JsonElement fields)
+            ? fields.EnumerateObject().ToFrozenDictionary(static field => field.Name, static field => field.Value.GetString()!, StringComparer.Ordinal)
+            : FrozenDictionary<string, string>.Empty;
 
     private static ValidPaths ParseValidPaths(JsonElement root) =>
         root.TryGetProperty("validPaths", out JsonElement lists)
@@ -210,6 +227,8 @@ public sealed class RuntimeChangeTable
             "cultureSensitiveText" => RuntimeChangePrecondition.CultureSensitiveText,
             "invalidPath" => RuntimeChangePrecondition.InvalidPath,
             "trimEntries" => RuntimeChangePrecondition.TrimEntries,
+            "absentFolder" => RuntimeChangePrecondition.AbsentFolder,
+            "blankFormat" => RuntimeChangePrecondition.BlankFormat,
             _ => throw new InvalidDataException($"runtime-changes row '{member}' has unknown precondition '{precondition}'"),
         };
     }

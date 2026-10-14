@@ -10,7 +10,8 @@ namespace Equiv.Frontend.CSharp.Lowering;
 
 /// <summary>
 /// A call's operands as a <c>runtime-changes.json</c> row's precondition reads them (ticket P2-073): the receiver of an
-/// instance call, then each argument under its parameter's name, with its value when it is a compile-time constant.
+/// instance call, then each argument under its parameter's name, with its value when it is a compile-time constant, or
+/// a read of a framework field the table's <c>fieldValues</c> lists, whose documented value it then has (ticket P2-189).
 /// </summary>
 internal static class CallArguments
 {
@@ -44,9 +45,16 @@ internal static class CallArguments
         instance is null ? [] : [Of(CallArgument.Receiver, instance.Type!, instance, isValidPath)];
 
     private static CallArgument Of(string parameter, ITypeSymbol type, IOperation value, Func<IOperation, bool> isValidPath) =>
-        new(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value)
+        Constant(new CallArgument(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value)
         {
             ValidPath = isValidPath(value),
             IsCharOrIndex = type.SpecialType is SpecialType.System_Char or SpecialType.System_Int32,
-        };
+        }, value);
+
+    /// <summary><paramref name="argument"/>, as a constant with its documented value when <paramref name="value"/> reads a field the table lists.</summary>
+    private static CallArgument Constant(CallArgument argument, IOperation value) =>
+        value is IFieldReferenceOperation { Field: var field }
+            && RuntimeChangeTable.Load().TryGetFieldValue($"{field.ContainingType.ToDisplayString()}::{field.Name}", out string? documented)
+            ? argument with { IsConstant = true, Value = documented }
+            : argument;
 }
