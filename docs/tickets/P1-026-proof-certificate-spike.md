@@ -1,5 +1,5 @@
 # P1-026 Spike: can a solver Equivalent be checked by an independent proof checker?
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-025
