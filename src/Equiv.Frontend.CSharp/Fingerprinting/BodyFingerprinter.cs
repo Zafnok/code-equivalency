@@ -78,13 +78,13 @@ internal static class BodyFingerprinter
         ArgumentNullException.ThrowIfNull(config);
         List<BoundLine> lines = [];
         List<string> rules = [];
-        _ = Text(method, compilation, config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime, keptForwarders, lines, rules);
+        _ = Text(method, compilation, Settings(config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime, keptForwarders) with { Lines = lines, Rules = rules });
         return new BoundText([.. lines], [.. rules]);
     }
 
     /// <summary>
     /// The canonical serialisation the fingerprint hashes, readable for tests and review; a null text when there is no body.
-    /// With <paramref name="lines"/>, the text's lines are added to it as well, and with <paramref name="rules"/> the runtime rules that apply to it.
+    /// With <paramref name="lines"/>, the text's lines are added to it as well.
     /// </summary>
     public static (string? Text, bool RuntimeSensitive) Text(
         IMethodSymbol method,
@@ -93,11 +93,20 @@ internal static class BodyFingerprinter
         ImmutableArray<ApiEquivalence> equivalences,
         SideRuntime runtime,
         ImmutableHashSet<string>? keptForwarders = null,
-        List<BoundLine>? lines = null,
-        List<string>? rules = null)
+        List<BoundLine>? lines = null) =>
+        Text(method, compilation, Settings(config, equivalences, runtime, keptForwarders) with { Lines = lines });
+
+    /// <summary>How <paramref name="config"/>, <paramref name="equivalences"/> and <paramref name="runtime"/> have a side's text spelled.</summary>
+    private static BoundSerialiser.Settings Settings(EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders)
     {
         ArgumentNullException.ThrowIfNull(config);
-        BoundSerialiser.Settings settings = new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime) { KeptForwarders = keptForwarders ?? [], Lines = lines, Rules = rules };
+        return new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime) { KeptForwarders = keptForwarders ?? [] };
+    }
+
+    /// <summary>The serialisation of <paramref name="method"/>'s body with <paramref name="settings"/>, which say where its lines and rules are also written.</summary>
+    private static (string? Text, bool RuntimeSensitive) Text(IMethodSymbol method, Compilation compilation, BoundSerialiser.Settings settings)
+    {
+        SideRuntime runtime = settings.Runtime;
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
 
