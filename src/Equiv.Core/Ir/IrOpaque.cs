@@ -13,10 +13,16 @@ namespace Equiv.Core.Ir;
 /// a <see cref="Threw"/> flag the frontend branches on and a <see cref="Heap"/> pair per heap map (ticket P1-005). The reads
 /// and each pair's <see cref="IrHeapPair.Before"/> are uses; the flag and each <see cref="IrHeapPair.After"/> definitions.
 /// </para>
+/// <para>
+/// One that stands for a compiler diagnostic names its id in <see cref="Diagnostic"/>, such as <c>CS0103</c> on a body that
+/// does not bind (ADR 0029 decision 2; ticket P2-172). It says why the frontend stopped and changes nothing a backend does.
+/// </para>
 /// </summary>
 public sealed record IrOpaque(IrVar? Target, string Reason, SourceSpan Span) : IrInstruction
 {
     public bool WholeBody { get; init; }
+
+    public string? Diagnostic { get; init; }
 
     public string? Fingerprint { get; init; }
 
@@ -32,13 +38,14 @@ public sealed record IrOpaque(IrVar? Target, string Reason, SourceSpan Span) : I
             & string.Equals(Reason, other.Reason, StringComparison.Ordinal)
             & (Span == other.Span)
             & (WholeBody == other.WholeBody)
+            & string.Equals(Diagnostic, other.Diagnostic, StringComparison.Ordinal)
             & string.Equals(Fingerprint, other.Fingerprint, StringComparison.Ordinal)
             & IrEquality.SequenceEqual(Reads, other.Reads)
             & (Threw == other.Threw)
             & IrEquality.SequenceEqual(Heap, other.Heap);
 
     public override int GetHashCode() =>
-        HashCode.Combine(Target, Reason, Span, WholeBody, Fingerprint, IrEquality.Hash(Reads), Threw, IrEquality.Hash(Heap));
+        HashCode.Combine(Target, Reason, Span, WholeBody, Fingerprint, IrEquality.Hash(Reads), Threw, HashCode.Combine(IrEquality.Hash(Heap), Diagnostic));
 
     internal override ImmutableArray<IrVar> Definitions() => [.. new[] { Target, Threw }.OfType<IrVar>(), .. Heap.Select(static h => h.After)];
 

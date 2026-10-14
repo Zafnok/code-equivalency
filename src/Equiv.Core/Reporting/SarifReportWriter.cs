@@ -46,6 +46,9 @@ public static class SarifReportWriter
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
     internal const string ObservedProofMethod = "observed";
 
+    /// <summary>What <c>unboundDiagnostics</c> lists for a cause that has no compiler diagnostic.</summary>
+    internal const string NoDiagnostic = "none";
+
     /// <param name="results">One SARIF result each, in order, ahead of any baseline carry-overs.</param>
     /// <param name="baseline">The previous log <c>baselineState</c> is computed against.</param>
     /// <param name="runProperties">
@@ -430,7 +433,9 @@ public static class SarifReportWriter
     /// <summary>
     /// An Unknown's <c>unknownReason</c> and <c>scope</c>, a line-scoped one's <c>residualClaim</c> (ADR 0029), its
     /// abstraction properties (ADR 0026), when the backend ran ADR 0037's queries, <c>failureRefinement</c> (ticket P1-013), and
-    /// its <c>agreesWhen</c> (ADR 0048).
+    /// its <c>agreesWhen</c> (ADR 0048). An <c>unbound</c> one's <c>unboundDiagnostics</c> names, per side that does not
+    /// bind, the compiler diagnostic id of each of that side's causes in their order, or <see cref="NoDiagnostic"/> for a
+    /// cause that is an error type with no diagnostic in the method's own declaration (ticket P2-172).
     /// </summary>
     private static void SetUnknownProperties(Result sarifResult, Unknown unknown)
     {
@@ -439,6 +444,13 @@ public static class SarifReportWriter
         if (unknown.Scope == UnknownScope.Line)
         {
             sarifResult.SetProperty("residualClaim", Unknown.ResidualClaim);
+        }
+
+        if (unknown.Reason == UnknownReason.Unbound)
+        {
+            sarifResult.SetProperty("unboundDiagnostics", unknown.Causes
+                .GroupBy(static c => c.Side)
+                .ToDictionary(static side => Name(side.Key), static side => side.Select(static c => c.Diagnostic ?? NoDiagnostic).ToList(), StringComparer.Ordinal));
         }
 
         SetAbstractionProperties(sarifResult, unknown);

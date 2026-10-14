@@ -181,14 +181,16 @@ public static class IrText
             + (instruction.Throws.IsEmpty ? string.Empty : $" throws({string.Join(", ", instruction.Throws.Select(static t => $"{Definition(t.Flag)} {Quote(t.ExceptionType)}"))})");
 
         /// <summary>
-        /// <c>%t: T = opaque "reason" at "path" 1:2-3:4</c>, then, each only when present, <c>fragment "fingerprint"</c>,
-        /// <c>reads(%a, ...)</c>, <c>threw %f: bool</c> and the heap pairs a call writes (ticket M4-004).
+        /// <c>%t: T = opaque "reason" at "path" 1:2-3:4</c>, then, each only when present, <c>diagnostic "id"</c> (ticket
+        /// P2-172), <c>fragment "fingerprint"</c>, <c>reads(%a, ...)</c>, <c>threw %f: bool</c> and the heap pairs a call
+        /// writes (ticket M4-004).
         /// </summary>
         public string Visit(IrOpaque instruction)
         {
             SourceSpan span = instruction.Span;
             return $"{Assigned(instruction.Target)}opaque {(instruction.WholeBody ? "body " : string.Empty)}{Quote(instruction.Reason)} at {Quote(span.Path)} "
                 + $"{Number(span.StartLine)}:{Number(span.StartColumn)}-{Number(span.EndLine)}:{Number(span.EndColumn)}"
+                + (instruction.Diagnostic is null ? string.Empty : " diagnostic " + Quote(instruction.Diagnostic))
                 + (instruction.Fingerprint is null ? string.Empty : " fragment " + Quote(instruction.Fingerprint))
                 + (instruction.Reads.IsEmpty ? string.Empty : $" reads({string.Join(", ", instruction.Reads.Select(Use))})")
                 + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))

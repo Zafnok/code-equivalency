@@ -193,6 +193,11 @@
           "properties": {
             "unknownReason": "unbound",
             "scope": "method",
+            "unboundDiagnostics": {
+              "modern": [
+                "CS0103"
+              ]
+            },
             "notCongruent": {
               "component": "operation",
               "identity": "Invocation"

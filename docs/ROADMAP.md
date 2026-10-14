@@ -555,6 +555,12 @@ of how much of the cleanup result each explains:
   inside the function. Found by P2-171's rerun. Needs P2-171.
 - P2-172 (M) Seventeen bodies of powershell-19687 are `unbound` on both sides of a human commit, in
   files the pull request did not touch: what P2-106 left of 82. Found by P2-110. Needs P2-106.
+  Done 2026-10-13: the 17 read members that two generators of PowerShell's build declare and the
+  corpus steps did not run. Three more steps in `tools/corpus/README.md` and the count is 0; an
+  `unbound` result now names its diagnostic ids in `properties.unboundDiagnostics`.
+- P2-176 (S) A project whose source generator is missing or throws loads without a word: the bodies
+  that read what it declares are `unbound` and nothing says a generator did not run. Found by
+  P2-172. Needs P2-172.
 - P2-173 (M) A result says which fingerprint component keeps a body out of congruence. 11 bodies in
   byte-identical files of the three cleanup pairs are not congruent and nothing says why. Found by
   P2-110. Needs P2-107.

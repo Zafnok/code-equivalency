@@ -121,6 +121,28 @@ public sealed class IrTextTests
         Assert.NotEqual(wholeBody, expression with { Reason = "lock" });
     }
 
+    /// <summary>Ticket P2-172: the id of the compiler diagnostic an opaque stands for round-trips, written only when present.</summary>
+    [Fact]
+    public void ADiagnosticIdRoundTripsInIrText()
+    {
+        SourceSpan span = new("a.cs", 1, 2, 3, 4);
+        IrOpaque diagnosed = new(Target: null, "unbound", span) { WholeBody = true, Diagnostic = "CS0103" };
+        IrOpaque bare = new(Target: null, "unbound", span) { WholeBody = true };
+        IrProcedure p = new(
+            new ProcedureIdentity("P"),
+            [],
+            ReturnType: null,
+            [new IrBlock(new IrBlockId(0), [diagnosed, bare], new IrReturn(Value: null, []))],
+            new IrBlockId(0));
+
+        string dumped = IrText.Dump(p);
+        Assert.Contains("opaque body \"unbound\" at \"a.cs\" 1:2-3:4 diagnostic \"CS0103\"", dumped, StringComparison.Ordinal);
+        Assert.Equal(2, dumped.Split(" diagnostic ").Length);
+
+        Assert.Equal<IrInstruction>([diagnosed, bare], IrText.Parse(dumped).Blocks[0].Instructions);
+        Assert.NotEqual(diagnosed, bare);
+    }
+
     /// <summary>Ticket M4-004: a fragment's fingerprint, reads, flag and heap pairs round-trip, each written only when present.</summary>
     [Fact]
     public void IrText_RoundTripsAFragment()
