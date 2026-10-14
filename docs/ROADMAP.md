@@ -558,6 +558,10 @@ of how much of the cleanup result each explains:
   Done 2026-10-13: the 17 read members that two generators of PowerShell's build declare and the
   corpus steps did not run. Three more steps in `tools/corpus/README.md` and the count is 0; an
   `unbound` result now names its diagnostic ids in `properties.unboundDiagnostics`.
+- P2-194 (M) A constant array whose default is not a value is printed for cvc5 exactly wherever it is
+  used: `SecondSolver.Print` declines the queries of 76 of gitextensions-9860's 302 solver
+  Equivalents, so neither the second solver nor a certificate reaches them. Found by P1-026. Needs
+  P1-033.
 - P2-195 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
   of giving Unknown(Timeout): the arithmetic refinement reads a model between checks, and nothing
   catches the interrupt there. Three `Z3BackendTests` failed on a loaded Windows runner. Found by
@@ -1197,6 +1201,17 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   fall from 148 to 80, and no pair is proved (`docs/runs/2026-10-05-positional-trace.md`).
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
+  Done 2026-10-14: 171 of the 302 `bounded` and `lockstep-induction` Equivalents have every query
+  proved by cvc5 1.4.1 and accepted by Carcara with no hole, at a median 170 ms a pair; 25 more only
+  with holes (bit-blasting steps), 12 stop at a missing bit-vector rewrite rule, no proof is
+  rejected, and no lockstep proof can be written in Alethe (`seq.unit`)
+  (`docs/runs/2026-10-14-proof-certificate-spike.md`). ADR 0057, P1-041, P1-042, P2-194.
+- P1-041 (L) Under `--certify`, a solver Equivalent carries cvc5's Alethe proof of each of its
+  queries, checked by Carcara, in `properties.certificate` (`certified`, `holey`, `uncertified`,
+  `rejected`); no verdict, rule id or exit code changes (ADR 0057). Needs P1-026, P1-033.
+- P1-042 (M) Rungs 2 and 3 compare the call traces by position, as rung 1 does since P1-038: none of
+  gitextensions-9860's 17 `lockstep-induction` Equivalents can be certified while their obligations
+  hold sequences. Found by P1-026. Needs P1-038.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
   counting over the parameter bits. Needs P2-047. Done 2026-10-04: 12 of 80 EQ002 results counted
   (15.0%), every share 1, so no ADR (`docs/runs/2026-10-04-divergent-count-spike.md`).
@@ -1331,9 +1346,9 @@ From the 2026-09-24 second-oracle review, unticketed until a result above asks f
   surface beyond SARIF, so it needs an ADR against ADR 0006.
 - Coverage-guided generation for P1-008 (SharpFuzz): an ADR 0002 row, once plain generation's
   discovery probability visibly plateaus.
-- A second solver (cvc5, BSD-3-Clause, as a separate process) cross-checking Equivalent
-  verdicts, with Alethe proof certificates checked by Carcara. Low priority: M0-012 and M4-009
-  catch encoding bugs, which are far likelier than solver bugs.
+- Proof certificates for solver Equivalents: measured by P1-026 (171 of 302 certified with no hole
+  on gitextensions-9860), decided by ADR 0057 and built by P1-041. A certificate covers the query
+  only: M0-012 and M4-009 catch encoding bugs, which are far likelier than solver bugs.
 - Stronger string solving (cvc5 strings, OSTRICH) for string-heavy line-of-business code, if
   M4-007 shows string opaques dominating the residual.
 - ARDiff-style refinement (Badihi et al., FSE 2020): start with unchanged fragments as
