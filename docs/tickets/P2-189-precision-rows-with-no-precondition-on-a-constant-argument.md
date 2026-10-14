@@ -65,3 +65,36 @@ Path rows (P2-188).
   field matches by identity alone, as a row's member does. Alternatives: a flag on `CallArgument` for a known non-blank
   field (one more flag no other precondition reads), any `static readonly` field of a reference assembly read as
   non-constant-but-valid (no value to read). Rule: 3.
+- Criterion 4, the reruns: 2026-10-14, equiv `864dfd62` (this branch on `fc7d46ca`), compare mode quick, `--jobs 4`,
+  on P2-130's checkouts: `gitextensions-8522` 481 s, `duplicati-3124` 652 s, `openra-17989` 394 s, each exit 1. Another
+  session's corpus run shared the box throughout, so the times do not compare with P2-130's. Compared with P2-181's
+  quick runs (`408a972c`, same checkouts and `--jobs`), EQ006 goes from 338 to 330 (159 to 152, 134 to 133, 45 to 45);
+  every result that changed cited the `GetFolderPath` or `GetFormat` row before, so nothing moved through the newer base.
+  The 11 procedures:
+
+  | Procedure | Row | P2-130 | P2-181 | Now |
+  |---|---|---|---|---|
+  | `GitExtUtilsTests.LazyStringSplitTests::None(string,char,string[])` | `Split` | EQ006 | congruent | congruent |
+  | `GitUI.AutoCompletion.CommitAutoCompleteProvider::ReadOrInitializeAutoCompleteRegexes()` | `Split` | EQ006 | congruent | congruent |
+  | `Duplicati.Library.Backend.GoogleDrive.GoogleDrive::GetFolderId(string,bool)` | `Split` | EQ006 | proved (lockstep-induction) | proved (lockstep-induction) |
+  | `Duplicati.Library.Backend.Box.BoxBackend::GetCurrentFolder(bool)` | `Split` | EQ006 | Unknown (timeout) | Unknown (timeout) |
+  | `OpenRA.MiniYaml::FromString(...)` | `Split` | EQ006 | congruent | congruent |
+  | `OpenRA.Mods.Common.Widgets.LabelWithHighlightWidget::MakeComponents(string)` | `Split` | EQ006 | congruent | congruent |
+  | `OpenRA.Mods.Cnc.Graphics.VoxelModelCache::LoadVoxel(string,OpenRA.MiniYaml)` | `Split` | EQ006 | congruent | congruent |
+  | `GitUI.SpellChecker.EditNetSpell::PasteTextFromClipboard()` | `GetFormat` | EQ006 | EQ006 | congruent |
+  | `GitUI.CommandsDialogs.SettingsDialog.Pages.GitConfigSettingsPageController::GetInitialDirectory(string,string)` | `GetFolderPath` | EQ006 | EQ006 | congruent |
+  | `GitCommands.PathUtil::GetDisplayPath(string)` | `GetFolderPath` | EQ006 | EQ006 | Unknown (abstraction) |
+  | `GitCommands.Settings.ConfigFileSettings::CreateSystemWide(bool)` | `GetFolderPath` | EQ006 | EQ006 | EQ006 |
+
+  `GetDisplayPath` is now kept out only by `StartsWith(string,StringComparison)` and `EndsWith(string)`, whose
+  receiver is no constant (P2-073 decided that such a receiver reaches the ICU rows). `CreateSystemWide` is EQ006 now
+  only on `Path.Combine(string,string,string,string)`, whose path comes from a solution method: P2-188's scope.
+- Criterion 4, the other results that moved, all on the `GetFolderPath` row: congruent now, from EQ006,
+  `SemanticMerge::GetFolders()`, `ExecutableExtensionsTests::SetUp()`, `PathUtilTest::GetDisplayPath()` and
+  `GitConfigSettingsPageControllerTests::GetInitialDirectory_CalculateInitialDirectory_should_return_ProgramFiles_if_path_and_toolPreferredPath_unset`;
+  congruent from Unknown (opaque), `CheckSettingsLogic::GetGitLocations()`; Unknown (abstraction) from EQ006,
+  Duplicati's `DatabaseLocator::IsDatabasePathInUse(string)`, now kept out by `String.Equals` with a
+  `StringComparison` that is no constant.
+- What is left on these rows: 7 results still cite `GetFolderPath` (2 EQ006, 5 Unknown). Each passes `Personal`, a
+  profile folder that can be missing (the LocalSystem profile has none), or a folder its caller passed in. Both can
+  reach the change, so no ticket. No result cites `GetFormat` or a `Split` row.
