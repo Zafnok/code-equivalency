@@ -1,5 +1,5 @@
 # P2-130 Scoreboard rerun: the three migration pairs on one commit, and the README scoreboard from every large pair
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-073, P2-074, P2-075, P2-103, P2-117, P2-118, P2-122, P2-087, P2-095, P2-093, P2-104, P1-028, P2-127, P2-077, P1-032, P2-124, P2-110
@@ -87,3 +87,32 @@ anything a run finds. A README edit to a row whose value did not change.
   (ADR 0049 decision 7).
 - Last recorded wall-clock: `gitextensions-8522` 2h05m, `duplicati-3124` 3h26m, `openra-17989`
   1h10m, one pair at a time. Never stop a run in progress.
+- 2026-10-14, the runs. P2-124 and P2-110 ran at two commits (`1d767f54`, `78853202`) and P2-170 to
+  P2-173 changed `src/` after both, so the runs are at `main`'s head, `e98fd1b9`: three runs one after
+  the other from one build, `.corpus/` made new, 413 s, 547 s and 292 s, all exit 1, no
+  `run.properties.unverified`, no notification. Duplicati and OpenRA run to a result for the first time.
+- Decision: compare mode quick only -> criterion 1 names `compare`'s default mode (ADR 0052), and the
+  scoreboard takes only quick runs. Alternatives: also thorough, as P2-124 and P2-110 did (their tickets
+  named no mode). Rule: the criterion's own words.
+- Decision: `--jobs 4` -> the value `gitextensions-8522`'s 2026-10-08 run and both upgrade runs used,
+  so times compare and the run-time row keeps one meaning. Alternatives: the default (24). Every query
+  that ran out of budget ended on the resource limit, so the number of threads decides no result.
+- Decision: a fresh sample of 30 EQ002 and 30 EQ006 (P2-047's draw) on `gitextensions-8522` as well as
+  P2-047's own, re-adjudicated -> 48 of P2-047's 60 are no longer Divergent, so its 12 survivors do not
+  describe today's Divergent results and could not give the pair's precision. Alternatives: precision
+  from the 12 alone. Rule: 3 (KPI order: precision is measured, not inferred).
+- Decision: the tracing was split across three sub-agents, one per pair, under one written brief kept in
+  `.corpus/audit/P2-130/`; their tables were read in full and the largest new cause (P2-184) and the
+  `runtime-rule` count were checked against the SARIF and `IrLowerer`'s source.
+- Decision: Duplicati's 4 path results whose argument carries a device prefix are undetermined, not
+  false positives -> the agent's reason rests on recalled .NET Framework behaviour, not a run.
+- Decision: criterion 6's 5% uses ADR 0028's "alone" share of changed pairs, as the summaries do, and
+  also the Unknowns that hold the reason; a reason that passes either is filed. That adds OpenRA's
+  `DelegateCreation` (9.7% alone, 9 Unknowns) and `ArrayElementReference` (5.9%, 13).
+- Deviation: criterion 6 files tickets for opaque reasons and false-positive causes. The runs also show
+  that 1,004 of the migrations' 1,966 changed pairs are unedited bodies a runtime rule keeps out of
+  congruence, the largest cause of both weak rows, with no owner: filed as P2-181.
+- Result: Divergent precision on migrations 1.4% (1 of 69), per pair 3.4%, 0% and 0%. Filed P2-179 to
+  P2-193. Two real behaviour changes surfaced by hand trace (not executed, so undetermined): a dropped
+  task in Duplicati's `S3IAM::CreateUnprivilegedUser`, and a `Process.Start` of a URL that throws on .NET
+  5 in Git Extensions' `GourceStart`.
