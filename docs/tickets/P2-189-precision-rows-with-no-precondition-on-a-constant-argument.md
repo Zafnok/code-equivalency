@@ -1,5 +1,5 @@
 # P2-189 Precision bug: the `Split` TrimEntries, `GetFolderPath` and `DataFormats.GetFormat` rows fire on a constant argument that cannot reach their change
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -48,3 +48,20 @@ Path rows (P2-188).
 - 2026-10-14: P2-181 gave the two `Split` rows their precondition (criterion 1), since its count of the
   unedited bodies a runtime rule keeps out of congruence found them in 75 of the 1,004. Criterion 4's
   rerun still gives the 7 `Split` procedures' results.
+- Decision: the `GetFolderPath` row's always-present list -> a new precondition `absentFolder`, met by any folder
+  but `System` and the nine .NET's own `GetFolderPathCore` falls back to a Windows environment variable for
+  (`ApplicationData`, `CommonApplicationData`, `LocalApplicationData`, `ProgramFiles`, `ProgramFilesX86`,
+  `CommonProgramFiles`, `CommonProgramFilesX86`, `UserProfile`, `Windows`). Source:
+  dotnet/runtime `src/libraries/System.Private.CoreLib/src/System/Environment.Windows.cs`, whose comment on `System` says it
+  "assumes the system directory always exists"; the others are the folders Windows names in an environment variable for
+  every session (dotnet/runtime#109673 added the fallback in .NET 10). Alternatives: the KNOWNFOLDERID page's `FIXED`
+  category (it says where a folder is, not that it exists), a measured list (one machine cannot show every install).
+  Rule: 1.
+- Decision: a `DataFormats` field as a `GetFormat` argument -> a top-level `fieldValues` map in `runtime-changes.json`
+  from a framework `static readonly` field to its documented value, which `CallArguments` reads as a constant; a new
+  precondition `blankFormat` reads the `format` argument and is met by null and a blank string (the breaking-change page's
+  condition). The map lists the 20 `DataFormats` fields whose value is the same on .NET Framework and .NET (dotnet/winforms
+  `DataFormatNames.cs`); `Serializable` is left out, as .NET Framework prefixes it with the Windows Forms version. A listed
+  field matches by identity alone, as a row's member does. Alternatives: a flag on `CallArgument` for a known non-blank
+  field (one more flag no other precondition reads), any `static readonly` field of a reference assembly read as
+  non-constant-but-valid (no value to read). Rule: 3.

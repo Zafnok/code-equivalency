@@ -35,6 +35,17 @@
 //     shows to be a valid path does not meet it, constant or not.
 //   "trimEntries": reads the argument named options; met by any value but StringSplitOptions.None and
 //     RemoveEmptyEntries, the only two .NET Framework accepts (P2-181).
+//   "absentFolder": reads the argument named folder; met by any Environment.SpecialFolder but System and the nine folders
+//     .NET falls back to a Windows environment variable for (ApplicationData, LocalApplicationData, CommonApplicationData,
+//     Windows, ProgramFiles, ProgramFilesX86, CommonProgramFiles, CommonProgramFilesX86, UserProfile), which every install
+//     has (dotnet/runtime src/libraries/System.Private.CoreLib/src/System/Environment.Windows.cs, GetFolderPathCore; P2-189).
+//   "blankFormat": reads the argument named format; met by null, an empty string and one of white space only (P2-189).
+//
+// "fieldValues" (ticket P2-189) gives the documented value of a framework static readonly field, which is no C#
+// constant; a precondition reads an argument that is one of these fields as a constant with that value. A field is named
+// "Namespace.Type::Name" and matched by that identity alone, as a row's member is. Only a field whose value is the same on
+// .NET Framework and .NET is listed: DataFormats.Serializable is not, as .NET Framework prefixes it with the Windows Forms
+// version. The DataFormats values are dotnet/winforms src/System.Private.Windows.Core/src/System/Private/Windows/Ole/DataFormatNames.cs.
 //
 // "validPaths" (ticket P2-074) lists the members that tell an "invalidPath" row its argument has no character .NET
 // Framework's path validation rejects. Each entry is a prefix, matched as a row's "member" is. An argument is a valid path
@@ -101,6 +112,28 @@
       "System.IO.File::Exists(string)",
       "System.IO.Directory::Exists(string)"
     ]
+  },
+  "fieldValues": {
+    "System.Windows.Forms.DataFormats::Text": "Text",
+    "System.Windows.Forms.DataFormats::UnicodeText": "UnicodeText",
+    "System.Windows.Forms.DataFormats::Dib": "DeviceIndependentBitmap",
+    "System.Windows.Forms.DataFormats::Bitmap": "Bitmap",
+    "System.Windows.Forms.DataFormats::EnhancedMetafile": "EnhancedMetafile",
+    "System.Windows.Forms.DataFormats::MetafilePict": "MetaFilePict",
+    "System.Windows.Forms.DataFormats::SymbolicLink": "SymbolicLink",
+    "System.Windows.Forms.DataFormats::Dif": "DataInterchangeFormat",
+    "System.Windows.Forms.DataFormats::Tiff": "TaggedImageFileFormat",
+    "System.Windows.Forms.DataFormats::OemText": "OEMText",
+    "System.Windows.Forms.DataFormats::Palette": "Palette",
+    "System.Windows.Forms.DataFormats::PenData": "PenData",
+    "System.Windows.Forms.DataFormats::Riff": "RiffAudio",
+    "System.Windows.Forms.DataFormats::WaveAudio": "WaveAudio",
+    "System.Windows.Forms.DataFormats::FileDrop": "FileDrop",
+    "System.Windows.Forms.DataFormats::Locale": "Locale",
+    "System.Windows.Forms.DataFormats::Html": "HTML Format",
+    "System.Windows.Forms.DataFormats::Rtf": "Rich Text Format",
+    "System.Windows.Forms.DataFormats::CommaSeparatedValue": "Csv",
+    "System.Windows.Forms.DataFormats::StringFormat": "System.String"
   },
   "rows": [
     {
@@ -546,6 +579,7 @@
       "member": "System.Windows.Forms.DataFormats::GetFormat(string",
       "source": "documented",
       "changedIn": "net5.0",
+      "precondition": "blankFormat",
       "reason": "Invalid arguments throw ArgumentException on .NET where .NET Framework continued in an undefined state.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentexception"
     },
@@ -2754,6 +2788,7 @@
       "member": "System.Environment::GetFolderPath(System.Environment.SpecialFolder)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "absentFolder",
       "reason": "A special folder that does not exist on disk (PrinterShortcuts here) returns an empty string on .NET 10, where .NET Framework returned its path anyway. The witness's legacy value is machine-specific and is written with %APPDATA%.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.environment.getfolderpath",
       "witness": { "input": [27], "culture": "invariant", "legacy": "%APPDATA%\\Microsoft\\Windows\\Printer Shortcuts", "modern": "" }

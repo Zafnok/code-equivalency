@@ -24,4 +24,13 @@ public enum RuntimeChangePrecondition
 
     /// <summary><c>trimEntries</c>: the <c>options</c> are neither <c>None</c> nor <c>RemoveEmptyEntries</c>, the only two .NET Framework accepts (ticket P2-181).</summary>
     TrimEntries,
+
+    /// <summary>
+    /// <c>absentFolder</c>: the <c>folder</c> is neither <c>System</c> nor one of the folders .NET falls back to a Windows
+    /// environment variable for, which every install has (ticket P2-189).
+    /// </summary>
+    AbsentFolder,
+
+    /// <summary><c>blankFormat</c>: the <c>format</c> is null, empty or white space (ticket P2-189).</summary>
+    BlankFormat,
 }
