@@ -112,8 +112,13 @@ public sealed class Cvc5IntegrationTests
         Assert.StartsWith("(error ", Assert.IsType<SmtUnknown>(solver.Ask("(set-logic QF_BV)\n(check-sat", TimeSpan.FromSeconds(60))).Reason, StringComparison.Ordinal);
 
         // A resource limit of a thousand steps ends the search almost at once; a wall-clock limit of a millisecond ends the process.
+        // cvc5 checks its own limit between steps, so on a loaded box it can still be running when KillAfter kills it: either
+        // way the wall-clock limit ended it.
         Assert.Equal("unknown", Assert.IsType<SmtUnknown>(new Cvc5Solver(Executable()) { ResourceLimit = 1_000 }.Ask(Hard, TimeSpan.FromSeconds(60))).Reason);
-        Assert.Equal("cvc5 interrupted by timeout.", Assert.IsType<SmtUnknown>(new Cvc5Solver(Executable()) { ResourceLimit = 1_000_000_000_000 }.Ask(Hard, TimeSpan.FromMilliseconds(1))).Reason);
+        Assert.Contains(
+            Assert.IsType<SmtUnknown>(new Cvc5Solver(Executable()) { ResourceLimit = 1_000_000_000_000 }.Ask(Hard, TimeSpan.FromMilliseconds(1))).Reason,
+            ["cvc5 interrupted by timeout.", "wall-clock limit: the process was killed"],
+            StringComparer.Ordinal);
     }
 
     /// <summary>

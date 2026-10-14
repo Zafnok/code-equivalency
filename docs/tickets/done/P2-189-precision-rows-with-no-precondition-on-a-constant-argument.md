@@ -1,5 +1,5 @@
 # P2-189 Precision bug: the `Split` TrimEntries, `GetFolderPath` and `DataFormats.GetFormat` rows fire on a constant argument that cannot reach their change
-Status: in-progress
+Status: done (PR #498)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -98,3 +98,7 @@ Path rows (P2-188).
 - What is left on these rows: 7 results still cite `GetFolderPath` (2 EQ006, 5 Unknown). Each passes `Personal`, a
   profile folder that can be missing (the LocalSystem profile has none), or a folder its caller passed in. Both can
   reach the change, so no ticket. No result cites `GetFormat` or a `Split` row.
+- Deviation: `gates (windows-latest)` failed on this PR in `Cvc5IntegrationTests.TheExecutableAnswersScripts`, which
+  P1-039 last changed and this ticket does not touch: with a 1 ms `--tlimit`, cvc5 was still running when `KillAfter`
+  (5 s) killed it, so the answer was the kill's reason, not cvc5's own timeout. The test now accepts either, as both
+  mean the wall-clock limit ended the query.
