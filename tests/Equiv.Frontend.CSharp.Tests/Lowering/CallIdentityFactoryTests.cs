@@ -58,7 +58,7 @@ public sealed class CallIdentityFactoryTests
 
     /// <summary>Ticket M2-006: a call to a runtime-changes-table member is flagged, dumped with a <c>!</c> suffix.</summary>
     [Fact]
-    public Task Lowering_FlagsIndexOfCall() => Verify(IrText.Dump(Method("static int M(string s, char c) => s.IndexOf(c);")));
+    public Task Lowering_FlagsIndexOfCall() => Verify(IrText.Dump(Method("static int M(string s, string t) => s.IndexOf(t);")));
 
     /// <summary>
     /// Ticket P2-073: a row with a precondition flags a call only when its constant arguments can reach the row's change.
@@ -89,6 +89,24 @@ public sealed class CallIdentityFactoryTests
         Assert.Equal(flagged, Assert.Single(Calls(Regexes(member))).Callee.RuntimeChanged);
 
     /// <summary>
+    /// Ticket P2-181: a search for a character is ordinal on every runtime, so the ICU rows never flag it, whatever its
+    /// receiver; a search for a string is flagged as before. A <c>Split</c> whose options are a constant .NET Framework
+    /// accepts (<c>None</c>, <c>RemoveEmptyEntries</c>) cannot reach the <c>TrimEntries</c> row; any other constant, or
+    /// options that are no constant, can.
+    /// </summary>
+    [Theory]
+    [InlineData("""static int M(string s) => s.IndexOf('/');""", false)]
+    [InlineData("""static int M(string s, char c, int i) => s.LastIndexOf(c, i, 2);""", false)]
+    [InlineData("""static int M(string s, string t) => s.IndexOf(t);""", true)]
+    [InlineData("""static int M(string s) => s.IndexOf("/", 1);""", true)]
+    [InlineData("""static string[] M(string s) => s.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);""", false)]
+    [InlineData("""static string[] M(string s) => s.Split(new[] { "," }, StringSplitOptions.None);""", false)]
+    [InlineData("""static string[] M(string s) => s.Split(new[] { ',' }, StringSplitOptions.TrimEntries);""", true)]
+    [InlineData("""static string[] M(string s, StringSplitOptions o) => s.Split(new[] { ',' }, o);""", true)]
+    public void ACallThatCannotReachItsRowsChangeByItsArgumentsIsNotFlagged(string member, bool flagged) =>
+        Assert.Equal(flagged, Assert.Single(Calls(Regexes(member))).Callee.RuntimeChanged);
+
+    /// <summary>
     /// Ticket P2-073: the arguments a precondition reads are those of the call to the callee itself. An element of a
     /// collection expression is passed to <c>Add</c>, whose call the element's own arguments do not describe.
     /// </summary>
@@ -104,7 +122,7 @@ public sealed class CallIdentityFactoryTests
     [Fact]
     public void ASuppressedMemberIsNotMarkedRuntimeChanged()
     {
-        const string Source = "class C { static int M(string s, char c) => s.IndexOf(c); }";
+        const string Source = "class C { static int M(string s, string t) => s.IndexOf(t); }";
 
         Assert.True(Assert.Single(Calls(Lowered.Source(Source))).Callee.RuntimeChanged);
         Assert.False(Assert.Single(Calls(Lowered.Source(Source, suppressedRuntimeChanges: ["System.String::IndexOf("]))).Callee.RuntimeChanged);
@@ -114,7 +132,7 @@ public sealed class CallIdentityFactoryTests
     [Fact]
     public void SameRuntime_NothingIsRuntimeChanged()
     {
-        const string Source = "class C { static int M(string s, char c) => s.IndexOf(c); }";
+        const string Source = "class C { static int M(string s, string t) => s.IndexOf(t); }";
         RuntimeInterval same = Runtimes.Interval("net10.0", "net10.0");
 
         Assert.True(Assert.Single(Calls(Lowered.Source(Source))).Callee.RuntimeChanged);
@@ -127,10 +145,10 @@ public sealed class CallIdentityFactoryTests
     /// <c>Double.ToString</c> in .NET Core 3.0 and <c>BinaryReader.ReadString</c> in .NET 9.
     /// </summary>
     [Theory]
-    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "net48", "net10.0", true)]
-    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "netcoreapp3.1", "net5.0", true)]
-    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "net8.0", "net10.0", false)]
-    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "net48", "netcoreapp3.1", false)]
+    [InlineData("static int M(string s, string t) => s.IndexOf(t);", "net48", "net10.0", true)]
+    [InlineData("static int M(string s, string t) => s.IndexOf(t);", "netcoreapp3.1", "net5.0", true)]
+    [InlineData("static int M(string s, string t) => s.IndexOf(t);", "net8.0", "net10.0", false)]
+    [InlineData("static int M(string s, string t) => s.IndexOf(t);", "net48", "netcoreapp3.1", false)]
     [InlineData("static string M(double d) => d.ToString();", "net48", "net10.0", true)]
     [InlineData("static string M(double d) => d.ToString();", "net8.0", "net10.0", false)]
     [InlineData("static string M(System.IO.BinaryReader r) => r.ReadString();", "net8.0", "net10.0", true)]
@@ -163,8 +181,8 @@ public sealed class CallIdentityFactoryTests
     [InlineData("static int M(string s) => s.IndexOf(\"x\", System.StringComparison.InvariantCulture);", true)]
     [InlineData("static int M(string s, System.StringComparison c) => s.IndexOf(\"x\", c);", true)]
     [InlineData("static int M(string s) => s.IndexOf(\"x\");", true)]
-    [InlineData("static int M(string s) => s.IndexOf('x', 4);", true)]
-    [InlineData("static int M(string s) => s.IndexOf('x', 5);", true)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", 4);", true)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", 5);", true)]
     [InlineData("static int M(string s) => s.GetHashCode();", true)]
     public void AnOrdinalComparisonConstantIsNotRuntimeChanged(string member, bool expected) =>
         Assert.Equal(expected, Assert.Single(Calls(Method(member))).Callee.RuntimeChanged);

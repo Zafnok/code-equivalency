@@ -17,4 +17,10 @@ public sealed record CallArgument(string Parameter, bool IsString, bool IsConsta
     /// guards has passed on it (<see cref="RuntimeChangeTable.YieldsValidPath"/>, <see cref="RuntimeChangeTable.ValidatesPath"/>).
     /// </summary>
     public bool ValidPath { get; init; }
+
+    /// <summary>
+    /// True when the operand is passed to a <c>char</c> or <c>int</c> parameter: a character to search for, or a position
+    /// or a count (ticket P2-181).
+    /// </summary>
+    public bool IsCharOrIndex { get; init; }
 }

@@ -169,7 +169,7 @@
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
             "notCongruent": {
               "component": "runtime-rule",
-              "identity": "legacy, modern"
+              "identity": "System.Text.RegularExpressions.Regex::Split(string,string)"
             },
             "reviewGroup": "runtime-change:System.Text.RegularExpressions.Regex::"
           }
@@ -213,7 +213,7 @@
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
             "notCongruent": {
               "component": "runtime-rule",
-              "identity": "legacy, modern"
+              "identity": "System.IO.Path::Combine(string,string)"
             },
             "reviewGroup": "runtime-change:System.IO.Path::Combine(string,string)"
           }
@@ -257,7 +257,7 @@
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
             "notCongruent": {
               "component": "runtime-rule",
-              "identity": "legacy, modern"
+              "identity": "System.Text.RegularExpressions.Regex::Split(string,string)"
             },
             "reviewGroup": "runtime-change:System.Text.RegularExpressions.Regex::"
           }
@@ -301,7 +301,7 @@
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
             "notCongruent": {
               "component": "runtime-rule",
-              "identity": "legacy, modern"
+              "identity": "System.IO.Path::Combine(string,string)"
             },
             "reviewGroup": "runtime-change:System.IO.Path::Combine(string,string)"
           }

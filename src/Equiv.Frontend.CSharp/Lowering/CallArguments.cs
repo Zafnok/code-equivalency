@@ -44,5 +44,9 @@ internal static class CallArguments
         instance is null ? [] : [Of(CallArgument.Receiver, instance.Type!, instance, isValidPath)];
 
     private static CallArgument Of(string parameter, ITypeSymbol type, IOperation value, Func<IOperation, bool> isValidPath) =>
-        new(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value) { ValidPath = isValidPath(value) };
+        new(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value)
+        {
+            ValidPath = isValidPath(value),
+            IsCharOrIndex = type.SpecialType is SpecialType.System_Char or SpecialType.System_Int32,
+        };
 }

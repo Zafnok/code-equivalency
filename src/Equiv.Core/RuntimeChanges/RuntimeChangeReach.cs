@@ -9,12 +9,21 @@ namespace Equiv.Core.RuntimeChanges;
 /// A precondition reads some of the call's operands. The call cannot reach the change only when it has at least one of
 /// them, every one is a compile-time constant, and no constant meets the precondition; a call with none of them, or
 /// with one that is not a constant, can. An operand that is a <see cref="CallArgument.ValidPath"/> never meets
-/// <see cref="RuntimeChangePrecondition.InvalidPath"/>, constant or not (ticket P2-074).
+/// <see cref="RuntimeChangePrecondition.InvalidPath"/>, constant or not (ticket P2-074). A search for a character, whose
+/// every argument but the receiver is a <see cref="CallArgument.IsCharOrIndex"/>, never meets
+/// <see cref="RuntimeChangePrecondition.CultureSensitiveText"/>, whatever its receiver: it is ordinal on every runtime
+/// (ticket P2-181).
 /// </summary>
 internal static partial class RuntimeChangeReach
 {
     /// <summary><c>RegexOptions.IgnoreCase</c>.</summary>
     private const int IgnoreCase = 1;
+
+    /// <summary><c>StringSplitOptions.None</c>.</summary>
+    private const int None = 0;
+
+    /// <summary><c>StringSplitOptions.RemoveEmptyEntries</c>.</summary>
+    private const int RemoveEmptyEntries = 1;
 
     /// <summary>The longest path .NET Framework accepts for a directory without the long-path switch.</summary>
     private const int LongPath = 248;
@@ -24,8 +33,20 @@ internal static partial class RuntimeChangeReach
 
     public static bool CanReach(RuntimeChangePrecondition precondition, ImmutableArray<CallArgument> arguments)
     {
+        if (precondition == RuntimeChangePrecondition.CultureSensitiveText && IsCharacterSearch(arguments))
+        {
+            return false;
+        }
+
         ImmutableArray<CallArgument> read = [.. arguments.Where(a => Reads(precondition, a))];
         return read.IsEmpty || read.Any(a => !IsKnownValid(precondition, a) && (!a.IsConstant || Meets(precondition, a.Value)));
+    }
+
+    /// <summary>A call that passes something besides its receiver, and only characters, positions and counts: <c>s.IndexOf('/', 1)</c>.</summary>
+    private static bool IsCharacterSearch(ImmutableArray<CallArgument> arguments)
+    {
+        ImmutableArray<CallArgument> passed = [.. arguments.Where(static a => !string.Equals(a.Parameter, CallArgument.Receiver, StringComparison.Ordinal))];
+        return !passed.IsEmpty && passed.All(static a => a.IsCharOrIndex);
     }
 
     private static bool IsKnownValid(RuntimeChangePrecondition precondition, CallArgument argument) =>
@@ -35,6 +56,7 @@ internal static partial class RuntimeChangeReach
     {
         RuntimeChangePrecondition.CaseInsensitivePattern => argument.Parameter is "pattern" or "options",
         RuntimeChangePrecondition.TwoDigitYearFormat => argument.Parameter is "format",
+        RuntimeChangePrecondition.TrimEntries => argument.Parameter is "options",
         _ => argument.IsString,
     };
 
@@ -45,6 +67,7 @@ internal static partial class RuntimeChangeReach
         (RuntimeChangePrecondition.TwoDigitYearFormat, string format) => format.Length < 2 || ShortYear.IsMatch(format),
         (RuntimeChangePrecondition.CultureSensitiveText, string text) => !text.All(char.IsAsciiLetterOrDigit),
         (RuntimeChangePrecondition.InvalidPath, string path) => IsSuspectPath(path),
+        (RuntimeChangePrecondition.TrimEntries, int options) => options is not (None or RemoveEmptyEntries),
         _ => true,
     };
 
