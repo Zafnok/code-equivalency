@@ -419,9 +419,14 @@ public sealed partial class SamplesEndToEndTests
     /// valid-path source, nor on a <c>StreamReader</c> opened only where <c>File.Exists</c> returned true for the path.
     /// Neither method has an EQ006; both are congruent.
     /// </summary>
+    /// <remarks>
+    /// Ticket P2-188: nor on the result of the sample's own <c>Full</c>, whose every return is the start of a
+    /// <c>Path.GetFullPath</c> result, which .NET Framework has validated.
+    /// </remarks>
     [Theory]
     [InlineData("Paths::BaseDir(")]
     [InlineData("Paths::Load(")]
+    [InlineData("Paths::Create(")]
     public void RuntimeRowValidPathSource_AValidPathDoesNotFireThePathRows(string method)
     {
         Result result = Single("runtime-row-valid-path-source", method);
@@ -438,6 +443,20 @@ public sealed partial class SamplesEndToEndTests
 
         Assert.Contains("Paths::Under(", result.Message.Text, StringComparison.Ordinal);
         Assert.Contains("invalid path characters", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-188: the parameter <c>Full</c> passes to <c>Path.GetFullPath</c> still reaches that row, so <c>Full</c> is
+    /// not Equivalent, and <c>Create</c>'s verdict names it as an assumption no proof covers.
+    /// </summary>
+    [Fact]
+    public void RuntimeRowValidPathSource_TheValidatorsOwnCallIsNotEquivalent()
+    {
+        Result full = Single("runtime-row-valid-path-source", "Paths::Full(string) is ");
+        Result create = Single("runtime-row-valid-path-source", "Paths::Create(");
+
+        Assert.NotEqual("EQ001", full.RuleId, StringComparer.Ordinal);
+        Assert.Equal(["Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string)"], create.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
     }
 
     /// <summary>

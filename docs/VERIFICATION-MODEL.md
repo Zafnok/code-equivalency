@@ -631,8 +631,15 @@ Migration-specific normalisations (applied to both sides before matching):
   (`Path.Combine`, `Path.GetDirectoryName`) called with valid paths and plain constants; it is a
   local variable that is only ever given such results; or it is a parameter or local variable that
   nothing assigns after its declaration, used where one of the `guards` (`File.Exists`,
-  `Directory.Exists`) has returned true for it. The header of `runtime-changes.json` has the exact
-  shapes. A path that came from a caller or a field is not followed, and the row flags it.
+  `Directory.Exists`) has returned true for it. Ticket P2-188 adds four: the result of one of its
+  `validators` (`Path.GetFullPath`), whatever the argument, since .NET Framework throws for a path its
+  validation rejects instead of returning one, and the validator's own row, whose change is every path
+  row's, fires on that argument; the start of a valid path (`Substring(0, n)`); a conditional
+  expression both of whose branches are valid paths; and the result of one of the solution's own
+  methods or property getters that no override can replace, when every value its body returns is a
+  valid path by these rules read in that body alone. Such a callee is followed one call deep, and the
+  caller's verdict assumes its pair equivalent (ADR 0019). The header of `runtime-changes.json` has the
+  exact shapes. A path that came from a caller or a field is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
   where the reference assemblies have the type (.NET Core 3.0 and later) and
