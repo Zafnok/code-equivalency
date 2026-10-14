@@ -1293,6 +1293,9 @@ They come before any other open ticket, in this order:
    (`ArrayElementReference`, 5.9% of OpenRA's), P2-180 (`CaughtException`, 5.2% of Duplicati's), P2-165
    (`no-body`, 5.4% of `gitextensions-8522`'s).
 6. The other false-positive causes, one or two results each: P2-185, P2-186, P2-187, P2-191, P2-097.
+   From P2-181's count: P2-194 (S, 69 OpenRA bodies under the .NET 9 float rule because its mods count
+   as unhosted) and P2-195 (M, the 347 `abstraction` Unknowns that name a shared function, not the
+   runtime-changed call).
 7. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates the same samples again,
    and names the milestone after this one. Not filed until the tickets above are done.
 

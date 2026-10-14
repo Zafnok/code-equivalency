@@ -1,0 +1,449 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Cache() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 30,
+                  "endLine": 5,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Cache()",
+            "resultFingerprint/v1": "4e33e7d879779a9ccc6f9764144c6c692158edc8e832f0a7800acc589e53f4ed"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Slash(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 27,
+                  "endLine": 7,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Slash(string)",
+            "resultFingerprint/v1": "9e92c329b8314d23214fadaffc7df296ffce2a10d2c079fc3c88cc156308767d"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Fields(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 32,
+                  "endLine": 9,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Fields(string)",
+            "resultFingerprint/v1": "8b7a26ded97b04c4c8ef4c30aece1442665079a16fc99dbc487c2397b0e944a1"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Under(string) diverges via a runtime-changed API between net48 and net10.0 (Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged. https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine): inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 30,
+                  "endLine": 11,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Under(string)",
+            "resultFingerprint/v1": "7360ae1695cef49e653b4977224630886f9b7f93c09c49a1ebcd702f21a7d4c9"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.IO.Path::Combine(string,string)"
+            },
+            "reviewGroup": "runtime-change:System.IO.Path::Combine(string,string)"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Find(string,string) diverges via a runtime-changed API between net48 and net10.0 (Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged. https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api): inputs(sort \"System.String\" 0, sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2097152 outs() trace(\"System.String::IndexOf(string)\"(sort \"System.String\" 0, sort \"System.String\" 1))) new(returned bv32 0 outs() trace(\"System.String::IndexOf(string)\"(sort \"System.String\" 0, sort \"System.String\" 1)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 13,
+                  "startColumn": 27,
+                  "endLine": 13,
+                  "endColumn": 31
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Find(string,string)",
+            "resultFingerprint/v1": "941b06e5a55388463a4082e24d5c09d8a0bd19ebdca02112c27879a147430d3d"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 0, sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2097152 outs() trace(\"System.String::IndexOf(string)\"(sort \"System.String\" 0, sort \"System.String\" 1))) new(returned bv32 0 outs() trace(\"System.String::IndexOf(string)\"(sort \"System.String\" 0, sort \"System.String\" 1)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.String::IndexOf(string)"
+            },
+            "reviewGroup": "runtime-change:System.String::IndexOf("
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::FieldsBy(string,System.StringSplitOptions) diverges via a runtime-changed API between net48 and net10.0 (StringSplitOptions.TrimEntries (2) is defined from .NET 5; .NET Framework throws ArgumentException for it. https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions): inputs(sort \"System.String\" 0, sort \"System.StringSplitOptions\" 0, map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 36673] default bv16 0, sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 132] default bv16 0, sort \"char[]\" 2 -> map<bv32, bv16> [bv32 67108864 -> bv16 27431] default bv16 36673] default map<bv32, bv16> [] default bv16 0, map<sort \"char[]\", bv32> [sort \"char[]\" 2 -> bv32 802982566] default bv32 2, map<bv32, sort \"char[]\"> [bv32 0 -> sort \"char[]\" 2] default sort \"char[]\" 3, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs(map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 12334] default bv16 0, sort \"char[]\" 4 -> map<bv32, bv16> [bv32 0 -> bv16 16772] default bv16 0] default map<bv32, bv16> [] default bv16 0, map<sort \"char[]\", bv32> [sort \"char[]\" 2 -> bv32 1] default bv32 2) trace(\"System.String::Split(char[],System.StringSplitOptions)\"(sort \"System.String\" 0, sort \"char[]\" 2, sort \"System.StringSplitOptions\" 0) heap(\"array.char__\" map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 36673] default bv16 0, sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 132] default bv16 0, sort \"char[]\" 2 -> map<bv32, bv16> [bv32 0 -> bv16 44] default bv16 0] default map<bv32, bv16> [] default bv16 0))) new(returned sort \"string[]\" 1 outs(map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 42080] default bv16 0, sort \"char[]\" 4 -> map<bv32, bv16> [bv32 0 -> bv16 45666] default bv16 0] default map<bv32, bv16> [] default bv16 0, map<sort \"char[]\", bv32> [sort \"char[]\" 2 -> bv32 1] default bv32 2) trace(\"System.String::Split(char[],System.StringSplitOptions)\"(sort \"System.String\" 0, sort \"char[]\" 2, sort \"System.StringSplitOptions\" 0) heap(\"array.char__\" map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 36673] default bv16 0, sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 132] default bv16 0, sort \"char[]\" 2 -> map<bv32, bv16> [bv32 0 -> bv16 44] default bv16 0] default map<bv32, bv16> [] default bv16 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 32,
+                  "endLine": 15,
+                  "endColumn": 40
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowUnreachableChange.Calls::FieldsBy(string,System.StringSplitOptions)",
+            "resultFingerprint/v1": "4bfc3539ec07390cc694855058472bd81774024971ec82459589596758b7d4be"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 0, sort \"System.StringSplitOptions\" 0, map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 36673] default bv16 0, sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 132] default bv16 0, sort \"char[]\" 2 -> map<bv32, bv16> [bv32 67108864 -> bv16 27431] default bv16 36673] default map<bv32, bv16> [] default bv16 0, map<sort \"char[]\", bv32> [sort \"char[]\" 2 -> bv32 802982566] default bv32 2, map<bv32, sort \"char[]\"> [bv32 0 -> sort \"char[]\" 2] default sort \"char[]\" 3, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs(map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 12334] default bv16 0, sort \"char[]\" 4 -> map<bv32, bv16> [bv32 0 -> bv16 16772] default bv16 0] default map<bv32, bv16> [] default bv16 0, map<sort \"char[]\", bv32> [sort \"char[]\" 2 -> bv32 1] default bv32 2) trace(\"System.String::Split(char[],System.StringSplitOptions)\"(sort \"System.String\" 0, sort \"char[]\" 2, sort \"System.StringSplitOptions\" 0) heap(\"array.char__\" map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 36673] default bv16 0, sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 132] default bv16 0, sort \"char[]\" 2 -> map<bv32, bv16> [bv32 0 -> bv16 44] default bv16 0] default map<bv32, bv16> [] default bv16 0))) new(returned sort \"string[]\" 1 outs(map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 42080] default bv16 0, sort \"char[]\" 4 -> map<bv32, bv16> [bv32 0 -> bv16 45666] default bv16 0] default map<bv32, bv16> [] default bv16 0, map<sort \"char[]\", bv32> [sort \"char[]\" 2 -> bv32 1] default bv32 2) trace(\"System.String::Split(char[],System.StringSplitOptions)\"(sort \"System.String\" 0, sort \"char[]\" 2, sort \"System.StringSplitOptions\" 0) heap(\"array.char__\" map<sort \"char[]\", map<bv32, bv16>> [sort \"char[]\" 0 -> map<bv32, bv16> [bv32 0 -> bv16 36673] default bv16 0, sort \"char[]\" 1 -> map<bv32, bv16> [bv32 0 -> bv16 132] default bv16 0, sort \"char[]\" 2 -> map<bv32, bv16> [bv32 0 -> bv16 44] default bv16 0] default map<bv32, bv16> [] default bv16 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.String::Split(char[],System.StringSplitOptions)"
+            },
+            "reviewGroup": "runtime-change:System.String::Split(char[],System.StringSplitOptions)"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 6,
+            "modern": 6
+          },
+          "matchedPairs": 6,
+          "pairsWithoutOpaque": 6,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 3,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 3,
+          "changedPairsWithoutOpaque": 3,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 3
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 6,
+              "modern": 6
+            },
+            "distinctMembers": {
+              "legacy": 4,
+              "modern": 4
+            },
+            "pairsWithAny": {
+              "legacy": 6,
+              "modern": 6
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.IO.Path::Combine(string,string)",
+                "callSites": 2
+              },
+              {
+                "member": "System.String::Split(char[],System.StringSplitOptions)",
+                "callSites": 2
+              },
+              {
+                "member": "System.String::IndexOf(char)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::IndexOf(string)",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.IO.Path::Combine(string,string)",
+                "callSites": 2
+              },
+              {
+                "member": "System.String::Split(char[],System.StringSplitOptions)",
+                "callSites": 2
+              },
+              {
+                "member": "System.String::IndexOf(char)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::IndexOf(string)",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 3,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 29,
+          "modern": 24
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.RuntimeRowUnreachableChange",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.RuntimeRowUnreachableChange",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "runtime-change:System.IO.Path::Combine(string,string)",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Under(string)"
+            ]
+          },
+          {
+            "group": "runtime-change:System.String::IndexOf(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowUnreachableChange.Calls::Find(string,string)"
+            ]
+          },
+          {
+            "group": "runtime-change:System.String::Split(char[],System.StringSplitOptions)",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowUnreachableChange.Calls::FieldsBy(string,System.StringSplitOptions)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

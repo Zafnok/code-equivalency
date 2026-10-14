@@ -28,10 +28,13 @@
 //   "twoDigitYearFormat": reads the argument named format; met by a standard (one-character) format and by a custom
 //     format with a y or yy specifier.
 //   "cultureSensitiveText": reads the receiver and every string argument; met by a string with a character that is
-//     not an ASCII letter or digit.
+//     not an ASCII letter or digit. A call whose every argument but the receiver is a char or an int (IndexOf('/', 1))
+//     searches ordinally on every runtime and never meets it, whatever its receiver (P2-181).
 //   "invalidPath": reads every string argument; met by a blank path, one of 248 characters or more, and one with a
 //     control character, one of " < > | ? *, or a colon anywhere but after a drive letter. An argument that "validPaths"
 //     shows to be a valid path does not meet it, constant or not.
+//   "trimEntries": reads the argument named options; met by any value but StringSplitOptions.None and
+//     RemoveEmptyEntries, the only two .NET Framework accepts (P2-181).
 //
 // "validPaths" (ticket P2-074) lists the members that tell an "invalidPath" row its argument has no character .NET
 // Framework's path validation rejects. Each entry is a prefix, matched as a row's "member" is. An argument is a valid path
@@ -3165,6 +3168,7 @@
       "member": "System.String::Split(char[],System.StringSplitOptions)",
       "source": "measured",
       "changedIn": "net5.0",
+      "precondition": "trimEntries",
       "reason": "StringSplitOptions.TrimEntries (2) is defined from .NET 5; .NET Framework throws ArgumentException for it.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions",
       "witness": { "input": ["i", null, 2], "culture": "invariant", "legacy": "System.ArgumentException", "modern": ["i"] }
@@ -3173,6 +3177,7 @@
       "member": "System.String::Split(string[],System.StringSplitOptions)",
       "source": "measured",
       "changedIn": "net5.0",
+      "precondition": "trimEntries",
       "reason": "StringSplitOptions.TrimEntries (2) is defined from .NET 5; .NET Framework throws ArgumentException for it.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions",
       "witness": { "input": ["i", null, 2], "culture": "invariant", "legacy": "System.ArgumentException", "modern": ["i"] }

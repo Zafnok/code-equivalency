@@ -138,7 +138,7 @@
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
             "notCongruent": {
               "component": "runtime-rule",
-              "identity": "legacy, modern"
+              "identity": "System.String::IndexOf(string,System.StringComparison)"
             },
             "reviewGroup": "runtime-change:System.String::IndexOf("
           }

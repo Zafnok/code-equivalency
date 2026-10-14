@@ -12,9 +12,16 @@ public enum RuntimeChangePrecondition
     /// <summary><c>twoDigitYearFormat</c>: the <c>format</c> is a standard format, or has a <c>y</c> or <c>yy</c> specifier.</summary>
     TwoDigitYearFormat,
 
-    /// <summary><c>cultureSensitiveText</c>: the receiver or a string argument has a character that is not an ASCII letter or digit.</summary>
+    /// <summary>
+    /// <c>cultureSensitiveText</c>: the receiver or a string argument has a character that is not an ASCII letter or digit,
+    /// and the call is no search for a character, whose every argument but the receiver is a <see cref="CallArgument.IsCharOrIndex"/>:
+    /// that search is ordinal on every runtime (ticket P2-181).
+    /// </summary>
     CultureSensitiveText,
 
     /// <summary><c>invalidPath</c>: a string argument is a path that .NET Framework's up-front validation could reject, and is not a <see cref="CallArgument.ValidPath"/>.</summary>
     InvalidPath,
+
+    /// <summary><c>trimEntries</c>: the <c>options</c> are neither <c>None</c> nor <c>RemoveEmptyEntries</c>, the only two .NET Framework accepts (ticket P2-181).</summary>
+    TrimEntries,
 }
