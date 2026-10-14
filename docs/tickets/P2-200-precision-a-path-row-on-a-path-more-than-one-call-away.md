@@ -7,7 +7,7 @@ Depends on: P2-188
 ## Goal
 P2-188 reads a solution callee one call deep, and its one validator is `Path.GetFullPath`. Eight of
 the 16 false EQ006 P2-130 adjudicated to it are still EQ006 for reasons a field does not explain
-(P2-199 has those):
+(P2-201 has those):
 - deeper than one call: Duplicati's `LinuxSnapshot::GetCreationTimeUtc` and `GetLastWriteTimeUtc`
   (#36, #44) reach `NormalizePath` through an override and then a nested type's method; Git
   Extensions' `ConfigFileSettings::CreateLocal` (row 52) reads `GitModule.GitCommonDirectory`, which
@@ -41,7 +41,7 @@ and stays flagged.
 A call graph over the solution: stop and route it through `equiv-adr`.
 
 ## Out of scope
-Fields and get-only properties (P2-199). Device-path prefixes (P2-130's undetermined four).
+Fields and get-only properties (P2-201). Device-path prefixes (P2-130's undetermined four).
 
 ## Notes
 - Filed 2026-10-14 by P2-188 (criterion 1).

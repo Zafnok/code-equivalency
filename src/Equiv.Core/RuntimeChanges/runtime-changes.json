@@ -17,7 +17,22 @@
 // tools/runtime-diff between adjacent runtimes (P2-113). A member whose behaviour changed at more than one runtime
 // has one row per change point. An optional "requires" (P2-114) names a fact about the method that makes the call, without
 // which the row does not fire: "asyncStreamOperation" is a call to ReadAsync, WriteAsync, BeginRead, BeginWrite,
-// CopyToAsync or FlushAsync on a Stream in that same method.
+// CopyToAsync or FlushAsync on a Stream in that same method. The others (P2-190) are each a call in that method to the
+// row's own member, or to a forwarder to it, that can reach the row's change; a local variable counts as holding a value
+// only when its initializer and every later assignment do:
+//   "shimmedVersionRead": a read of the OperatingSystem other than .Platform, or .Version compared (CompareTo or an
+//     operator) with new Version(major, minor) of constants no newer than 6.2. .NET Framework's shim reports 6.2.9200
+//     for every newer Windows and the real version up to it, so it never crosses such a threshold.
+//   "signedZeroResult": a call whose result is not converted to an integer type at once; -0 and +0 both convert to 0.
+//   "staticFieldSet": a call on a FieldInfo the method does not show to be an instance field: the result of
+//     Type.GetField(string, BindingFlags), or the variable of a foreach over Type.GetFields(BindingFlags), with
+//     constant flags that include Instance and not Static. Only a static readonly field reaches the change.
+//   "utf8Decoding": a call on an Encoding the method does not show to be Encoding.ASCII, whose decoding did not change.
+//   "defaultShellExecute": a call that is not Process.Start(ProcessStartInfo) given a ProcessStartInfo the method shows
+//     sets UseShellExecute and never sets WindowStyle: a new one whose initializer sets UseShellExecute, or a local
+//     variable declared with a new one that nothing assigns again, used only for its properties and as Process.Start's
+//     argument, whose initializer sets UseShellExecute or which an earlier statement of the block that makes the call,
+//     a block with no label, sets it in.
 //
 // "precondition" (optional; ticket P2-073) names what a call's arguments must be able to be for the row's change to
 // reach it. It reads some of the call's operands, each only when it is a compile-time constant: the row does not apply
@@ -303,6 +318,7 @@
       "member": "System.Text.Encoding::GetCharCount(",
       "source": "documented",
       "changedIn": "netcoreapp3.0",
+      "requires": "utf8Decoding",
       "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
     },
@@ -310,6 +326,7 @@
       "member": "System.Text.Encoding::GetChars(",
       "source": "documented",
       "changedIn": "netcoreapp3.0",
+      "requires": "utf8Decoding",
       "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
     },
@@ -317,6 +334,7 @@
       "member": "System.Text.Encoding::GetString(",
       "source": "documented",
       "changedIn": "netcoreapp3.0",
+      "requires": "utf8Decoding",
       "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
     },
@@ -345,6 +363,7 @@
       "member": "System.Reflection.FieldInfo::SetValue(",
       "source": "documented",
       "changedIn": "netcoreapp3.0",
+      "requires": "staticFieldSet",
       "reason": "Setting a static readonly field through reflection throws on .NET after the type is initialized, where .NET Framework allowed it.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#fieldinfosetvalue-throws-exception-for-static-init-only-fields"
     },
@@ -387,6 +406,7 @@
       "member": "System.Environment::get_OSVersion(",
       "source": "documented",
       "changedIn": "net5.0",
+      "requires": "shimmedVersionRead",
       "reason": "OSVersion reports the real Windows version on .NET, while .NET Framework can report a compatibility-shimmed older version.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/environment-osversion-returns-correct-version"
     },
@@ -1828,6 +1848,7 @@
       "member": "System.Diagnostics.Process::Start(",
       "source": "documented",
       "changedIn": "netcoreapp1.0",
+      "requires": "defaultShellExecute",
       "reason": "UseShellExecute defaults to false on .NET, so starting a document or URL without the shell fails where it opened before, and WindowStyle is honoured without the shell.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#change-in-default-value-of-useshellexecute"
     },
@@ -3058,6 +3079,7 @@
       "member": "System.Math::Ceiling(double)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "requires": "signedZeroResult",
       "reason": "Ceiling of a small negative number returns -0 on .NET 10 (IEEE 754) and +0 on .NET Framework.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.ceiling",
       "witness": { "input": ["0x8621A03FE0BBDB7B"], "culture": "invariant", "legacy": "0x0000000000000000", "modern": "0x8000000000000000" }

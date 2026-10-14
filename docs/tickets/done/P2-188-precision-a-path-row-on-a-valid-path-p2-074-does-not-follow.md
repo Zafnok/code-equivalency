@@ -72,7 +72,7 @@ Device-path prefixes (`\\?\`): the verdict leaves Duplicati's 4 such results und
   false positives (9 of 16) and the one criterion 2 names. Over all path-row EQ006 the field-or-property shape (53)
   is larger than the call shape (32), but none of its adjudicated four is reached by reading a field's writers
   alone (a local function, a solution extension method, two writers in other methods, a `Lazy`), and the parameter
-  shape (71) is mostly public methods whose callers are outside the solution. The field route is P2-199; what one
+  shape (71) is mostly public methods whose callers are outside the solution. The field route is P2-201; what one
   call level leaves is P2-200.
 - Decision: `validators` is its own list in `runtime-changes.json`, not an entry in `sources`. Its soundness rests on
   a condition a source does not have (below), which `EveryValidatorIsAPathRowWithEveryPathRowsChange` checks for
@@ -135,7 +135,7 @@ Device-path prefixes (`\\?\`): the verdict leaves Duplicati's 4 such results und
   | OpenRA | 8 | `OpenRA.FileFormats.ReplayMetadata::RenameFile(string)` | EQ006 | EQ006 | EQ006 |
 
   4 of the 16 leave EQ006, the four criterion 1 counted as one call level and a validator away. The twelve left
-  are P2-199 (row 61, #51, #55, OpenRA #8) and P2-200 (#30, #36, #44, rows 52 and 62, #38, Duplicati #43, Git
+  are P2-201 (row 61, #51, #55, OpenRA #8) and P2-200 (#30, #36, #44, rows 52 and 62, #38, Duplicati #43, Git
   Extensions #43).
 - Criterion 3, path-row EQ006 and all EQ006:
 

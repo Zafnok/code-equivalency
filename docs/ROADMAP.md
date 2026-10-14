@@ -570,6 +570,9 @@ of how much of the cleanup result each explains:
   reaching its resource limit: `ImpactControl::UpdatePathsAndLabels()` on gitextensions-8522, in
   every run, and its split another 3,600 s. An answer the clock ends can differ between runs. Found
   by P1-039. Needs P1-033, P1-039.
+- P2-199 (S) A property a body only writes does not fire its getter's runtime row in the fingerprint:
+  9 results on duplicati-3124 and openra-17989 name only `ProcessStartInfo::get_UseShellExecute(`, for
+  a body that only sets it, and go to the solver instead of being congruent. Found by P2-190.
 - P2-176 (S) A project whose source generator is missing or throws loads without a word: the bodies
   that read what it declares are `unbound` and nothing says a generator did not run. Found by
   P2-172. Needs P2-172.
@@ -1308,7 +1311,7 @@ They come before any other open ticket, in this order:
 2. Divergent precision, the EQ006 rows' reach (37 of the 68 false positives): P2-188 (M, 13, valid
    paths P2-074 does not follow), P2-190 (M, 13, rows that match calls their change does not affect),
    P2-189 (S, 11, rows with no precondition on a constant argument). P2-188 cleared 4 of its 16 and
-   left two tickets: P2-199 (M, 4, a field or get-only property holds the path) and P2-200 (M, 8, a
+   left two tickets: P2-201 (M, 4, a field or get-only property holds the path) and P2-200 (M, 8, a
    path more than one call away, from a private method's only caller, or past `Path.Combine` only).
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
    migrations.
