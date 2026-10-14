@@ -71,23 +71,54 @@ internal static class Layouts
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(called);
-        ISymbol? member = operation switch
-        {
-            IInvocationOperation o => called(o.TargetMethod),
-            IMemberReferenceOperation o => o.Member,
-            IObjectCreationOperation o => o.Constructor,
-            _ => null,
-        };
+        ISymbol? member = Member(operation, called);
         List<ITypeSymbol> handed = [];
         if (member?.ContainingType is { DeclaringSyntaxReferences.IsEmpty: false } declaring)
         {
             handed.AddRange((member as IMethodSymbol)?.TypeArguments ?? []);
-            IEnumerable<INamedTypeSymbol> inherited = member is IMethodSymbol { MethodKind: MethodKind.Constructor } ? [.. BaseTypes(declaring), .. declaring.AllInterfaces] : [];
+            IEnumerable<INamedTypeSymbol> inherited = member is IMethodSymbol { MethodKind: MethodKind.Constructor } ? Listed(declaring) : [];
             handed.AddRange(Nesting(declaring).Concat(Arguments(inherited)));
         }
 
         return [.. handed];
     }
+
+    /// <summary>
+    /// The type arguments that the base lists of the types <paramref name="operation"/> hands a member of a reference
+    /// hand generic types of the solution, and the types those are nested in (ADR 0024 as clarified by ticket P2-168):
+    /// for a call, an object creation or a reference to a member that a type from a reference declares, a method's own
+    /// type arguments, and those of the type that declares the member and of the types it is nested in, and the types
+    /// each of them is made of. Such a member hands the solution none of the types themselves (<see cref="TypeArguments"/>),
+    /// but it can create one (<c>Activator.CreateInstance&lt;T&gt;()</c>, <c>new Lazy&lt;T&gt;().Value</c>) with no
+    /// reference to its constructor in any text, and creating the type runs the code it inherits, which no body names
+    /// (ticket P2-152). The member's own text is in no fingerprint, so the body that hands it the type holds what the
+    /// type's base types and interfaces are handed.
+    /// </summary>
+    public static ImmutableArray<ITypeSymbol> Inherited(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(called);
+        ISymbol? member = Member(operation, called);
+        if (member?.ContainingType is not { DeclaringSyntaxReferences.IsEmpty: true } declaring)
+        {
+            return [];
+        }
+
+        IEnumerable<ITypeSymbol> handed = ((member as IMethodSymbol)?.TypeArguments ?? []).Concat(Nesting(declaring));
+        return [.. Arguments(handed.SelectMany(Named).SelectMany(Listed))];
+    }
+
+    /// <summary>The member a call, a reference to a member or an object creation names; for a call, <paramref name="called"/> says which.</summary>
+    private static ISymbol? Member(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called) => operation switch
+    {
+        IInvocationOperation o => called(o.TargetMethod),
+        IMemberReferenceOperation o => o.Member,
+        IObjectCreationOperation o => o.Constructor,
+        _ => null,
+    };
+
+    /// <summary>The base types of <paramref name="type"/> and its interfaces, all of them and not only those it lists itself.</summary>
+    private static IEnumerable<INamedTypeSymbol> Listed(INamedTypeSymbol type) => [.. BaseTypes(type), .. type.AllInterfaces];
 
     /// <summary>
     /// The type arguments that interface lists hand generic interfaces of the solution, and the types those are nested
@@ -163,12 +194,14 @@ internal static class Layouts
     /// (<see cref="IsLaidOut"/>), so it holds only where the fingerprint has the declaration. A type handed over also
     /// hands on what its interface list hands a generic interface of the solution (<see cref="Implemented"/>; tickets
     /// P2-162 and P2-161): the member can create the type or run a static member it inherits, and that code reads the
-    /// layout of the interface's type argument, though the type handed over is a class with none of its own.
+    /// layout of the interface's type argument, though the type handed over is a class with none of its own. A type
+    /// handed to a member of a reference hands on what its base list hands a generic type of the solution
+    /// (<see cref="Inherited"/>; ticket P2-168).
     /// </summary>
     public static bool HandsOver(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called)
     {
         ImmutableArray<ITypeSymbol> handed = TypeArguments(operation, called);
-        return handed.Any(IsLaidOut) || Implemented([], handed).Any(IsLaidOut);
+        return handed.Any(IsLaidOut) || Implemented([], handed).Any(IsLaidOut) || Inherited(operation, called).Any(IsLaidOut);
     }
 
     /// <summary>
