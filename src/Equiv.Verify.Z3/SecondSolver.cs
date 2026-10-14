@@ -76,10 +76,16 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
     /// <paramref name="rung"/>, its step naming the second solver and its version when that solver answered one of its
     /// queries, and how many partitions it was asked for when partitions gave one of those answers.
     /// </summary>
-    public LoopLadder.Rung Tagged(LoopLadder.Rung rung) =>
-        Answered
-            ? rung with { Step = rung.Step with { Solver = new SolverUse(options.Solver!.Name, options.Solver.Version) { Partitions = AnsweredInPartitions ? options.Partitions : null } } }
-            : rung;
+    public LoopLadder.Rung Tagged(LoopLadder.Rung rung)
+    {
+        if (!Answered)
+        {
+            return rung;
+        }
+
+        int? partitions = AnsweredInPartitions ? options.Partitions : null;
+        return rung with { Step = rung.Step with { Solver = new SolverUse(options.Solver!.Name, options.Solver.Version) { Partitions = partitions } } };
+    }
 
     /// <summary>
     /// The solver's answer to <paramref name="printed"/>. A query that could not be printed is not sent and is unknown, and

@@ -65,16 +65,20 @@ internal static class SmtPartitions
         List<(int Start, int End)> forms = [];
         int depth = 0;
         int start = 0;
-        for (int i = 0; i < script.Length; i++)
+        int i = 0;
+        while (i < script.Length)
         {
             char c = script[i];
             if (c is '|' or '"')
             {
-                i = script.IndexOf(c, i + 1);
-                if (i < 0)
+                // A quoted symbol or a string runs to its closing mark.
+                int close = script.IndexOf(c, i + 1);
+                if (close < 0)
                 {
                     break;
                 }
+
+                i = close;
             }
             else if (c == '(')
             {
@@ -84,6 +88,8 @@ internal static class SmtPartitions
             {
                 forms.Add((start, i + 1));
             }
+
+            i++;
         }
 
         return forms;

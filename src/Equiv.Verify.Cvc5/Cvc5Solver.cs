@@ -123,8 +123,12 @@ public sealed class Cvc5Solver : ISmtSolver
         return new Partitioned(cover is SmtUnsat ? cover : new SmtUnknown("the partitions do not cover every case"), written, answers, cover);
     }
 
-    private SmtAnswer Plain(string script, TimeSpan limit, CancellationToken stop) =>
-        run(path, Limits(limit), script, limit + KillAfter, stop) is { } output ? SmtOutput.Parse(output) : stop.IsCancellationRequested ? Stopped : Killed;
+    private SmtAnswer Plain(string script, TimeSpan limit, CancellationToken stop)
+    {
+        string? output = run(path, Limits(limit), script, limit + KillAfter, stop);
+        SmtUnknown unfinished = stop.IsCancellationRequested ? Stopped : Killed;
+        return output is null ? unfinished : SmtOutput.Parse(output);
+    }
 
     private string[] Limits(TimeSpan limit) =>
     [

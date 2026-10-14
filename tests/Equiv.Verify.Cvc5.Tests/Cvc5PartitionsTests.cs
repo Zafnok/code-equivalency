@@ -33,15 +33,16 @@ public sealed class Cvc5PartitionsTests
         Assert.DoesNotContain(fake.Runs, static r => r.Script!.Contains(CoverMark, StringComparison.Ordinal));
     }
 
-    /// <summary>Every partition is waited for, and the first satisfiable one in the order written gives the values, whichever process ended first.</summary>
+    /// <summary>The first satisfiable partition in the order written gives the values, though a later one ended first.</summary>
     [Fact]
     public void TwoSatisfiablePartitions_TheFirstWrittenGivesTheValues()
     {
+        using ManualResetEventSlim laterEnded = new();
         Fake fake = new("p0\np1\np2\n", partition => partition switch
         {
             "p0" => "unknown\n",
-            "p1" => Slowly("sat\n((x #b0))\n"),
-            _ => "sat\n((x #b1))\n",
+            "p1" => After(laterEnded, "sat\n((x #b0))\n"),
+            _ => Before(laterEnded, "sat\n((x #b1))\n"),
         }, cover: "unsat\n");
 
         Cvc5Solver.Partitioned split = fake.Solver.Split(Script, 3, Limit);
@@ -59,10 +60,11 @@ public sealed class Cvc5PartitionsTests
     [Fact]
     public void ASatisfiablePartition_StopsTheLaterOnes_AndWaitsForTheEarlierOnes()
     {
-        Fake fake = new("p0\np1\np2\np3\n", static (partition, stop) => partition switch
+        using ManualResetEventSlim satEnded = new();
+        Fake fake = new("p0\np1\np2\np3\n", (partition, stop) => partition switch
         {
-            "p0" => Slowly("unsat\n"),
-            "p1" => "sat\n((x #b1))\n",
+            "p0" => After(satEnded, "unsat\n"),
+            "p1" => Before(satEnded, "sat\n((x #b1))\n"),
             _ => stop.WaitHandle.WaitOne(TimeSpan.FromSeconds(30)) ? null : "unknown\n",
         }, cover: "unsat\n", processes: 4);
 
@@ -189,11 +191,14 @@ public sealed class Cvc5PartitionsTests
     {
         int running = 0;
         int most = 0;
+        using ManualResetEventSlim never = new();
         Fake fake = new("p0\np1\np2\np3\np4\np5\np6\np7\n", _ =>
         {
             int now = Interlocked.Increment(ref running);
             InterlockedMax(ref most, now);
-            Thread.Sleep(20);
+
+            // Each process holds its slot a moment, so the processes of two queries overlap if the slots let them.
+            never.Wait(TimeSpan.FromMilliseconds(20), TestContext.Current.CancellationToken);
             Interlocked.Decrement(ref running);
             return "unsat\n";
         }, cover: "unsat\n", processes);
@@ -220,9 +225,17 @@ public sealed class Cvc5PartitionsTests
         Assert.Throws<ArgumentOutOfRangeException>(() => solver.AskInPartitions(Script, 1, Limit));
     }
 
-    private static string Slowly(string answer)
+    /// <summary><paramref name="answer"/>, once <paramref name="ended"/> is set (or after 30 s, which fails the test's order).</summary>
+    private static string After(ManualResetEventSlim ended, string answer)
     {
-        Thread.Sleep(50);
+        ended.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        return answer;
+    }
+
+    /// <summary><paramref name="answer"/>, with <paramref name="ended"/> set first.</summary>
+    private static string Before(ManualResetEventSlim ended, string answer)
+    {
+        ended.Set();
         return answer;
     }
 
