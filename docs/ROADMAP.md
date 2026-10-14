@@ -534,10 +534,25 @@ of how much of the cleanup result each explains:
   Found by P2-110's thorough run. Needs P1-032.
 - P2-170 (M) A deconstruction of a tuple-typed value lowers as its stores. `DeconstructionAssignment`
   is in the reason set of 46 of gitextensions-11284's 178 changed pairs (25.8%), its largest opaque
-  reason; P2-025 lowers a tuple literal only. Found by P2-110. Needs P2-025.
+  reason; P2-025 lowers a tuple literal only. Found by P2-110. Needs P2-025. Done 2026-10-13: 78 of
+  the pair's 80 tuple-typed sites a side lower; the reason is in 16 of 178 reason sets and the solver
+  proves 99 of 178 (55.6%, from 73), quick mode.
+- P2-174 (M) Two instantiations of a generic type in one body share one field map, at the type of
+  whichever the body named first: `int m = q.Item1; string s = p.Item1;` over a `(string, int)` and
+  an `(int, string)` makes the lowerer throw. Found by P2-170. Needs P2-027.
+- P2-175 (M) A deconstruction through a `Deconstruct` method lowers as the call it is: 22 sites a
+  side on gitextensions-11284, 21 of them `foreach (var (k, v) in dictionary)`, what P2-170 left of
+  `DeconstructionAssignment`. Found by P2-170. Needs P2-170.
 - P2-171 (L) A call of a local function is not an opaque when both sides declare the same local
   function: `LocalFunction` is in 43 of gitextensions-11372's 319 changed pairs (13.5%) and 18 of
   gitextensions-11284's 178. The cost P2-127's soundness fix named. Found by P2-110. Needs P2-127.
+  Done 2026-10-13: the call is a shared fragment named by the fingerprint of the bound code it runs
+  (ADR 0024, clarified). On gitextensions-11372 quick the solver proves 234 of 319 changed pairs
+  (73.4%, from 217); 13 results still name the opaque, from 26. What is left is P2-178.
+- P2-178 (L) A call of a local function is decided when the two sides' local functions differ in
+  text, or write what they capture: 13 of gitextensions-11372's 319 changed pairs still name a
+  `LocalFunction` opaque after P2-171, 12 of them because the pull request rewrote an expression
+  inside the function. Found by P2-171's rerun. Needs P2-171.
 - P2-172 (M) Seventeen bodies of powershell-19687 are `unbound` on both sides of a human commit, in
   files the pull request did not touch: what P2-106 left of 82. Found by P2-110. Needs P2-106.
 - P2-173 (M) A result says which fingerprint component keeps a body out of congruence. 11 bodies in

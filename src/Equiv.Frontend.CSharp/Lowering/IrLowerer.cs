@@ -863,6 +863,14 @@ internal sealed class IrLowerer
             return;
         }
 
+        if (operation is IDeconstructionAssignmentOperation variables)
+        {
+            // A `foreach` that deconstructs its element: the graph makes the deconstruction a statement of its own, whose
+            // value nothing uses (ticket P2-170).
+            Deconstruct(variables, context);
+            return;
+        }
+
         Lower(operation, context);
     }
 
@@ -1391,16 +1399,13 @@ internal sealed class IrLowerer
     /// <summary><see cref="Opaque(IOperation, string, LoweringContext)"/> of an operation whose <paramref name="shared"/> fragment is already known.</summary>
     private IrVar? Opaque(IOperation operation, string reason, FragmentOf? shared, LoweringContext context)
     {
-        IrVar? target = operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(Map(type)) : null;
-        SourceSpan span = Span(operation.Syntax);
         if (shared is { } fragment)
         {
-            IrVar threw = ssa.Temp(Bool);
-            ssa.EmitFragment(context.Current, new IrOpaque(target, reason, span) { Fingerprint = fragment.Fingerprint, Reads = Loaded(fragment.Reads, context), Threw = threw }, fragment.Captured);
-            ThrowIf(threw, SystemException, context, known: false, byCall: true);
-            return target;
+            return Shared(operation, reason, fragment, [], context);
         }
 
+        IrVar? target = Result(operation);
+        SourceSpan span = Span(operation.Syntax);
         ssa.Emit(context.Current, new IrOpaque(target, reason, span));
         foreach (SsaBuilder.Variable written in Written(operation))
         {
@@ -1409,6 +1414,24 @@ internal sealed class IrLowerer
             StoreUnknown(written, value, context);
         }
 
+        return target;
+    }
+
+    /// <summary>A temporary for <paramref name="operation"/>'s value, or null when it has none.</summary>
+    private IrVar? Result(IOperation operation) => operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(Map(type)) : null;
+
+    /// <summary>
+    /// A fingerprinted opaque for <paramref name="operation"/> (ADR 0024 decision 2): it reads <paramref name="operands"/>,
+    /// values already computed, and then what <paramref name="fragment"/> reads at this point, and has a <c>threw</c> edge
+    /// to <c>System.Exception</c>, as a call has.
+    /// </summary>
+    private IrVar? Shared(IOperation operation, string reason, FragmentOf fragment, ImmutableArray<IrVar> operands, LoweringContext context)
+    {
+        IrVar? target = Result(operation);
+        IrVar threw = ssa.Temp(Bool);
+        IrOpaque opaque = new(target, reason, Span(operation.Syntax)) { Fingerprint = fragment.Fingerprint, Reads = [.. operands, .. Loaded(fragment.Reads, context)], Threw = threw };
+        ssa.EmitFragment(context.Current, opaque, fragment.Captured);
+        ThrowIf(threw, SystemException, context, known: false, byCall: true);
         return target;
     }
 
@@ -1498,9 +1521,17 @@ internal sealed class IrLowerer
     /// <paramref name="operation"/>'s fingerprint, the variables it reads and those a lambda in it captures, when it writes no
     /// variable and every variable it reads or captures is one the lowering tracks; otherwise null.
     /// </summary>
-    private FragmentOf? Fragment(IOperation operation, bool runtimeSensitive = false)
+    private FragmentOf? Fragment(IOperation operation, bool runtimeSensitive = false) =>
+        Written(operation).Any() ? null : Tracked(fragments.Of(operation, cfg), runtimeSensitive);
+
+    /// <summary>
+    /// <paramref name="found"/> over the lowering's variables, when it is a fragment, is not runtime-sensitive unless
+    /// <paramref name="runtimeSensitive"/> allows it, and every variable it reads or captures is one the lowering tracks;
+    /// otherwise null.
+    /// </summary>
+    private FragmentOf? Tracked(FragmentFingerprinter.Fragment? found, bool runtimeSensitive)
     {
-        if (Written(operation).Any() || fragments.Of(operation, cfg) is not { } fragment || (fragment.RuntimeSensitive && !runtimeSensitive))
+        if (found is not { } fragment || (fragment.RuntimeSensitive && !runtimeSensitive))
         {
             return null;
         }
@@ -1668,12 +1699,13 @@ internal sealed class IrLowerer
     private static string Reason(IOperation lvalue) => lvalue is IFieldReferenceOperation ? "Tuple" : lvalue.Kind.ToString();
 
     /// <summary>
-    /// A statement that deconstructs a tuple literal into locals, parameters, captured lvalues, fields and discards, one level
-    /// deep (ticket P2-025), as C# evaluates it: each field's receiver, then each element of the literal, then each store, all
-    /// left to right, so <c>(a, b) = (b, a)</c> swaps. A <c>Deconstruct</c> method, a tuple-typed value, a nested tuple, and a
-    /// property, array element or lowered tuple element (ticket P2-027) target stay opaque with reason
-    /// <c>DeconstructionAssignment</c>, their targets written with unknown values, as does a deconstruction whose value is
-    /// used, which is not a statement's.
+    /// A statement that deconstructs a tuple literal (ticket P2-025) or a tuple-typed value (ticket P2-170) into locals,
+    /// parameters, captured lvalues, fields and discards, one level deep, as C# evaluates it: each field's receiver, then
+    /// each element of the literal or the value, once, then each store, all left to right, so <c>(a, b) = (b, a)</c> swaps.
+    /// An element of a value is read from it as <c>t.Item&lt;n&gt;</c> is (<see cref="Element"/>). A <c>Deconstruct</c>
+    /// method, a nested tuple, a value whose element is converted on the way to its target, and a property, array element
+    /// or lowered tuple element (ticket P2-027) target stay opaque with reason <c>DeconstructionAssignment</c>, their
+    /// targets written with unknown values, as does a deconstruction whose value is used, which is not a statement's.
     /// </summary>
     private IrVar? Deconstruct(IDeconstructionAssignmentOperation deconstruction, LoweringContext context)
     {
@@ -1683,8 +1715,9 @@ internal sealed class IrLowerer
         }
 
         ImmutableArray<IOperation> lvalues = [.. ((ITupleOperation)Declared(deconstruction.Target)).Elements.Select(Declared)];
-        if (TupleLiteral(deconstruction.Value) is not { } literal
-            || !lvalues.All(l => l is IDiscardOperation || (l is IFieldReferenceOperation field && TypeMapper.TupleElement(field.Field) is null) || Target(l) is not null))
+        ITupleOperation? literal = TupleLiteral(deconstruction.Value);
+        if (!lvalues.All(l => l is IDiscardOperation || (l is IFieldReferenceOperation field && TypeMapper.TupleElement(field.Field) is null) || Target(l) is not null)
+            || (literal is null && !IsTakenApart(deconstruction)))
         {
             return Opaque(deconstruction, nameof(OperationKind.DeconstructionAssignment), context);
         }
@@ -1696,16 +1729,24 @@ internal sealed class IrLowerer
         }
 
         List<IrVar> values = [];
-        foreach (IOperation element in literal.Elements)
+        if (literal is null)
         {
-            values.Add(Value(element, context));
+            IrVar tuple = Value(deconstruction.Value, context);
+            values.AddRange(((INamedTypeSymbol)deconstruction.Value.Type!).TupleElements.Select(e => Element(tuple, e, context)));
+        }
+        else
+        {
+            foreach (IOperation element in literal.Elements)
+            {
+                values.Add(Value(element, context));
+            }
         }
 
         // Each null shadow is read before any store, so a swap of references swaps their nullness too.
         List<IrVar?> nulls = [];
         for (int i = 0; i < lvalues.Length; i++)
         {
-            nulls.Add(Target(lvalues[i]) is { } target && Shadow(target) is not null ? NullFlag(literal.Elements[i], values[i], context) : null);
+            nulls.Add(Target(lvalues[i]) is { } target && Shadow(target) is not null ? ElementNullFlag(literal?.Elements[i], values[i], context) : null);
         }
 
         for (int i = 0; i < lvalues.Length; i++)
@@ -1715,6 +1756,37 @@ internal sealed class IrLowerer
 
         return null;
     }
+
+    /// <summary>
+    /// Whether <paramref name="deconstruction"/>, whose value is no tuple literal, is one read per element (ticket P2-170):
+    /// the value is a tuple of at most seven elements (an eighth is a field of the <c>Rest</c> tuple), it reaches the
+    /// targets through an identity conversion, so each element is the value stored, each element's <c>Item&lt;n&gt;</c>
+    /// map holds that element's type (<see cref="HeapInputs.Holds"/>), and no element brings in a struct whose reads are
+    /// opaque (<see cref="Layouts.Inherits"/>; ticket P2-161).
+    /// </summary>
+    private bool IsTakenApart(IDeconstructionAssignmentOperation deconstruction) =>
+        deconstruction.Value.Type is INamedTypeSymbol { IsTupleType: true, TupleElements: { Length: <= 7 } elements } tuple
+        && compilation.ClassifyConversion(tuple, deconstruction.Target.Type!).IsIdentity
+        && !Layouts.Inherits(deconstruction.Value)
+        && (TypeMapper.Tuple(tuple) is not null || elements.All(e => heap.Inputs.Holds(e.CorrespondingTupleField!)));
+
+    /// <summary>
+    /// Element <paramref name="element"/> of the tuple <paramref name="tuple"/>, as a read of <c>t.Item&lt;n&gt;</c> is
+    /// (<see cref="FieldOrTuple"/>): the <c>tuple.item</c> function of a tuple of an <see cref="IrTuple"/> sort, and
+    /// otherwise the element's <c>Item&lt;n&gt;</c> field map read at the tuple, whatever name the tuple's type gives it.
+    /// </summary>
+    private IrVar Element(IrVar tuple, IFieldSymbol element, LoweringContext context) =>
+        TypeMapper.TupleElement(element) is { } position
+            ? Pure(IrTuple.Item(position), [], runtimeSensitive: false, [tuple], Map(element.Type), context)
+            : heap.ReadSlice(heap.Backing(element.CorrespondingTupleField!, tuple, context), context);
+
+    /// <summary>
+    /// Whether the element a deconstruction stores is null: <see cref="NullFlag"/> of a literal's element
+    /// <paramref name="source"/>, and for an element read from a tuple-typed value, which has no source, what the
+    /// <c>null.&lt;Sort&gt;</c> map says of <paramref name="value"/>.
+    /// </summary>
+    private IrVar ElementNullFlag(IOperation? source, IrVar value, LoweringContext context) =>
+        source is null ? heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context) : NullFlag(source, value, context);
 
     /// <summary>One store of a deconstruction: to a field's slice, or to a variable and its null shadow; a discard stores nothing.</summary>
     private void StoreDeconstructed(IOperation lvalue, HeapLowerer.Access? slice, IrVar value, IrVar? isNull, LoweringContext context)
@@ -2579,16 +2651,13 @@ internal sealed class IrLowerer
     /// <c>out</c> argument, is a call to the entry's modern member instead, and the entry is recorded as applied (ADR 0020;
     /// ticket M3-009). A call to a forwarder is the same call to its target (ADR 0047; ticket P2-068), which is then the
     /// callee everything here reads: the catalogue, the runtime-changes table and whether the call is closed. A call of a
-    /// local function is no call at all but an opaque with reason <c>LocalFunction</c> (ticket P2-127): a local function
-    /// is not a matched procedure, so no pair of its own reads its body, and it reads and writes the locals it captures,
-    /// which a call does not. <see cref="FragmentFingerprinter"/> gives a fragment that calls a local function declared
-    /// outside it no fingerprint, so the opaque is never shared.
+    /// local function is no call of a name (<see cref="InvokeLocal"/>).
     /// </summary>
     private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context)
     {
         if (invocation.TargetMethod.MethodKind == MethodKind.LocalFunction)
         {
-            return Opaque(invocation, nameof(MethodKind.LocalFunction), context);
+            return InvokeLocal(invocation, context);
         }
 
         if (RefOuts(invocation.Arguments) is not { } written)
@@ -2601,6 +2670,24 @@ internal sealed class IrLowerer
         return Addressed(invocation, called.Identity) is { } rewrite
             ? AsLegacy(rewrite, invocation, returns, context)
             : Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
+    }
+
+    /// <summary>
+    /// A call of a local function: an opaque with reason <c>LocalFunction</c>, never a call of the function's name (ticket
+    /// P2-127). A local function is not a matched procedure, so no pair of its own reads its body, and it reads the locals
+    /// it captures, which a call of a name does not carry. Where the function's bound code has a fingerprint
+    /// (<see cref="FragmentFingerprinter.OfLocalFunctionCall"/>; ADR 0024 as clarified by ticket P2-171) the opaque
+    /// carries it and reads the arguments, evaluated as any call's and passed in parameter order, and then the variables
+    /// that code captures, so the same function called on both sides is one call of what it is given, and two functions
+    /// that differ are two opaques no side shares. A call with a <c>ref</c> or <c>out</c> argument, and one whose
+    /// function has no fingerprint or is runtime-sensitive, is the bare opaque, its arguments unevaluated.
+    /// </summary>
+    private IrVar? InvokeLocal(IInvocationOperation invocation, LoweringContext context)
+    {
+        const string Reason = nameof(MethodKind.LocalFunction);
+        return invocation.Arguments.Any(static a => IsWritten(a.Parameter!)) || Tracked(fragments.OfLocalFunctionCall(invocation, cfg), runtimeSensitive: false) is not { } called
+            ? Opaque(invocation, Reason, shared: null, context)
+            : Shared(invocation, Reason, called, Arguments([], invocation.Arguments, context), context);
     }
 
     /// <summary>

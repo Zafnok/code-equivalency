@@ -1,0 +1,12 @@
+﻿proc "C::M((int, bool, long))" (%p "p": sort "tuple(bv32,bool,bv64)", ref %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  %$1: bv32 = pure "tuple.item1"(%p)
+  %$2: bool = pure "tuple.item2"(%p)
+  %z.13 "z": bv64 = pure "tuple.item3"(%p)
+  %field.C.f.12: map<sort "C", bv32> = mapwrite %field.C.f, %this, %$1
+  %$7: bv32 = mapread %field.C.f.12, %this
+  %$9: bv32 = trunc %z.13
+  %$10: bv32 = add %$7, %$9
+  ret %$10 outs(%field.C.f = %field.C.f.12)

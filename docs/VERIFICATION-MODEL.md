@@ -385,11 +385,21 @@ class with an element and not exactly one such `Add`, and an array the array cre
 `IrOpaque` with reason `CollectionExpression`. The conversion around a target-typed `new()` whose creation is already
 of the target type is its operand, so `new()` is `new T()`.
 
-The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
-locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
-each field's receiver, then every element of the literal (each already converted to its target's
-type), then each store, all left to right, so `(a, b) = (b, a)` swaps. Anything else, a `Deconstruct`
-method or a tuple-typed value included, is `IrOpaque` with reason `DeconstructionAssignment`.
+The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal or a
+tuple-typed value (P2-170) into locals, parameters, captured lvalues, fields or discards, one level
+deep, lowers as C# evaluates it: each field's receiver, then every element of the literal (each
+already converted to its target's type) or the value, once, then each store, all left to right, so
+`(a, b) = (b, a)` swaps. An element of a tuple-typed value is read from the value as `t.Item<n>` is:
+`tuple.item<n>` of a tuple of an `IrTuple` sort, and otherwise the element's
+`field.System.ValueTuple_<arity>.Item<n>` map at the value, by position, whatever the tuple's type
+names the element. A reference target's null shadow is the `null.<Sort>` map at the element read. So
+`var (a, b) = F()` and `(T a, U b) = F()` are one IR. The deconstruction a `foreach` makes of its
+element is the same statement. A value is taken apart only when it reaches the targets through an
+identity conversion, has at most seven elements (an eighth is a field of the `Rest` tuple), holds no
+struct whose read is opaque with reason `Layout` (P2-161), and each `Item<n>` map the body already
+holds is of the element's type (a field's map is named without its type's arguments, so two tuple
+types share one). Anything else, a `Deconstruct` method included, is `IrOpaque` with reason
+`DeconstructionAssignment`.
 
 C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 0013):
 
@@ -412,6 +422,17 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   variable that is stored after it in the IR or that any lambda or local function writes; or is
   runtime-sensitive inside the pair's runtime interval, which both sides are given alike, so a
   fragment both hold gets the same answer on each (ADR 0040; P2-055). A whole-body opaque has none.
+- A call of a local function in the body is an opaque with reason `LocalFunction`, never a call of
+  the function's name (P2-127). Its fingerprint is not the call expression's but that of the bound
+  code the call runs: the called function's declaration and that of every local function it
+  reaches, with the call's type arguments (ADR 0024, clarified 2026-10-13; P2-171). It reads the
+  call's arguments, lowered as any call's and in parameter order, and then the locals and
+  parameters declared outside those declarations that they reference, a reference's null shadow
+  after it, in order of first occurrence. It gets no fingerprint when it has a `ref` or `out`
+  argument, when any lambda or local function of the body writes one of those variables, when the
+  lowering does not track one, when the function returns by reference, or when its code is
+  runtime-sensitive; and it loses it when one of those variables is stored after it in the IR, as
+  a fragment with a lambda's capture does.
 - An opaque call's `threw` flag branches to `IrThrow("System.Exception")`. `throw new T(...)`
   records the constructor call and then lowers to `IrThrow("T")` on T's static type (M2-004).
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's

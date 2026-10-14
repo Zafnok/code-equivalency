@@ -17,6 +17,7 @@ namespace Equiv.Tests.Integration;
 /// <summary>
 /// Ticket P2-025 end to end: a deconstruction of a tuple literal is its stores, left to right after every element is read,
 /// so a swap by tuple is proved Equivalent to a swap through a temporary, and a deconstruction that stores in another order is not.
+/// Ticket P2-170: a deconstruction of a tuple-typed value is one read of each element of the value, in order.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class DeconstructionEquivalenceTests
@@ -41,6 +42,25 @@ public sealed class DeconstructionEquivalenceTests
         Assert.IsNotType<Equivalent>(Verify(
             "class C { static int M(int a, int b) { a = b; b = a; return a - b; } }",
             "class C { static int M(int a, int b) { (a, b) = (b, a); return a - b; } }"));
+
+    /// <summary>
+    /// Ticket P2-170 acceptance criterion 3: a deconstruction of a call's tuple is the same IR whether its targets are
+    /// declared with <c>var</c> or with their types, as IDE0008 rewrites it, so the pair is Equivalent.
+    /// </summary>
+    [Theory]
+    [InlineData("(string, int)", "var (s, n)", "(string s, int n)", "s == null ? n : n + 1")]
+    [InlineData("(int, long)", "var (s, n)", "(int s, long n)", "s - (int)n")]
+    public void ADeconstructionWithExplicitTypesIsEquivalentToOneWithVar(string tuple, string var, string typed, string result) =>
+        Assert.IsType<Equivalent>(Verify(
+            $"class C {{ static {tuple} F(int a) => default; static int M(int a) {{ {var} = F(a); return {result}; }} }}",
+            $"class C {{ static {tuple} F(int a) => default; static int M(int a) {{ {typed} = F(a); return {result}; }} }}"));
+
+    /// <summary>Ticket P2-170 acceptance criterion 3: each target takes the element at its own position, so swapping two targets is Divergent.</summary>
+    [Fact]
+    public void ADeconstructionThatSwapsTwoTargetsIsDivergent() =>
+        Assert.IsType<Divergent>(Verify(
+            "class C { static (int, int, string) F(int a) => default; static int M(int a) { var (x, y, _) = F(a); return x - y; } }",
+            "class C { static (int, int, string) F(int a) => default; static int M(int a) { (int y, int x, _) = F(a); return x - y; } }"));
 
     private static Verdict Verify(string legacy, string modern) =>
         new Z3Backend().Verify(Lower(legacy, isLegacy: true), Lower(modern, isLegacy: false), Options);

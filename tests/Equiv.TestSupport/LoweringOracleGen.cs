@@ -22,7 +22,7 @@ namespace Equiv.TestSupport;
 /// (ticket P2-022), and reads and writes of the instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to
 /// <c>o.Bump(k)</c>, which adds <c>k</c> to it (ticket P1-005), and <c>z = o.TryParse(k, out x)</c>, whose <c>out</c> argument is
 /// the call's output (ticket M4-003), and deconstructions of tuple literals into <c>(x, y, z)</c> and into <c>(F, x)</c>
-/// (ticket P2-025); and, only from <see cref="MethodWithLambda"/>, a lambda whose body a runtime rule applies to,
+/// (ticket P2-025), and of a tuple-typed local that holds the same elements (ticket P2-170); and, only from <see cref="MethodWithLambda"/>, a lambda whose body a runtime rule applies to,
 /// converted to a delegate and tested against <c>null</c> (ticket P2-136), <see cref="Nullables"/> (ticket P2-095), and
 /// <c>o.Nudge(k)</c>, a call that leaves out an optional parameter of the struct type <see cref="MarkType"/> (ticket P2-138), and
 /// <see cref="Guard"/>, a <c>catch</c> that reads the message of the exception <c>o.Check(x)</c> threw (ticket P2-140); built as a small AST and
@@ -236,9 +236,11 @@ public static class LoweringOracleGen
         Gen<IStmt> decimals = Gen.Select(Gen.OneOfConst(DecimalArithmetic), Gen.Bool, DecimalGen(Depth - 1), static (op, isChecked, value) =>
             (IStmt)new Compound("m", op, value, isChecked));
         // Ticket P2-025: every element is read before any target is written. The field's pair never branches, as a field write's value never does.
-        Gen<IStmt> locals = Gen.Select(ExprGen(typeof(int), Depth - 1), ExprGen(typeof(long), Depth - 1), ExprGen(typeof(bool), Depth - 1), static (x, y, z) =>
-            (IStmt)new Deconstruction(["x", "y", "z"], [x, y, z]));
-        Gen<IStmt> fieldPair = Gen.Select(FieldValue, FieldValue, static (f, x) => (IStmt)new Deconstruction([Field, "x"], [f, x]));
+        // Ticket P2-170: half of them take a tuple-typed local apart, which is read once and then element by element.
+        Gen<IStmt> locals = Gen.Select(ExprGen(typeof(int), Depth - 1), ExprGen(typeof(long), Depth - 1), ExprGen(typeof(bool), Depth - 1), Gen.Bool, static (x, y, z, typed) =>
+            (IStmt)new Deconstruction(["x", "y", "z"], [x, y, z], typed ? "(int, long, bool)" : null));
+        Gen<IStmt> fieldPair = Gen.Select(FieldValue, FieldValue, Gen.Bool, static (f, x, typed) =>
+            (IStmt)new Deconstruction([Field, "x"], [f, x], typed ? "(int, int)" : null));
         Gen<IStmt> deconstruct = Gen.OneOf(locals, fieldPair);
         if (depth == 0)
         {
@@ -382,8 +384,7 @@ public static class LoweringOracleGen
                     text.Append(pad).Append($"try {{ {Cell}.{Check}(x); }} catch (System.Exception t) {{ z = t.Message != null; }}\n");
                     break;
                 case Deconstruction deconstruct:
-                    text.Append(pad).Append('(').AppendJoin(", ", deconstruct.Targets).Append(") = (")
-                        .AppendJoin(", ", deconstruct.Values.Select(static v => v.Render())).Append(");\n");
+                    text.Append(pad).Append(deconstruct.Render()).Append('\n');
                     break;
                 case Step step:
                     text.Append(pad).Append(Open(step.IsChecked, pad)).Append(step.Local).Append(step.Op).Append(";\n").Append(Close(step.IsChecked, pad));
@@ -473,8 +474,20 @@ public static class LoweringOracleGen
 
     internal sealed record Step(string Local, string Op, bool IsChecked) : IStmt;
 
-    /// <summary><c>(Targets) = (Values);</c> (ticket P2-025).</summary>
-    internal sealed record Deconstruction(ImmutableArray<string> Targets, ImmutableArray<IExpr> Values) : IStmt;
+    /// <summary>
+    /// <c>(Targets) = (Values);</c> (ticket P2-025), or, when <paramref name="Tuple"/> names a tuple type,
+    /// <c>{ Tuple t = (Values); (Targets) = t; }</c>, a deconstruction of a tuple-typed value (ticket P2-170).
+    /// </summary>
+    internal sealed record Deconstruction(ImmutableArray<string> Targets, ImmutableArray<IExpr> Values, string? Tuple) : IStmt
+    {
+        /// <summary>The statement's text. The braces scope the local, so two of them in one block do not collide.</summary>
+        public string Render()
+        {
+            string targets = string.Join(", ", Targets);
+            string values = string.Join(", ", Values.Select(static v => v.Render()));
+            return Tuple is null ? $"({targets}) = ({values});" : $"{{ {Tuple} t = ({values}); ({targets}) = t; }}";
+        }
+    }
 
     /// <summary><c>Method(Argument);</c> as a statement.</summary>
     internal sealed record Call(string Callee, IExpr Argument) : IStmt;

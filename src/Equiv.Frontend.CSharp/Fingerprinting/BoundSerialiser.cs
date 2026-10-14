@@ -78,16 +78,23 @@ internal sealed class BoundSerialiser : OperationWalker
     private readonly string interpolation;
     private readonly Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas;
     private readonly List<BoundLine>? lines;
+    private readonly bool calledWithItsReads;
     private int depth;
     private int lineStart;
 
     private bool RuntimeSensitive { get; set; }
 
-    private BoundSerialiser(IMethodSymbol method, Compilation compilation, Settings settings, Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null)
+    private BoundSerialiser(
+        IMethodSymbol method,
+        Compilation compilation,
+        Settings settings,
+        Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null,
+        bool calledWithItsReads = false)
     {
         this.method = method;
         this.compilation = compilation;
         this.lambdas = lambdas;
+        this.calledWithItsReads = calledWithItsReads || lambdas is not null;
         renames = settings.Renames;
         suppressedRuntimeChanges = settings.SuppressedRuntimeChanges;
         runtime = settings.Runtime;
@@ -222,6 +229,31 @@ internal sealed class BoundSerialiser : OperationWalker
         serialiser.text.Append("Fragment");
         serialiser.End(FingerprintDifference.BodyKind, "Fragment");
         serialiser.Visit(fragment);
+        return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
+    }
+
+    /// <summary>
+    /// The serialisation of a call of a local function of <paramref name="method"/> (ADR 0024 as clarified by ticket
+    /// P2-171), and whether it is runtime-sensitive, by the rules of <see cref="Serialise"/>: the type arguments the call
+    /// gives <paramref name="called"/>, then each declaration of its <paramref name="closure"/>, body and all, the called
+    /// function's first and then each local function the ones before it reach, in order of first reference. The call's
+    /// arguments are not in it: they are the call's operands. As in a fragment, the method's own parameters are numbered
+    /// by first occurrence, since the call is given the variables the closure reads in that order.
+    /// </summary>
+    public static (string Text, bool RuntimeSensitive) SerialiseLocalFunctionCall(
+        IMethodSymbol method,
+        Compilation compilation,
+        IMethodSymbol called,
+        ImmutableArray<ILocalFunctionOperation> closure,
+        Settings settings)
+    {
+        BoundSerialiser serialiser = new(method, compilation, settings, calledWithItsReads: true);
+        serialiser.text.Append("LocalFunctionCall <").AppendJoin(',', called.TypeArguments.Select(serialiser.Type)).Append(">\n");
+        foreach (ILocalFunctionOperation declaration in closure)
+        {
+            serialiser.Visit(declaration);
+        }
+
         return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
     }
 
@@ -622,7 +654,7 @@ internal sealed class BoundSerialiser : OperationWalker
         ILocalSymbol l => $"{Number(l, "L")}:{l.RefKind} {Type(l.Type)}",
         ILabelSymbol => Number(symbol, "B"),
         IParameterSymbol p when SymbolEqualityComparer.Default.Equals(p.ContainingSymbol, method) =>
-            lambdas is null ? $"P{p.Ordinal.ToString(CultureInfo.InvariantCulture)}" : Number(p, "P"),
+            calledWithItsReads ? Number(p, "P") : $"P{p.Ordinal.ToString(CultureInfo.InvariantCulture)}",
         IParameterSymbol { ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction } } => Number(symbol, "A"),
         IParameterSymbol p => $"#{p.Ordinal.ToString(CultureInfo.InvariantCulture)}",
         ITypeSymbol t => Type(t),

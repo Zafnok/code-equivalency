@@ -164,8 +164,8 @@ public sealed class FragmentLoweringTests
     /// <summary>
     /// Ticket P2-026 criterion 2, reduced from Git Extensions' <c>RecentRepoSplitter.SplitRecentRepos</c>: a second <c>from</c>
     /// clause is a lambda whose syntax is the clause, neither an expression nor a statement, which the data-flow analysis of the
-    /// graph's functions cast to a statement and threw on. The first case's call of its local function is an opaque no side
-    /// shares (ticket P2-127); every other opaque is a fingerprinted fragment.
+    /// graph's functions cast to a statement and threw on. The first case's call of its local function carries the fingerprint
+    /// of the function's bound code (ticket P2-171), as every other opaque carries its fragment's.
     /// </summary>
     [Theory]
     [InlineData("int M(List<List<int>> groups, bool top) { var all = new List<int>(); void Add(List<int> into) { into.AddRange(from g in groups from x in g where (x > 0) == top select x); } Add(all); return all.Count(x => (x > 0) == top); }")]
@@ -174,7 +174,7 @@ public sealed class FragmentLoweringTests
     {
         IrProcedure procedure = Source(Linq + "class C { " + method + " }");
 
-        Assert.All(Opaques(procedure), static o => Assert.Equal(string.Equals(o.Reason, "LocalFunction", StringComparison.Ordinal), o.Fingerprint is null));
+        Assert.All(Opaques(procedure), static o => Assert.NotNull(o.Fingerprint));
     }
 
     [Fact]
