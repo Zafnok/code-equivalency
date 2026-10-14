@@ -1,4 +1,4 @@
-# P2-179 A constant array whose default is not a value is printed for cvc5 exactly, wherever it is used
+# P2-194 A constant array whose default is not a value is printed for cvc5 exactly, wherever it is used
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

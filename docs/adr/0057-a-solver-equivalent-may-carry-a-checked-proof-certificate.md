@@ -112,7 +112,7 @@ ADR 0002 rows, added by the ticket that builds this:
   bit-vector rewrites. A run reports such pairs `holey` or `uncertified` until upstream closes
   those gaps. No work here closes them.
 - Two encoding questions decide how far certification can reach, and each has its own ticket.
-  P2-179: queries with a constant array the printer declines, 76 pairs here, reach no solver but
+  P2-194: queries with a constant array the printer declines, 76 pairs here, reach no solver but
   Z3. P1-042: rung 2 compares call traces as sequences, which Alethe cannot express, so 12 pairs
   here cannot be certified.
 - Like cvc5, Carcara runs on Windows only until someone builds it elsewhere. The Linux parity gate

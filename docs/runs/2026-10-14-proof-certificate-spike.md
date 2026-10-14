@@ -185,7 +185,7 @@ checked there.
   reports.
 - 76 results (149 queries) cannot be sent to cvc5. Their constant arrays have a default that is no
   value, and `SecondSolver.Print` declines them. This is also why they never reach cvc5 as the
-  second solver. Ticket P2-179.
+  second solver. Ticket P2-194.
 - No rung 2 proof can be written in Alethe, because its obligations compare call traces as
   sequences (`seq.unit`). Rung 1 has compared them by position since P1-038. Ticket P1-042.
 - 4 queries reach unsat but cvc5 runs out of its 60 s while writing the proof, and one proof is

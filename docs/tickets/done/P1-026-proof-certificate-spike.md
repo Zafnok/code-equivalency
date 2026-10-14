@@ -58,7 +58,7 @@ Certificates for Divergent results (replay is their check).
   a bit-vector RARE rule the rule file lacks. 76 have a query cvc5 cannot read (a constant array the
   printer declines), 12 lockstep pairs have no Alethe proof (`seq.unit`), 4 run out of cvc5's 60 s,
   and 2 are proved by a later round of rung 1, which the spike does not rebuild. Carcara rejected no
-  proof. Median cost 170 ms a pair. ADR 0057, P1-041, P1-042 and P2-179 follow.
+  proof. Median cost 170 ms a pair. ADR 0057, P1-041, P1-042 and P2-194 follow.
 - Deviation: criterion 1 counts 239 results, from the 2026-10-03 run. The spike rebuilds every pair
   with today's frontend, so it reads the latest thorough run of the pair (`20261012-2040`, 302
   results: 285 `bounded`, 17 `lockstep-induction`). The older run's identities would describe an

@@ -558,7 +558,7 @@ of how much of the cleanup result each explains:
   Done 2026-10-13: the 17 read members that two generators of PowerShell's build declare and the
   corpus steps did not run. Three more steps in `tools/corpus/README.md` and the count is 0; an
   `unbound` result now names its diagnostic ids in `properties.unboundDiagnostics`.
-- P2-179 (M) A constant array whose default is not a value is printed for cvc5 exactly wherever it is
+- P2-194 (M) A constant array whose default is not a value is printed for cvc5 exactly wherever it is
   used: `SecondSolver.Print` declines the queries of 76 of gitextensions-9860's 302 solver
   Equivalents, so neither the second solver nor a certificate reaches them. Found by P1-026. Needs
   P1-033.
@@ -1194,7 +1194,7 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   proved by cvc5 1.4.1 and accepted by Carcara with no hole, at a median 170 ms a pair; 25 more only
   with holes (bit-blasting steps), 12 stop at a missing bit-vector rewrite rule, no proof is
   rejected, and no lockstep proof can be written in Alethe (`seq.unit`)
-  (`docs/runs/2026-10-14-proof-certificate-spike.md`). ADR 0057, P1-041, P1-042, P2-179.
+  (`docs/runs/2026-10-14-proof-certificate-spike.md`). ADR 0057, P1-041, P1-042, P2-194.
 - P1-041 (L) Under `--certify`, a solver Equivalent carries cvc5's Alethe proof of each of its
   queries, checked by Carcara, in `properties.certificate` (`certified`, `holey`, `uncertified`,
   `rejected`); no verdict, rule id or exit code changes (ADR 0057). Needs P1-026, P1-033.

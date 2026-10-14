@@ -59,7 +59,7 @@ A snapshot of a `certificate` property. The property test of criterion 5.
 
 ## Size guard
 Changing a verdict on a certificate's status, or certifying rungs 4 and 5, Divergents or
-congruence: stop (ADR 0057 decisions 2 and 4). Teaching the printer a new rewrite is P2-179, and
+congruence: stop (ADR 0057 decisions 2 and 4). Teaching the printer a new rewrite is P2-194, and
 changing how rung 2 compares traces is P1-042.
 
 ## Out of scope
