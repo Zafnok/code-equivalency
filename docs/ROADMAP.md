@@ -852,6 +852,13 @@ Found by P2-162 (2026-10-12, by reading its own rule; not reproduced):
   (`Activator.CreateInstance<K>()`, `new Lazy<K>().Value`) names a type argument only in its base
   list, and the body references no constructor and hands the solution nothing. The first step is
   the repro. Needs P2-162.
+  Done: reproduced as equal fingerprints for a body that hands such a type to
+  `Activator.CreateInstance<T>()` or `Lazy<T>`, through an interface, a base type or a type the
+  base type is nested in. An operation that hands a type to any member of a reference is now also
+  followed by the declarations of the type arguments the type's base list, and a generic type of
+  the solution itself, hand over, and the lowering makes it the `Layout` opaque where one has a
+  layout (ADR 0024, clarification of 2026-10-14 (P2-168)); no result on `gitextensions-8522`
+  changed.
 
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
