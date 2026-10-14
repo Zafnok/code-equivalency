@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 
+using Equiv.Core.ApiEquivalences;
 using Equiv.Core.RuntimeChanges;
 
 using Xunit;
@@ -203,6 +204,48 @@ public sealed class RuntimeChangeTableTests
     public void OnlyTheFileStreamPositionRowRequiresAnAsyncStreamOperation()
     {
         Assert.Equal(["System.IO.FileStream::get_Position("], RuntimeChangeTable.Load().MembersRequiring(RowPrecondition.AsyncStreamOperation));
+    }
+
+    /// <summary>Ticket P2-190: each fact about a method's calls to a row's member has its JSON name.</summary>
+    [Theory]
+    [InlineData("shimmedVersionRead", RowPrecondition.ShimmedVersionRead)]
+    [InlineData("signedZeroResult", RowPrecondition.SignedZeroResult)]
+    [InlineData("staticFieldSet", RowPrecondition.StaticFieldSet)]
+    [InlineData("utf8Decoding", RowPrecondition.Utf8Decoding)]
+    [InlineData("defaultShellExecute", RowPrecondition.DefaultShellExecute)]
+    public void EachCallFactParses(string requires, RowPrecondition expected)
+    {
+        RuntimeChangeTable table = Parse(
+            $$"""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated", "requires": "{{requires}}" }]""");
+
+        Assert.Equal(expected, Assert.Single(table.Rows).Requires);
+    }
+
+    /// <summary>Ticket P2-190: the six rows whose adjudicated calls could not reach their change, each with the fact it needs.</summary>
+    [Theory]
+    [InlineData(RowPrecondition.ShimmedVersionRead, "System.Environment::get_OSVersion(")]
+    [InlineData(RowPrecondition.SignedZeroResult, "System.Math::Ceiling(double)")]
+    [InlineData(RowPrecondition.StaticFieldSet, "System.Reflection.FieldInfo::SetValue(")]
+    [InlineData(RowPrecondition.Utf8Decoding, "System.Text.Encoding::GetCharCount(", "System.Text.Encoding::GetChars(", "System.Text.Encoding::GetString(")]
+    [InlineData(RowPrecondition.DefaultShellExecute, "System.Diagnostics.Process::Start(")]
+    public void TheRowsRequiringACallFact(RowPrecondition fact, params string[] members)
+    {
+        Assert.Equal<string>(members, RuntimeChangeTable.Load().MembersRequiring(fact), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// A method that never calls a row's member suppresses the row when it requires a fact about such calls (ticket P2-190).
+    /// A call that an API-equivalence entry rewrites into that member would then never be flagged, so no entry may.
+    /// </summary>
+    [Fact]
+    public void NoApiEquivalenceRewritesACallIntoARowThatRequiresACallFact()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        ImmutableArray<string> members = [.. table.Rows.Where(static row => row.Requires is { } fact && fact != RowPrecondition.AsyncStreamOperation).Select(static row => row.Member)];
+
+        Assert.DoesNotContain(
+            ApiEquivalenceTable.Load().Entries,
+            entry => members.Any(member => entry.Modern.StartsWith(member, StringComparison.Ordinal)));
     }
 
     /// <summary>A curated or documented row has no witness: only a measured row was proved with one.</summary>

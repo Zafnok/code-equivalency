@@ -148,7 +148,7 @@ internal sealed class IrLowerer
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
         ImmutableArray<Initializer> initializers = operation is IConstructorBodyOperation ? Initializers(method, syntax, compilation) : [];
-        ImmutableArray<string> suppressed = RowPreconditions.Suppress(suppressedRuntimeChanges, initializers.Select(static i => i.Operation).Prepend(operation));
+        ImmutableArray<string> suppressed = RowPreconditions.Suppress(suppressedRuntimeChanges, initializers.Select(static i => i.Operation).Prepend(operation), compilation);
         ImmutableArray<UnboundCause> unbound =
             [.. UnboundCauses(syntax, model, operation), .. initializers.SelectMany(static i => UnboundCauses(i.Syntax, i.Model, i.Operation))];
         if (unbound.IsEmpty && LeavesAnErrorTypeOut(method))
@@ -184,7 +184,7 @@ internal sealed class IrLowerer
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         // A constructor's graph starts with its initializer: a call to the base or `this` constructor on `this`.
         ControlFlowGraph graph = body is IConstructorBodyOperation constructor ? ControlFlowGraph.Create(constructor) : ControlFlowGraph.Create((IMethodBodyOperation)body);
-        return Lower(method, body, [graph], model, renames, RowPreconditions.Suppress(suppressedRuntimeChanges, [body]), new Catalogue([], runtime));
+        return Lower(method, body, [graph], model, renames, RowPreconditions.Suppress(suppressedRuntimeChanges, [body], model.Compilation), new Catalogue([], runtime));
     }
 
     /// <summary>
