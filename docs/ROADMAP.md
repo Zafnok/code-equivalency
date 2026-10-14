@@ -558,6 +558,10 @@ of how much of the cleanup result each explains:
   Done 2026-10-13: the 17 read members that two generators of PowerShell's build declare and the
   corpus steps did not run. Three more steps in `tools/corpus/README.md` and the count is 0; an
   `unbound` result now names its diagnostic ids in `properties.unboundDiagnostics`.
+- P2-195 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
+  of giving Unknown(Timeout): the arithmetic refinement reads a model between checks, and nothing
+  catches the interrupt there. Three `Z3BackendTests` failed on a loaded Windows runner. Found by
+  P2-168's CI. Needs P2-112.
 - P2-176 (S) A project whose source generator is missing or throws loads without a word: the bodies
   that read what it declares are `unbound` and nothing says a generator did not run. Found by
   P2-172. Needs P2-172.
