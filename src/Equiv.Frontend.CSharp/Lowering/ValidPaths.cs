@@ -96,10 +96,12 @@ internal static class ValidPaths
     /// the sealed type inherits the one that runs, which is not looked for.
     /// </summary>
     private static IMethodSymbol? Dispatched(IMethodSymbol method, IOperation? receiver) =>
-        method is { IsVirtual: false, IsAbstract: false, IsOverride: false } ? method
-        : receiver?.Type is { IsSealed: true } sealedType
-            ? sealedType.GetMembers(method.Name).OfType<IMethodSymbol>().FirstOrDefault(candidate => Overrides(candidate, method))
-            : null;
+        (method, receiver?.Type) switch
+        {
+            ({ IsVirtual: false, IsAbstract: false, IsOverride: false }, _) => method,
+            (_, { IsSealed: true } sealedType) => sealedType.GetMembers(method.Name).OfType<IMethodSymbol>().FirstOrDefault(candidate => Overrides(candidate, method)),
+            _ => null,
+        };
 
     /// <summary>Whether <paramref name="candidate"/> is <paramref name="method"/> or overrides it, directly or through others.</summary>
     private static bool Overrides(IMethodSymbol candidate, IMethodSymbol method) =>
