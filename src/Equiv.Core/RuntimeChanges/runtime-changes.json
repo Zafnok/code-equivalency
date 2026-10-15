@@ -1112,13 +1112,6 @@
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/notifyicon-text-max-text-length-increased"
     },
     {
-      "member": "System.Windows.Forms.TreeNodeCollection::get_Item(",
-      "source": "documented",
-      "changedIn": "net6.0",
-      "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/apis-throw-argumentnullexception"
-    },
-    {
       "member": "System.Windows.Forms.DrawTreeNodeEventArgs::.ctor(",
       "source": "documented",
       "changedIn": "net6.0",
@@ -1143,7 +1136,7 @@
       "member": "System.Windows.Forms.TreeNodeCollection::set_Item(",
       "source": "documented",
       "changedIn": "net6.0",
-      "reason": "Assigning a node that already belongs to another TreeView throws ArgumentException on .NET instead of duplicating it.",
+      "reason": "Assigning a null node throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException, and assigning a node that already belongs to another TreeView throws ArgumentException on .NET instead of duplicating it.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/treenodecollection-item-throws-argumentexception"
     },
     {

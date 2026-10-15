@@ -1,5 +1,5 @@
 # P2-163 Precision bug: the `TreeNodeCollection::get_Item(` row fires on every read of the indexer
-Status: todo
+Status: done (PR #507)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-075
@@ -49,3 +49,22 @@ Other "null argument" rows whose member is a getter: list any you find in `## No
   `BugReporter.ExceptionDetails::Initialize(BugReporter.Serialization.SerializableException)` and
   `BugReporter.ExceptionDetails::FillInnerExceptionTree(BugReporter.Serialization.SerializableException,System.Windows.Forms.TreeNode)`.
   Each reads the indexer and none assigns through it.
+- Decision: where the null-argument change goes -> folded into the existing `TreeNodeCollection::set_Item(` row, whose
+  reason now names both net6.0 changes; `docs/runtime-changes-review.md` traces both pages to it. Alternatives: a second
+  `set_Item(` row (`EveryRowHasASource` keeps `(member, changedIn)` unique, and `TryMatch` reports the first matching row
+  only, so the second would never be named), a precondition on the existing row (no precondition can say "null", and
+  the other-TreeView change is reached by non-null nodes, so narrowing the row to null would drop it). Rule: 1.
+- Deviation: the ticket's Files list only the table, but criterion 1 also needed a frontend fix. With the row moved to
+  `set_Item(` the sample was still not congruent: `BoundSerialiser` rendered a property reference as both accessors and
+  flagged a row on either, so a read of the indexer was kept out of congruence by the setter's row
+  (`notCongruent: runtime-rule TreeNodeCollection::set_Item(...)`, then Equivalent by the bounded rung). It now flags only
+  the accessor the reference runs; the fingerprint text is unchanged. The lowered body already called only the getter.
+  VERIFICATION-MODEL section 3 states the rule.
+- Out of scope (other null-argument rows on a getter): none. The other rows whose member is a getter and whose reason
+  mentions null (`Socket::get_LocalEndPoint(`, `ProcessStartInfo::get_Environment`/`get_EnvironmentVariables(`,
+  `BindingSource::get_SortDescriptions(`, `PublicKey::get_EncodedParameters(`) describe a changed result, which a read
+  does reach.
+- The sample is the first Windows Forms pair. Its projects set `EnableWindowsTargeting` so Ubuntu (the parity leg)
+  restores the Windows Desktop targeting pack, and `IlSamples` gains three stub types (`TreeView`, `TreeNodeCollection`,
+  `TreeNode`), as it has for the Web API types, since the Frontend tests compile sample sources against their own
+  framework.

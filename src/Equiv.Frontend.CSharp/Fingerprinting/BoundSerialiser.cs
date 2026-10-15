@@ -744,7 +744,7 @@ internal sealed class BoundSerialiser : OperationWalker
         IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction } m =>
             $"{Number(m, "F")}(async={m.IsAsync} {string.Join(", ", m.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}"))}) -> {(m.ReturnsVoid ? "void" : Type(m.ReturnType))}",
         IMethodSymbol m => Method(m, site),
-        IPropertySymbol p => string.Join('|', ((IMethodSymbol?[])[p.GetMethod, p.SetMethod]).OfType<IMethodSymbol>().Select(accessor => Method(accessor))),
+        IPropertySymbol p => string.Join('|', ((IMethodSymbol?[])[p.GetMethod, p.SetMethod]).OfType<IMethodSymbol>().Select(accessor => Method(accessor, runs: Runs(accessor, site)))),
         ILocalSymbol l => $"{Number(l, "L")}:{l.RefKind} {Type(l.Type)}",
         ILabelSymbol => Number(symbol, "B"),
         IParameterSymbol p when SymbolEqualityComparer.Default.Equals(p.ContainingSymbol, method) =>
@@ -769,9 +769,10 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <summary>
     /// A callee as the IR's <c>IrCall</c> names it, rewritten by a pass-through API-equivalence entry; flags the body when a
     /// table row applies to it, which a row with a precondition does by the arguments <paramref name="site"/> gives the
-    /// callee (ticket P2-073), as the lowering decides it.
+    /// callee (ticket P2-073), as the lowering decides it. A property accessor the reference does not run is named but
+    /// flags nothing (<paramref name="runs"/> false; ticket P2-163).
     /// </summary>
-    private string Method(IMethodSymbol callee, IOperation? site = null)
+    private string Method(IMethodSymbol callee, IOperation? site = null, bool runs = true)
     {
         CallIdentity identity = site is null
             ? CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval)
@@ -781,8 +782,37 @@ internal sealed class BoundSerialiser : OperationWalker
             identity = CallIdentityFactory.Of(modern, suppressedRuntimeChanges, runtime.Interval);
         }
 
-        Flag(identity.RuntimeChanged, identity.Value);
+        Flag(runs && identity.RuntimeChanged, identity.Value);
         return identity.Value;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="site"/> runs <paramref name="accessor"/> (ticket P2-163). A property reference that is the
+    /// target of a plain assignment, its own or a deconstruction's (through the tuples it sits in), runs only the setter;
+    /// one that is read runs only the getter; a compound assignment, a <c>??=</c> and an increment run both. Any other
+    /// site, such as a property initializer or a list pattern, counts as running both.
+    /// </summary>
+    private static bool Runs(IMethodSymbol accessor, IOperation site)
+    {
+        if (site is not IPropertyReferenceOperation reference)
+        {
+            return true;
+        }
+
+        IOperation target = reference;
+        while (target.Parent is ITupleOperation tuple)
+        {
+            target = tuple;
+        }
+
+        bool written = target.Parent switch
+        {
+            IAssignmentOperation assignment => assignment.Target == target,
+            IIncrementOrDecrementOperation increment => increment.Target == target,
+            _ => false,
+        };
+        bool onlyWritten = written && target.Parent is ISimpleAssignmentOperation or IDeconstructionAssignmentOperation;
+        return accessor.MethodKind == MethodKind.PropertySet ? written : !onlyWritten;
     }
 
     /// <summary>A field or event as <c>Type::Name</c>; flags the body when a runtime-changes row applies to it.</summary>

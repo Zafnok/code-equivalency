@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>Equiv.Samples.RuntimeRowIndexerGetter</RootNamespace>
+    <AssemblyName>Equiv.Samples.RuntimeRowIndexerGetter</AssemblyName>
+  </PropertyGroup>
+
+</Project>
