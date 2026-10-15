@@ -1,5 +1,5 @@
 # P2-164 Precision bug: `StringBuilder.Append($"...")` is Divergent between net5.0 and net6.0
-Status: in-progress
+Status: done (PR #508)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-086, P2-139
