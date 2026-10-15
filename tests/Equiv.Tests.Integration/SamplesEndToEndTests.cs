@@ -81,7 +81,7 @@ public sealed partial class SamplesEndToEndTests
             (string legacy, string modern) = Solutions(sample);
 
             int exitCode = RunProgramSilently(() => Program.Main(
-                ["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, "--baseline", baselinePath, .. Pinned]));
+                ["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, "--baseline", baselinePath, .. Pinned, .. ConfigOptions(sample)]));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             SarifLog log = SarifLog.Load(outPath);
@@ -899,6 +899,61 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-192 criterion 2 (ADR 0058): with the sample's config, which maps the remoting <c>CallContext</c> members to
+    /// the solution's shim, the two callers that make the same calls are Equivalent, and each lists the remoting member as an
+    /// unproven assumption with the shim member it was declared to be. The caller that passes another value stays Divergent.
+    /// The checked-in snapshot is the whole run.
+    /// </summary>
+    [Fact]
+    public async Task CalleeReplacement_AMappedCallIsAnUnprovenAssumptionAndADifferentArgumentStaysDivergent()
+    {
+        const string GetData = "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)";
+        const string SetData = "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)";
+        SampleRun run = RunSample("callee-replacement");
+        Result current = Single("callee-replacement", "::Current(");
+        Result enter = Single("callee-replacement", "::Enter(");
+        Result leave = Single("callee-replacement", "::Leave(");
+
+        Assert.Equal(await Snapshot("callee-replacement"), run.NormalizedSarif);
+        Assert.Equal("EQ001", current.RuleId);
+        Assert.Equal([GetData], current.GetProperty<List<string>>("unprovenAssumptions"));
+        Dictionary<string, string> mapped = Assert.Single(current.GetProperty<List<Dictionary<string, string>>>("callIdentitiesMapped"));
+        Assert.Equal(GetData, mapped["legacy"]);
+        Assert.Equal("Equiv.Samples.CalleeReplacement.Slots::GetData(string)", mapped["modern"]);
+        Assert.Contains($"Assumes callees equivalent; not proved for: {GetData}.", current.Message.Text, StringComparison.Ordinal);
+        Assert.Equal("EQ001", enter.RuleId);
+        Assert.Equal([SetData], enter.GetProperty<List<string>>("unprovenAssumptions"));
+        Assert.Equal("EQ002", leave.RuleId);
+        Assert.Equal([SetData], leave.GetProperty<List<string>>("unprovenAssumptions"));
+        Assert.Equal(ExitCodes.Divergent, run.ExitCode);
+    }
+
+    /// <summary>
+    /// Ticket P2-192 (ADR 0058): without the declaration the remoting member and the shim are two unrelated functions, so
+    /// every caller is Divergent and none names a mapped call.
+    /// </summary>
+    [Fact]
+    public void CalleeReplacement_WithoutTheDeclarationEveryCallerIsDivergent()
+    {
+        (string legacy, string modern) = Solutions("callee-replacement");
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-192-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, .. Pinned]));
+
+            Result[] callers = [.. SarifLog.Load(outPath).Runs[0].Results.Where(static r => r.Message.Text.Contains("Culture::", StringComparison.Ordinal))];
+            Assert.Equal(ExitCodes.Divergent, exitCode);
+            Assert.Equal(3, callers.Length);
+            Assert.All(callers, static r => Assert.Equal("EQ002", r.RuleId));
+            Assert.All(callers, static r => Assert.False(r.TryGetProperty("callIdentitiesMapped", out List<Dictionary<string, string>>? _)));
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
+    }
+
+    /// <summary>
     /// Ticket P2-071 criteria 2 and 3 (ADR 0043): a discarded extra read of <c>String.Length</c> and a new
     /// <c>Collection&lt;int&gt;</c> stored where the legacy side stored a new <c>List&lt;int&gt;</c> are no calls, so both
     /// pairs are Equivalent by the solver. A modern side that calls <c>list.Clear()</c>, a member with an effect, stays
@@ -1013,7 +1068,7 @@ public sealed partial class SamplesEndToEndTests
         try
         {
             int exitCode = RunProgramSilently(() => CompareCommand.Run(
-                new Equiv.Cli.CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { ResourceLimit = 5_000_000 },
+                new Equiv.Cli.CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath(sample), FailOn: null, DryRun: false) { ResourceLimit = 5_000_000 },
                 [new CSharpFrontend()],
                 new WithoutRefinement(new Z3Backend()),
                 new FileReportSink(outPath),
@@ -1159,6 +1214,19 @@ public sealed partial class SamplesEndToEndTests
         return int.Parse(match.Groups["code"].Value, CultureInfo.InvariantCulture);
     }
 
+    /// <summary>
+    /// The sample's own <c>equiv.config.json</c>, which only a sample that declares something in it has (ticket P2-192's
+    /// <c>callee-replacement</c>); null otherwise. Every run of a sample takes it, so two runs of one sample differ only in
+    /// what the test varies.
+    /// </summary>
+    private static string? ConfigPath(string sample)
+    {
+        string path = Path.Combine(SamplesRoot, sample, "equiv.config.json");
+        return File.Exists(path) ? path : null;
+    }
+
+    private static string[] ConfigOptions(string sample) => ConfigPath(sample) is { } path ? ["--config", path] : [];
+
     private static (string Legacy, string Modern) Solutions(string sample) => (
         Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single(),
         Directory.GetFiles(Path.Combine(SamplesRoot, sample, "modern"), "*.slnx").Single());
@@ -1199,7 +1267,7 @@ public sealed partial class SamplesEndToEndTests
         string outPath = Path.Combine(Path.GetTempPath(), $"equiv-M3-003-{Guid.NewGuid():N}.sarif");
         try
         {
-            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, .. Pinned, .. options]));
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, .. Pinned, .. ConfigOptions(sample), .. options]));
             string json = File.ReadAllText(outPath);
             return new SampleRun(exitCode, json, SarifNormalizer.Normalize(json, sampleDir), SarifLog.Load(outPath));
         }

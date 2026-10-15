@@ -404,7 +404,7 @@ internal static class CompareCommand
         (IVerificationBackend backend, int jobs, TextWriter error) = verifying;
         (List<VerificationResult> verified, List<Notification> failures, List<ProcedureIdentity> unverified) = Verified(lowered, backend, passes.First, jobs, error);
         (List<VerificationResult> passed, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> decidedFrom) = LaterPasses(verified, lowered, passes, verifying);
-        List<VerificationResult> assumed = WithAssumptions(passed, decidedFrom, analysis.Match);
+        List<VerificationResult> assumed = WithAssumptions(passed, decidedFrom, analysis.Match, passes.First.CallIdentityMap);
         List<VerificationResult> contracted = passes.Thorough ? WithContracts(assumed, decidedFrom, backend, passes.Whole, jobs, error) : assumed;
         List<VerificationResult> results = Executed(contracted, decidedFrom, analysis.Replay, executing.Environment, executing.Testing, passes);
         if (passes.Thorough && executing.Environment is null && results.Exists(static r => r.Verdict is Unknown))
@@ -990,11 +990,16 @@ internal static class CompareCommand
     /// <summary>
     /// ADR 0019, once every verdict is known: each result of a lowered pair lists the matched pairs (lowered or not) that
     /// either body calls, other than itself, as <see cref="VerificationResult.AssumedCallees"/>, sorted and distinct, and
-    /// those whose own result in this run is not Equivalent as <see cref="VerificationResult.UnprovenAssumptions"/>. No
-    /// verdict changes.
+    /// those whose own result in this run is not Equivalent as <see cref="VerificationResult.UnprovenAssumptions"/>. ADR 0058:
+    /// each legacy identity of <paramref name="callIdentityMap"/> the legacy body calls is a callee pair nothing in the run
+    /// proves, so it is assumed and unproven, and listed with its modern counterpart as
+    /// <see cref="VerificationResult.CallIdentitiesMapped"/>. No verdict changes.
     /// </summary>
     private static List<VerificationResult> WithAssumptions(
-        List<VerificationResult> verified, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, MatchResult matchResult)
+        List<VerificationResult> verified,
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered,
+        MatchResult matchResult,
+        ImmutableDictionary<string, string> callIdentityMap)
     {
         HashSet<string> matched = new(
             matchResult.Pairs.Select(static p => p.New.Value).Concat(matchResult.LoweringFailures.Select(static f => f.New.Value)),
@@ -1006,17 +1011,20 @@ internal static class CompareCommand
             .. verified.Select(result =>
             {
                 (IrProcedure old, IrProcedure @new) = bodies[result.Identity.Value];
+                string[] mapped = [.. Callees(old).Where(callIdentityMap.ContainsKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
                 ImmutableArray<string> assumed =
                 [
                     .. Callees(old).Concat(Callees(@new))
                         .Where(callee => matched.Contains(callee) && !string.Equals(callee, result.Identity.Value, StringComparison.Ordinal))
+                        .Concat(mapped)
                         .Distinct(StringComparer.Ordinal)
                         .Order(StringComparer.Ordinal),
                 ];
                 return result with
                 {
                     AssumedCallees = assumed,
-                    UnprovenAssumptions = [.. assumed.Where(callee => verdicts.GetValueOrDefault(callee) is not Equivalent)],
+                    UnprovenAssumptions = [.. assumed.Where(callee => mapped.Contains(callee, StringComparer.Ordinal) || verdicts.GetValueOrDefault(callee) is not Equivalent)],
+                    CallIdentitiesMapped = [.. mapped.Select(callee => new MappedCall(callee, callIdentityMap[callee]))],
                 };
             }),
         ];
@@ -1024,7 +1032,8 @@ internal static class CompareCommand
 
     /// <summary>
     /// ADR 0036 decision 2 (ticket P1-010), once every result carries its assumptions: an Equivalent result whose unproven
-    /// assumptions include lowered callee pairs goes back to <paramref name="backend"/> with those pairs, to be proved again
+    /// assumptions include lowered callee pairs goes back to <paramref name="backend"/> with those pairs, other than a mapped
+    /// legacy identity, which has no callee pair to prove a contract on (ADR 0058), to be proved again
     /// with a caller-sufficient contract for each. When it is, the result takes that verdict, each callee it has a contract
     /// for leaves <see cref="VerificationResult.UnprovenAssumptions"/>, and that callee's own unproven assumptions join the
     /// caller's assumed and unproven ones, since the contract's proof assumed them. Otherwise, and when the backend throws,
@@ -1040,7 +1049,7 @@ internal static class CompareCommand
         Dictionary<string, VerificationResult> byIdentity = results.ToDictionary(static r => r.Identity.Value, StringComparer.Ordinal);
         Dictionary<string, ContractCandidate> candidates = results
             .Where(static result => result.Verdict is Equivalent)
-            .Select(result => (Result: result, Callees: result.UnprovenAssumptions.Where(bodies.ContainsKey).Select(c => new CalleePair(c, bodies[c].Old, bodies[c].New)).ToImmutableArray()))
+            .Select(result => (Result: result, Callees: result.UnprovenAssumptions.Where(c => bodies.ContainsKey(c) && !options.CallIdentityMap.ContainsKey(c)).Select(c => new CalleePair(c, bodies[c].Old, bodies[c].New)).ToImmutableArray()))
             .Where(static c => !c.Callees.IsEmpty)
             .ToDictionary(static c => c.Result.Identity.Value, c => new ContractCandidate(bodies[c.Result.Identity.Value].Old, bodies[c.Result.Identity.Value].New, c.Callees), StringComparer.Ordinal);
         if (candidates.Count == 0)

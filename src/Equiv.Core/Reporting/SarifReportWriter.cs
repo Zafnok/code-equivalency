@@ -261,7 +261,8 @@ public static class SarifReportWriter
     /// <summary>
     /// ADR 0042: the callee pairs a call site with the same text binds to, which the pair treats as possibly the same, as
     /// <c>reboundCalls</c>. ADR 0047: the forwarders the pair's bodies call, each with the callee its calls were lowered as
-    /// calls to, as <c>forwardersResolved</c>. Each is left out when there is none.
+    /// calls to, as <c>forwardersResolved</c>. ADR 0058: the config's call-identity map entries the legacy body calls, as
+    /// <c>callIdentitiesMapped</c>. Each is left out when there is none.
     /// </summary>
     private static void SetCalleeProperties(Result sarifResult, VerificationResult result)
     {
@@ -280,6 +281,15 @@ public static class SarifReportWriter
             {
                 ["forwarder"] = f.Forwarder,
                 ["target"] = f.Target,
+            }).ToList());
+        }
+
+        if (!result.CallIdentitiesMapped.IsEmpty)
+        {
+            sarifResult.SetProperty("callIdentitiesMapped", result.CallIdentitiesMapped.Select(static m => new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["legacy"] = m.Legacy,
+                ["modern"] = m.Modern,
             }).ToList());
         }
     }
