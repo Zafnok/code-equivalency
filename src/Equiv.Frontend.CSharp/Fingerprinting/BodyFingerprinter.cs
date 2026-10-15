@@ -23,9 +23,9 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// generates for it. On a same-runtime pair, a partial method whose defining declaration is the one read is fingerprinted by
 /// its implementing part, which holds its code, and by its attributes and those of that part's local functions
 /// (ADR 0024 as clarified by ticket P2-107); an ordinary method only, since a partial constructor also runs its type's
-/// initializers. On a same-runtime pair too, an <c>extern</c> method that names its implementation, with
+/// initializers. On every runtime pair, an <c>extern</c> method that names its implementation, with
 /// <c>[DllImport]</c> or <c>InternalCall</c>, is fingerprinted by its signature, what it imports and its attributes
-/// (ADR 0054; ticket P2-145). On every runtime pair, a <c>[GeneratedRegex]</c> member whose implementing part the regex
+/// (ADR 0054; ticket P2-145), runtime-sensitive across runtimes by ADR 0058's rules (ticket P2-165). On every runtime pair, a <c>[GeneratedRegex]</c> member whose implementing part the regex
 /// generator wrote is fingerprinted by its signature and that attribute, which is its code (ADR 0055; ticket P2-118).
 /// Null when the declaration has no body otherwise.
 /// </summary>
@@ -117,7 +117,7 @@ internal static class BodyFingerprinter
             {
                 _ when RegexGenerator.Declaration(method) is { } declaration => BoundSerialiser.SerialiseGeneratedRegex(method, declaration, compilation, settings),
                 (true, _, _) => BoundSerialiser.Serialise(method, compilation, [], settings),
-                (false, true, { IsExtern: true }) => NamesItsImplementation(method) ? BoundSerialiser.SerialiseExtern(method, compilation, settings) : (null, false),
+                (false, _, { IsExtern: true }) => NamesItsImplementation(method) ? BoundSerialiser.SerialiseExtern(method, compilation, settings) : (null, false),
                 (false, true, { MethodKind: MethodKind.Ordinary, PartialImplementationPart: { } implementation }) => ImplementingPart(implementation, compilation, settings),
                 _ => (null, false),
             };

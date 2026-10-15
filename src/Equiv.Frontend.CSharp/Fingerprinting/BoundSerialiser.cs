@@ -9,6 +9,7 @@ using Equiv.Core;
 using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
+using Equiv.Core.RuntimeChanges;
 using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
@@ -41,7 +42,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// <c>switch</c> expression that may match no arm carries the constructor of the exception the compiler throws then, which
 /// depends on the reference assemblies (ADR 0024 as clarified by ticket P2-144). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
-/// P2-055), or it declares an <c>extern</c> local function on a pair that crosses a runtime (ADR 0054 decision 4). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
+/// P2-055), or it declares an <c>extern</c> local function on a pair that crosses a runtime, which an interop change between
+/// the two runtimes reaches or which no list of them covers (ADR 0058; ticket P2-165). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
 /// <see cref="OperationKind.None"/>) carry their source tokens instead, which costs congruence on a rename there but never
 /// equates two different operations. A caller that asks for it also gets the text as <see cref="BoundLine"/>s, which say
 /// what fingerprint component each part of a line belongs to (ticket P2-173); the text is the same with and without.
@@ -67,7 +69,10 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <summary>The rule that a floating-point to integer conversion saturates from .NET 9.</summary>
     public const string FloatToInteger = "float-to-integer";
 
-    /// <summary>The rule that the runtime marshals the call of an <c>extern</c> local function (ADR 0054 decision 4).</summary>
+    /// <summary>
+    /// The rule that the runtime marshals the call of an <c>extern</c> function, between runtimes no <c>marshalling</c> list
+    /// covers (ADR 0054 decision 4 as ADR 0058 keeps it); <c>extern:</c> and an entry's id where one reaches it.
+    /// </summary>
     public const string Extern = "extern";
 
     /// <summary>What a <c>[GeneratedRegex]</c> member constructs, as a <c>runtime-changes.json</c> row names it (ADR 0055 decision 3).</summary>
@@ -203,14 +208,15 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <summary>
     /// The serialisation of an <c>extern</c> <paramref name="method"/>, which has no bound code (ADR 0054 decision 2;
     /// ticket P2-145): its signature, what it imports as the compiler resolves it, and every attribute of the method,
-    /// which for a partial method has those of both its parts, of its return value and of its parameters. It is never
-    /// runtime-sensitive: the frontend asks only on a same-runtime pair.
+    /// which for a partial method has those of both its parts, of its return value and of its parameters. On a pair that
+    /// crosses a runtime it is runtime-sensitive by the rules <see cref="ExternRules"/> gives (ADR 0058; ticket P2-165).
     /// </summary>
     public static (string Text, bool RuntimeSensitive) SerialiseExtern(IMethodSymbol method, Compilation compilation, Settings settings)
     {
         BoundSerialiser serialiser = new(method, compilation, settings);
         serialiser.Signature();
         serialiser.Attributes("method", method);
+        serialiser.ExternRules(method);
         return serialiser.Result(settings);
     }
 
@@ -307,8 +313,7 @@ internal sealed class BoundSerialiser : OperationWalker
         if (operation is ILocalFunctionOperation local)
         {
             Attributes(Number(local.Symbol, "F"), local.Symbol);
-            // Across runtimes it is the runtime that marshals an interop call, and no table row describes that (ADR 0054 decision 4).
-            Flag(local.Symbol.IsExtern && !runtime.Interval.IsEmpty, Extern);
+            ExternRules(local.Symbol);
         }
 
         Layout(operation);
@@ -452,6 +457,57 @@ internal sealed class BoundSerialiser : OperationWalker
             Marshalled(name, type, written);
         }
     }
+
+    /// <summary>
+    /// The runtime rules that apply to an <c>extern</c> <paramref name="function"/> on a pair that crosses a runtime (ADR
+    /// 0058 decision 2; ticket P2-165). Where the table's <c>marshalling</c> list does not cover the interval, or the function
+    /// has no <c>[DllImport]</c> and its runtime looks it up in a table of its own, <see cref="Extern"/>, as ADR 0054
+    /// decision 4 has it. Otherwise one rule per entry inside the interval whose reach takes in the declaration, named
+    /// <c>extern:</c> and the entry's id.
+    /// </summary>
+    private void ExternRules(IMethodSymbol function)
+    {
+        if (!function.IsExtern || runtime.Interval.IsEmpty)
+        {
+            return;
+        }
+
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        if (function.GetDllImportData() is not { } import || !table.CoversMarshalling(runtime.Interval))
+        {
+            Flag(applies: true, Extern);
+            return;
+        }
+
+        foreach (MarshallingChange change in table.MarshallingWithin(runtime.Interval))
+        {
+            Flag(Reaches(change.Reach, function, import), $"{Extern}:{change.Id}");
+        }
+    }
+
+    /// <summary>Whether a <c>marshalling</c> entry of <paramref name="reach"/> takes in the imported <paramref name="function"/> (ADR 0058 decision 3).</summary>
+    private static bool Reaches(MarshallingReach reach, IMethodSymbol function, DllImportData import) => reach switch
+    {
+        MarshallingReach.EveryImport => true,
+        MarshallingReach.InexactEntryPoint => !import.ExactSpelling,
+        MarshallingReach.ComObject => ComMarshalling.Reaches(function),
+        MarshallingReach.SearchPathsWithoutAssemblyDirectory => SearchPathFlags(function) is { } flags && (flags & AssemblyDirectory) == 0,
+        MarshallingReach.AssemblyDirectoryOnly => SearchPathFlags(function) == AssemblyDirectory,
+        _ => false,
+    };
+
+    /// <summary><c>DllImportSearchPath.AssemblyDirectory</c>'s value.</summary>
+    private const int AssemblyDirectory = 2;
+
+    /// <summary>
+    /// The <c>DllImportSearchPath</c> flags the runtime searches an imported <paramref name="function"/>'s library by: its
+    /// own <c>[DefaultDllImportSearchPaths]</c>, else its assembly's; null when neither names any.
+    /// </summary>
+    private static int? SearchPathFlags(IMethodSymbol function) =>
+        function.GetAttributes().Concat(function.ContainingAssembly.GetAttributes())
+            .FirstOrDefault(static attribute => Is(attribute, SearchPaths)) is { } attribute
+            ? Convert.ToInt32(attribute.ConstructorArguments[0].Value, CultureInfo.InvariantCulture)
+            : null;
 
     /// <summary>
     /// Writes the types <paramref name="type"/> is made of that are declared in the solution, each once. A type from a

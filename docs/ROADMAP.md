@@ -1316,7 +1316,7 @@ They come before any other open ticket, in this order:
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
    migrations.
 4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same. P2-192 made a call the
-   config's call-identity map declares an unproven assumption the result names (ADR 0058) and left P2-202
+   config's call-identity map declares an unproven assumption the result names (ADR 0059) and left P2-202
    (M, 1, a synchronous call replaced by its `Async` twin and `GetAwaiter().GetResult()`) and P2-203 (M, 1, a
    renamed static getter of the caller's own type is not read).
 5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs: P2-179 (`rebound-call`, 12.9%

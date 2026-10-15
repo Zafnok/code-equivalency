@@ -990,7 +990,7 @@ internal static class CompareCommand
     /// <summary>
     /// ADR 0019, once every verdict is known: each result of a lowered pair lists the matched pairs (lowered or not) that
     /// either body calls, other than itself, as <see cref="VerificationResult.AssumedCallees"/>, sorted and distinct, and
-    /// those whose own result in this run is not Equivalent as <see cref="VerificationResult.UnprovenAssumptions"/>. ADR 0058:
+    /// those whose own result in this run is not Equivalent as <see cref="VerificationResult.UnprovenAssumptions"/>. ADR 0059:
     /// each legacy identity of <paramref name="callIdentityMap"/> the legacy body calls is a callee pair nothing in the run
     /// proves, so it is assumed and unproven, and listed with its modern counterpart as
     /// <see cref="VerificationResult.CallIdentitiesMapped"/>. No verdict changes.
@@ -1033,7 +1033,7 @@ internal static class CompareCommand
     /// <summary>
     /// ADR 0036 decision 2 (ticket P1-010), once every result carries its assumptions: an Equivalent result whose unproven
     /// assumptions include lowered callee pairs goes back to <paramref name="backend"/> with those pairs, other than a mapped
-    /// legacy identity, which has no callee pair to prove a contract on (ADR 0058), to be proved again
+    /// legacy identity, which has no callee pair to prove a contract on (ADR 0059), to be proved again
     /// with a caller-sufficient contract for each. When it is, the result takes that verdict, each callee it has a contract
     /// for leaves <see cref="VerificationResult.UnprovenAssumptions"/>, and that callee's own unproven assumptions join the
     /// caller's assumed and unproven ones, since the contract's proof assumed them. Otherwise, and when the backend throws,

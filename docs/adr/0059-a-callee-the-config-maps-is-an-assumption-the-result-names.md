@@ -1,4 +1,4 @@
-# ADR 0058: A callee the config maps to another member is a callee pair the result assumes and names as unproven
+# ADR 0059: A callee the config maps to another member is a callee pair the result assumes and names as unproven
 
 Status: accepted (2026-10-14). Extends ADR 0019's `assumedCallees` and `unprovenAssumptions` from matched callee pairs
 to the pairs `callIdentityRenames` declares.
@@ -64,3 +64,5 @@ whose legacy body calls `L`:
   equivalence and is not declarable this way. Ticket P2-202 owns it.
 - SARIF gains `properties.callIdentitiesMapped`, so the change that implements this carries `Release: minor`. VERIFICATION-MODEL sections 1 and 6 change in the
   PR that accepts this ADR. Ticket P2-192 implements it, with `samples/callee-replacement`.
+- Proposed as ADR 0058 and renumbered on merge, since `main` took that number first (ADR 0058 is the cross-runtime
+  `[DllImport]` decision).

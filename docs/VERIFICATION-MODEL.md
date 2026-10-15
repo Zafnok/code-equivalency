@@ -17,7 +17,7 @@ SARIF result names them (`assumedCallees`) and flags the ones not proved in the 
 (`unprovenAssumptions`). This holds for cycles too: if every pair on a cycle of matched
 procedures is Equivalent, every pair is partially equivalent (the mutual-summary rule).
 
-A callee the config's call-identity map (`callIdentityRenames`) maps is assumed too (ADR 0058;
+A callee the config's call-identity map (`callIdentityRenames`) maps is assumed too (ADR 0059;
 ticket P2-192). An entry `L → M` declares that every legacy call to `L` is the same function as a
 modern call to `M`, whatever kind of members `L` and `M` are, a solution's own shim of a member the
 new runtime lacks included. Nothing in the run proves the declaration, so every result of a pair
@@ -95,7 +95,8 @@ runtime-sensitive is Equivalent by congruence, without the solver (`proofMethod:
 congruence`, ADR 0024): identical bound code makes the same claim a shared call does. A body is
 runtime-sensitive only by a runtime rule that applies inside the pair's runtime interval (section 3,
 ADR 0040), or, on a pair that crosses a runtime, by declaring an `extern` local function, whose call
-the runtime marshals (ADR 0054); so on a same-runtime pair no body is. The fingerprint is of the bound tree, not of the
+the runtime marshals, where an interop change between the two runtimes reaches its declaration or no
+list of such changes covers them (ADR 0054, ADR 0058); so on a same-runtime pair no body is. The fingerprint is of the bound tree, not of the
 IR, so a pair whose bodies are whole-body opaque (an iterator) can be congruent. A local function's
 attributes are in every text that holds the function, and an `extern` one's import with them, since
 an `extern` function's attributes say what it calls (ADR 0024 as clarified by tickets P2-107 and
@@ -105,13 +106,17 @@ types in its signature that the solution declares (P2-146). An operation whose r
 declaration fixes is followed by that declaration, where the solution declares the type: a reference
 to a field that has a `[FieldOffset]`, a `sizeof`, an operation whose type is a pointer, a function
 pointer or an inline array, and a call into `System.Runtime.InteropServices` or
-`System.Runtime.CompilerServices` or one that takes a pointer (P2-149). A declaration with no bound code has no fingerprint, with three exceptions, the first two on a
+`System.Runtime.CompilerServices` or one that takes a pointer (P2-149). A declaration with no bound code has no fingerprint, with three exceptions, the first on a
 same-runtime pair only. A partial method whose defining declaration is the one read has the
 fingerprint of its implementing part, with the method's attributes (P2-107). And an `extern` method
 that names its implementation, with `[DllImport]` or `InternalCall`, has the fingerprint of its
 signature, of what it imports and of its attributes, so an unedited one is congruent; any other
 matched `extern` pair is Unknown with the whole-body reason `no-body`, and is never Divergent (ADR
-0054). And on every runtime pair, a `[GeneratedRegex]` method or property accessor whose implementing
+0054). On a pair that crosses a runtime that fingerprint is runtime-sensitive, so not congruent, in
+three cases: an entry of `runtime-changes.json`'s `marshalling` list, the Interop items of
+Microsoft's breaking-change pages from .NET Core 3.0 to .NET 10, lies inside the interval and its
+`reach` takes in the declaration; the interval reaches .NET Framework or below the table's coverage,
+where no such list is complete; or the method is an `InternalCall` (ADR 0058). And on every runtime pair, a `[GeneratedRegex]` method or property accessor whose implementing
 part the regex source generator wrote (the member carries that generator's `[GeneratedCode]`) has the
 fingerprint of its signature and of that attribute as it is bound: the pattern, the options, the
 timeout and the culture name. The implementing part is not read. The text is runtime-sensitive when a
@@ -526,7 +531,7 @@ Migration-specific normalisations (applied to both sides before matching):
 - Namespace and type rename maps come from `equiv.config.json`, and so does the call-identity map
   (`callIdentityRenames`), which makes a legacy callee identity the same function as a modern one.
   The encoders apply it to legacy calls only. Each entry a pair's legacy body calls is an unproven
-  assumption of that pair's result (section 1; ADR 0058).
+  assumption of that pair's result (section 1; ADR 0059).
 - BCL API changes are NOT auto-equated (`WebClient` vs `HttpClient` calls are different
   identities and therefore Divergent unless the user maps them, or Unknown when the call site's
   text is the same on both sides, as the rebound call sites below). False alarms are
@@ -1032,7 +1037,7 @@ catalogue entry fired (ADR 0020), and `properties.reboundCalls` when a call site
 modern identity. It is not part of the fingerprint. `properties.forwardersResolved` lists the forwarders a body's calls were
 resolved through (ADR 0047): one `{ forwarder, target }` per forwarder, sorted by forwarder and then target; it is not part
 of the fingerprint either. `properties.callIdentitiesMapped` lists the call-identity map entries the legacy body calls (ADR
-0058): one `{ legacy, modern }` per entry, sorted by legacy identity, each legacy identity also in `assumedCallees` and
+0059): one `{ legacy, modern }` per entry, sorted by legacy identity, each legacy identity also in `assumedCallees` and
 `unprovenAssumptions`; it is not part of the fingerprint.
 
 A result of a matched pair with bodies that is not Equivalent by congruence carries `properties.notCongruent` (ADR 0024
@@ -1056,7 +1061,7 @@ body that does not bind. It says where the two texts first part, which is one ca
 | `import` | what an `extern` function imports | `method`, or the local function's number in the text |
 | `attribute` | an attribute the text holds: of the method, its return value, a parameter or a local function, or a marshalling attribute of the assembly or the declaring type | what carries it (`method return`, `method assembly`) |
 | `type-layout` | the declaration of a type the body reads the layout of or hands over (ADR 0024's clarifications) | the type |
-| `runtime-rule` | nothing in the text: a runtime rule applies between the pair's runtimes | every rule that applies, each once, the legacy side's first, joined by `, `: the callee, field or event a `runtime-changes.json` row flags, or `x87`, `float-to-integer` or `extern` (P2-181) |
+| `runtime-rule` | nothing in the text: a runtime rule applies between the pair's runtimes | every rule that applies, each once, the legacy side's first, joined by `, `: the callee, field or event a `runtime-changes.json` row flags, or `x87`, `float-to-integer` or `extern` (P2-181), or `extern:` and the id of a `marshalling` entry that reaches an import (ADR 0058) |
 | `unbound` | nothing in the text: a body does not bind (ADR 0029 decision 2) | the side or sides |
 
 Where one side has a line of a type's declaration, an attribute or an import and the other has an operation or nothing

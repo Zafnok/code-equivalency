@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <RootNamespace>Equiv.Samples.ExternImportRuntime</RootNamespace>
+    <AssemblyName>Equiv.Samples.ExternImportRuntime</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\legacy\Native.cs" />
+    <Compile Include="..\..\legacy\Changed.cs" />
+  </ItemGroup>
+
+</Project>

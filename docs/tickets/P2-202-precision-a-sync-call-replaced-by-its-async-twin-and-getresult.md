@@ -12,16 +12,16 @@ A migration to a library whose synchronous API is gone replaces `c.Foo(x)` by
 calls `SimulatePrincipalPolicy` and `GetUser` became their `Async` twins with `GetResult()`. The same file
 has three more such calls (`CreateUser`, `PutUserPolicy`, `CreateAccessKey`).
 
-ADR 0058 (P2-192) lets a user declare one callee the same function as another, one call for one call. This
+ADR 0059 (P2-192) lets a user declare one callee the same function as another, one call for one call. This
 is a different kind: one legacy call against two modern calls, the second on the first's result. The
 config's call-identity map cannot say it, and the result would need the `Task` the first call returns to be
 the legacy call's result wrapped.
 
 When done, such a pair can be declared (or catalogued) and is decided, and what keeps the declaration
-from hiding a real difference is decided, as ADR 0058 did for one call for one call.
+from hiding a real difference is decided, as ADR 0059 did for one call for one call.
 
 ## Spec references
-ADR 0058, ADR 0020, ADR 0019, `docs/tickets/done/P2-192-*.md`, `.claude/skills/equiv-adr`.
+ADR 0059, ADR 0020, ADR 0019, `docs/tickets/done/P2-192-*.md`, `.claude/skills/equiv-adr`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. Decide, through `equiv-adr`, how `Foo(args) = FooAsync(args).GetAwaiter().GetResult()` is declared and

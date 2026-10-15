@@ -45,17 +45,17 @@ Base class library one-call pairs (P2-137's catalogue).
 
 ## Notes
 - Filed 2026-10-14 by P2-130 (criterion 4).
-- Criterion 1. `equiv-adr`'s bar test: a new SARIF property, so a new ADR, ADR 0058 (accepted in this PR, as P2-118 did
+- Criterion 1. `equiv-adr`'s bar test: a new SARIF property, so a new ADR, ADR 0059 (accepted in this PR, as P2-118 did
   with ADR 0055). The config's `callIdentityRenames` already makes a legacy identity the same function as a modern one
   in every encoder (`TraceEncoder.Canonical`): on `samples/callee-replacement`, without any code change, it turned the
   two callers that make the same calls from EQ002 into EQ001, and the caller that stores another value stayed EQ002.
   What was missing is ADR 0019's stance: nothing said the Equivalent rested on the user's entry. So the declaration
   stays that map, and the check is the report. The mapped legacy identity is an assumed callee no result of the run
   proves (`assumedCallees`, `unprovenAssumptions`, the Equivalent's message), with its counterpart in
-  `properties.callIdentitiesMapped`, and the contracts pass never takes it. ADR 0058's Rejected list gives the
+  `properties.callIdentitiesMapped`, and the contracts pass never takes it. ADR 0059's Rejected list gives the
   alternatives: a new config key, a catalogue entry, a specification of the remoting member, real runtimes, inference.
 - Decision: spell the declared pair in `unprovenAssumptions` by its legacy identity, the map key, not by the modern one,
-  which can be a matched pair proved Equivalent and would then hide the assumption (ADR 0058, Rejected).
+  which can be a matched pair proved Equivalent and would then hide the assumption (ADR 0059, Rejected).
 - Decision: a sample's own `equiv.config.json` is passed by every end-to-end run of that sample
   (`SamplesEndToEndTests.ConfigPath`), so two runs of `callee-replacement` differ only in what a test varies. Only this
   sample has one. The MCP parity test runs both sides without it, and they agree.

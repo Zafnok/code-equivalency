@@ -531,6 +531,85 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-165 criteria 2 and 4 (ADR 0058): .NET 5 against .NET 6, where no interop change reaches an import. The
+    /// two unedited imports are Equivalent by congruence, and the one whose library differs is Unknown, <c>no-body</c>.
+    /// </summary>
+    [Fact]
+    public void ExternImportRuntime_UneditedImportsAreCongruentAcrossNet5AndNet6AndAnEditedOneIsNot()
+    {
+        Run run = RunSample("extern-import-runtime").Log.Runs[0];
+
+        Assert.Equal(3, run.Results.Count);
+        AssertCongruent(ExternImportRuntime(run.Results, "Native::Ticks()"));
+        AssertCongruent(ExternImportRuntime(run.Results, "Native::MessageBox(System.IntPtr,string,string,uint)"));
+        AssertNoBody(ExternImportRuntime(run.Results, "Changed::F()"));
+    }
+
+    /// <summary>
+    /// Ticket P2-165 criterion 2 (ADR 0058 decision 3): the same files from .NET Core 3.1 cross .NET 5, whose suffix
+    /// probing reaches the import that is not spelled exactly, which stays Unknown; the one spelled exactly is congruent.
+    /// </summary>
+    [Fact]
+    public void ExternImportRuntime_FromNetCore31TheSuffixProbingReachesOnlyTheInexactImport()
+    {
+        IList<Result> results = RunExternImportRuntimeFrom("netcoreapp3.1");
+
+        Assert.Equal(3, results.Count);
+        AssertCongruent(ExternImportRuntime(results, "Native::Ticks()"));
+        AssertNoBody(ExternImportRuntime(results, "Native::MessageBox(System.IntPtr,string,string,uint)"));
+        AssertNoBody(ExternImportRuntime(results, "Changed::F()"));
+    }
+
+    /// <summary>
+    /// Ticket P2-165 criterion 3 (ADR 0058 decision 2): from .NET Framework 4.8 no list of interop changes is complete, so
+    /// ADR 0054 decision 4 stands for every import, the one the list reaches and the one it does not.
+    /// </summary>
+    [Fact]
+    public void ExternImportRuntime_FromNet48EveryImportStaysUnknown()
+    {
+        IList<Result> results = RunExternImportRuntimeFrom("net48");
+
+        Assert.Equal(3, results.Count);
+        Assert.All(results, AssertNoBody);
+    }
+
+    private static Result ExternImportRuntime(IList<Result> results, string member) =>
+        results.Single(r => string.Equals(r.PartialFingerprints["procedureIdentity/v1"], $"Equiv.Samples.ExternImportRuntime.{member}", StringComparison.Ordinal));
+
+    private static void AssertCongruent(Result result)
+    {
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    private static void AssertNoBody(Result result)
+    {
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("opaque", result.GetProperty<string>("unknownReason"));
+        Assert.Contains("no-body", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary><c>extern-import-runtime</c>'s files compiled from <paramref name="legacy"/>'s project, against its .NET 6 side.</summary>
+    private static IList<Result> RunExternImportRuntimeFrom(string legacy)
+    {
+        string sampleDir = Path.Combine(SamplesRoot, "extern-import-runtime");
+        string legacySolution = Directory.GetFiles(Path.Combine(sampleDir, legacy, "legacy"), "*.sln").Single();
+        string modernSolution = Directory.GetFiles(Path.Combine(sampleDir, "modern"), "*.slnx").Single();
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-165-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacySolution, "--modern", modernSolution, "--out", outPath, .. Pinned]));
+
+            Assert.Equal(ExitCodes.Success, exitCode);
+            return SarifLog.Load(outPath).Runs[0].Results;
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
+    }
+
+    /// <summary>
     /// Ticket P2-118 criterion 2 (ADR 0055): .NET 8 against .NET 9 with one <c>[GeneratedRegex]</c> method nobody edited.
     /// The method is congruent by its declaration, its caller is congruent, and no result names the matcher the two
     /// generators emit differently: it is no procedure, and the run counts what each side left out.
@@ -899,7 +978,7 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
-    /// Ticket P2-192 criterion 2 (ADR 0058): with the sample's config, which maps the remoting <c>CallContext</c> members to
+    /// Ticket P2-192 criterion 2 (ADR 0059): with the sample's config, which maps the remoting <c>CallContext</c> members to
     /// the solution's shim, the two callers that make the same calls are Equivalent, and each lists the remoting member as an
     /// unproven assumption with the shim member it was declared to be. The caller that passes another value stays Divergent.
     /// The checked-in snapshot is the whole run.
@@ -929,7 +1008,7 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
-    /// Ticket P2-192 (ADR 0058): without the declaration the remoting member and the shim are two unrelated functions, so
+    /// Ticket P2-192 (ADR 0059): without the declaration the remoting member and the shim are two unrelated functions, so
     /// every caller is Divergent and none names a mapped call.
     /// </summary>
     [Fact]

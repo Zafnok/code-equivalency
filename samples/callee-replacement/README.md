@@ -1,7 +1,7 @@
 # callee-replacement
 
 A member the new runtime lacks is replaced, call for call, by a member of the solution's own that the user declares
-does the same (ADR 0058, ticket P2-192). It is the shape of `duplicati-3124`'s largest false-positive group. The legacy
+does the same (ADR 0059, ticket P2-192). It is the shape of `duplicati-3124`'s largest false-positive group. The legacy
 side keeps a culture name in the remoting `CallContext`, through `CallContext.LogicalSetData(string, object)` and
 `CallContext.LogicalGetData(string)`, which .NET 5 and later do not have. The modern side calls `Slots.SetData` and
 `Slots.GetData`, its own shim over `AsyncLocal<object>`.

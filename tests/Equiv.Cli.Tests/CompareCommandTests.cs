@@ -1968,7 +1968,7 @@ public sealed partial class CompareCommandTests
     }
 
     /// <summary>
-    /// Ticket P2-192 (ADR 0058): a legacy callee the config maps to another member is a callee pair nothing in the run proves,
+    /// Ticket P2-192 (ADR 0059): a legacy callee the config maps to another member is a callee pair nothing in the run proves,
     /// so the result assumes it, lists it as unproven and names its counterpart. An entry no legacy body calls is listed
     /// nowhere, and a modern body's call to a mapped identity is not mapped, since the map renames legacy calls only.
     /// </summary>
@@ -2004,7 +2004,7 @@ public sealed partial class CompareCommandTests
     }
 
     /// <summary>
-    /// Ticket P2-192 (ADR 0058): a mapped callee has no callee pair to prove a contract on, even when its legacy identity is
+    /// Ticket P2-192 (ADR 0059): a mapped callee has no callee pair to prove a contract on, even when its legacy identity is
     /// also a lowered pair of the run, so the contracts pass leaves it unproven.
     /// </summary>
     [Fact]
