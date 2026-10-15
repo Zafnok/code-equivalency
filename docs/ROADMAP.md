@@ -1314,7 +1314,9 @@ They come before any other open ticket, in this order:
    left two tickets: P2-201 (M, 4, a field or get-only property holds the path) and P2-200 (M, 8, a
    path more than one call away, from a private method's only caller, or past `Path.Combine` only).
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
-   migrations.
+   migrations. P2-184 cleared 7 of the 8 on Git Extensions and OpenRA (the eighth is P2-181's) and
+   left two tickets for sample Divergents that ADR 0056's taint now reaches: P2-202 (S, a rewritten
+   extension call on a null source) and P2-203 (M, two different answers of a closed `TrimEnd`).
 4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same.
 5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs: P2-179 (`rebound-call`, 12.9%
    of `gitextensions-8522`'s), P2-182 (`DelegateCreation`, 9.7% of OpenRA's), P2-183
