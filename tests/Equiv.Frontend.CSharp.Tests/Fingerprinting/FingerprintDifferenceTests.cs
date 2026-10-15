@@ -113,6 +113,7 @@ public sealed class FingerprintDifferenceTests
     [InlineData("double M(double d) => d + 1;", "net10.0", true, BoundSerialiser.X87)]
     [InlineData("double M(char c, double d) => char.IsLetterOrDigit(c) ? d : 0;", "net48", true, "x87, System.Char::IsLetterOrDigit(char)")]
     [InlineData("int M() { return F(); " + Import + "static extern int F(); }", "net48", false, BoundSerialiser.Extern)]
+    [InlineData("int M() { return F(); " + Import + "static extern int F(); }", "net7.0", false, "extern:netcoredeps, extern:cet")]
     public void EqualTextsAreNamedByTheRuntimeRulesThatApply(string member, string legacy, bool x87, string rules)
     {
         Compilation compilation = Compile(member);

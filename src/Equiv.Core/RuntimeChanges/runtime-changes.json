@@ -94,6 +94,17 @@
 // assemblies have no such type the compiler calls InvalidOperationException's, which has no row, so the row flags the
 // side that has the type; the bound fingerprint names the constructor on both sides.
 //
+// "marshalling" (ADR 0058; ticket P2-165) lists the items of the Interop category of the breaking-change pages from
+// .NET Core 3.0 to .NET 10, one entry each. They are not rows: a row matches a call, and these are read off the
+// declaration of a [DllImport] function, whose fingerprint is runtime-sensitive on a pair whose interval crosses an
+// entry's changedIn when the entry's "reach" takes in the declaration:
+//   "none": nothing; "everyImport": every [DllImport]; "inexactEntryPoint": one whose ExactSpelling is false;
+//   "comObject": one whose return value or a parameter is marshalled as a COM or WinRT object;
+//   "searchPathsWithoutAssemblyDirectory" and "assemblyDirectoryOnly": one whose [DefaultDllImportSearchPaths], its own
+//     or else its assembly's, leaves out AssemblyDirectory, or is AssemblyDirectory alone.
+// No page lists the interop changes at the .NET Framework boundary or before coveredFrom, so on an interval that reaches
+// either every extern function stays runtime-sensitive (ADR 0054 decision 4).
+//
 // x87 vs SSE floating-point on x86 is NOT a row here: floats are an uninterpreted Sort in the
 // MVP, so there is no bit-level float semantics yet for a row to flag calls against. Add it once
 // floats gain a real encoding (post-MVP).
@@ -166,6 +177,23 @@
     "System.Windows.Forms.DataFormats::CommaSeparatedValue": "Csv",
     "System.Windows.Forms.DataFormats::StringFormat": "System.String"
   },
+  "marshalling": [
+    { "id": "suffixProbing", "reach": "inexactEntryPoint", "changedIn": "net5.0", "source": "documented", "reason": "Off Windows the runtime no longer probes for an export with an A or W suffix, so an import whose entry point is not spelled exactly can bind to another export or none.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/function-suffix-pinvoke" },
+    { "id": "winrtRemoved", "reach": "comObject", "changedIn": "net5.0", "source": "documented", "reason": "Built-in WinRT marshalling is removed, so a WinRT object or an HSTRING no longer crosses an import.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/built-in-support-for-winrt-removed" },
+    { "id": "inspectableCast", "reach": "comObject", "changedIn": "net5.0", "source": "documented", "reason": "Casting a runtime callable wrapper to an InterfaceIsIInspectable interface throws.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/casting-rcw-to-inspectable-interface-throws-exception" },
+    { "id": "staticAbstractInterfaces", "reach": "none", "changedIn": "net6.0", "source": "documented", "reason": "Static abstract members in interfaces: a language and type-system feature that marshals nothing.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/static-abstract-interface-methods" },
+    { "id": "osArchitectureEmulation", "reach": "none", "changedIn": "net7.0", "source": "documented", "reason": "RuntimeInformation.OSArchitecture under emulation: a property, which a member row covers.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/7.0/osarchitecture-emulation" },
+    { "id": "comWrappersUnwrap", "reach": "comObject", "changedIn": "net8.0", "source": "documented", "reason": "CreateObjectFlags.Unwrap unwraps only the wrappers of the ComWrappers instance it is called on.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/comwrappers-unwrap" },
+    { "id": "customMarshallerShapes", "reach": "none", "changedIn": "net8.0", "source": "documented", "reason": "The custom marshaller analyzer requires both shapes: the source generator's, at compile time.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/marshal-modes" },
+    { "id": "idispatchImplRemoved", "reach": "comObject", "changedIn": "net8.0", "source": "documented", "reason": "IDispatchImplAttribute is removed, so a COM-visible class that names it no longer loads.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/idispatchimplattribute-removed" },
+    { "id": "jsFunctionBinding", "reach": "none", "changedIn": "net8.0", "source": "documented", "reason": "JSFunctionBinding's implicit public constructor is removed: JavaScript interop, which no [DllImport] uses.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/jsfunctionbinding-constructor" },
+    { "id": "safeHandleConstructor", "reach": "none", "changedIn": "net8.0", "source": "documented", "reason": "A SafeHandle type needs a public parameterless constructor in [LibraryImport] and [GeneratedComInterface] methods, at compile time.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/safehandle-constructor" },
+    { "id": "netcoredeps", "reach": "everyImport", "changedIn": "net8.0", "source": "documented", "reason": "On Linux the netcoredeps directory is no longer searched for a native library.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/linux-netcoredeps" },
+    { "id": "cet", "reach": "everyImport", "changedIn": "net9.0", "source": "documented", "reason": "The host is CET-compatible, so on Windows a native library that sets thread context off the shadow stack terminates the process.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/9.0/cet-support" },
+    { "id": "idispatchExCast", "reach": "comObject", "changedIn": "net10.0", "source": "documented", "reason": "Casting a COM object that implements IDispatchEx to IReflect fails.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/idispatchex-ireflect-cast" },
+    { "id": "singleFileSearch", "reach": "searchPathsWithoutAssemblyDirectory", "changedIn": "net10.0", "source": "documented", "reason": "A single-file app looks in its own directory only when the search paths include AssemblyDirectory.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/native-library-search" },
+    { "id": "assemblyDirectoryOnly", "reach": "assemblyDirectoryOnly", "changedIn": "net10.0", "source": "documented", "reason": "DllImportSearchPath.AssemblyDirectory alone searches only the assembly directory, with no fallback to the operating system's search.", "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/search-assembly-directory" }
+  ],
   "rows": [
     {
       "member": "System.String::IndexOf(",

@@ -22,6 +22,8 @@ public sealed class RuntimeChangeTableTests
 
     private const string CoveredTag = "covered by row ";
 
+    private const string MarshallingTag = " — marshalling: ";
+
     private static readonly ImmutableHashSet<string> AllowedReasons =
         ["not a BCL member", "build-time only", "not reachable from .NET Framework code", "configuration only"];
 
@@ -417,11 +419,24 @@ public sealed class RuntimeChangeTableTests
         string[] lines = File.ReadAllLines(Path.Combine(RepoRoot, "docs", "runtime-changes-review.md"));
         HashSet<string> tableMembers = new(RuntimeChangeTable.Load().Rows.Select(static row => row.Member), StringComparer.Ordinal);
         HashSet<string> reviewed = new(StringComparer.Ordinal);
+        Dictionary<string, MarshallingChange> marshalling = RuntimeChangeTable.Load().Marshalling.ToDictionary(static change => change.Id, StringComparer.Ordinal);
+        HashSet<string> tagged = new(StringComparer.Ordinal);
         int entries = 0;
 
-        foreach (string line in lines.Where(static line => line.StartsWith("- ", StringComparison.Ordinal) && line.Contains(" — http", StringComparison.Ordinal)))
+        foreach (string entry in lines.Where(static line => line.StartsWith("- ", StringComparison.Ordinal) && line.Contains(" — http", StringComparison.Ordinal)))
         {
             entries++;
+            string line = entry;
+            int at = entry.IndexOf(MarshallingTag, StringComparison.Ordinal);
+            if (at >= 0)
+            {
+                string id = entry[(at + MarshallingTag.Length)..];
+                line = entry[..at];
+                Assert.True(marshalling.TryGetValue(id, out MarshallingChange? change), $"review marshalling '{id}' is not in runtime-changes.json");
+                Assert.Contains($" — {change.Url.OriginalString} — ", line, StringComparison.Ordinal);
+                tagged.Add(id);
+            }
+
             string verdict = line[(line.LastIndexOf(" — ", StringComparison.Ordinal) + " — ".Length)..];
             if (verdict.StartsWith(RowTag, StringComparison.Ordinal))
             {
@@ -442,7 +457,130 @@ public sealed class RuntimeChangeTableTests
 
         Assert.NotEqual(0, entries);
         Assert.Empty(tableMembers.Except(reviewed, StringComparer.Ordinal));
+        Assert.Equal(marshalling.Keys.Order(StringComparer.Ordinal), tagged.Order(StringComparer.Ordinal));
     }
+
+    /// <summary>
+    /// Ticket P2-165 (ADR 0058 decision 3): the shipped <c>marshalling</c> list is the fifteen items of the Interop
+    /// category of the breaking-change pages from .NET Core 3.0 to .NET 10, each with its change point and reach.
+    /// </summary>
+    [Theory]
+    [InlineData("suffixProbing", "net5.0", MarshallingReach.InexactEntryPoint)]
+    [InlineData("winrtRemoved", "net5.0", MarshallingReach.ComObject)]
+    [InlineData("inspectableCast", "net5.0", MarshallingReach.ComObject)]
+    [InlineData("staticAbstractInterfaces", "net6.0", MarshallingReach.None)]
+    [InlineData("osArchitectureEmulation", "net7.0", MarshallingReach.None)]
+    [InlineData("comWrappersUnwrap", "net8.0", MarshallingReach.ComObject)]
+    [InlineData("customMarshallerShapes", "net8.0", MarshallingReach.None)]
+    [InlineData("idispatchImplRemoved", "net8.0", MarshallingReach.ComObject)]
+    [InlineData("jsFunctionBinding", "net8.0", MarshallingReach.None)]
+    [InlineData("safeHandleConstructor", "net8.0", MarshallingReach.None)]
+    [InlineData("netcoredeps", "net8.0", MarshallingReach.EveryImport)]
+    [InlineData("cet", "net9.0", MarshallingReach.EveryImport)]
+    [InlineData("idispatchExCast", "net10.0", MarshallingReach.ComObject)]
+    [InlineData("singleFileSearch", "net10.0", MarshallingReach.SearchPathsWithoutAssemblyDirectory)]
+    [InlineData("assemblyDirectoryOnly", "net10.0", MarshallingReach.AssemblyDirectoryOnly)]
+    public void TheShippedMarshallingListIsTheInteropItems(string id, string changedIn, MarshallingReach reach)
+    {
+        ImmutableArray<MarshallingChange> list = RuntimeChangeTable.Load().Marshalling;
+        MarshallingChange change = Assert.Single(list, change => string.Equals(change.Id, id, StringComparison.Ordinal));
+
+        Assert.Equal(15, list.Length);
+        Assert.Equal(TargetRuntime.Parse(changedIn), change.ChangedIn);
+        Assert.Equal(reach, change.Reach);
+        Assert.StartsWith("https://learn.microsoft.com/en-us/dotnet/core/compatibility/", change.Url.OriginalString, StringComparison.Ordinal);
+        Assert.NotEmpty(change.Reason);
+    }
+
+    /// <summary>
+    /// Ticket P2-165 (ADR 0058 decision 2): the list covers an empty interval and one between .NET (Core) runtimes from
+    /// the table's <c>coveredFrom</c> on; not one that reaches .NET Framework or an older .NET (Core).
+    /// </summary>
+    [Theory]
+    [InlineData("net6.0", "net6.0", true)]
+    [InlineData("net48", "net48", true)]
+    [InlineData("net5.0", "net6.0", true)]
+    [InlineData("net6.0", "net5.0", true)]
+    [InlineData("netcoreapp3.0", "net10.0", true)]
+    [InlineData("net48", "net6.0", false)]
+    [InlineData("net45", "net48", false)]
+    [InlineData("netcoreapp2.1", "net6.0", false)]
+    public void TheMarshallingListCoversOnlyDotNetIntervalsFromCoveredFrom(string first, string second, bool covered)
+    {
+        RuntimeInterval interval = new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
+
+        Assert.Equal(covered, RuntimeChangeTable.Load().CoversMarshalling(interval));
+    }
+
+    /// <summary>
+    /// Ticket P2-165: the entries an interval holds are those whose change point it crosses. Between .NET 5 and .NET 6
+    /// that is one, which reaches no declaration.
+    /// </summary>
+    [Theory]
+    [InlineData("net5.0", "net6.0", "staticAbstractInterfaces")]
+    [InlineData("netcoreapp3.1", "net6.0", "suffixProbing,winrtRemoved,inspectableCast,staticAbstractInterfaces")]
+    [InlineData("net8.0", "net9.0", "cet")]
+    [InlineData("net9.0", "net10.0", "idispatchExCast,singleFileSearch,assemblyDirectoryOnly")]
+    [InlineData("net7.0", "net7.0", "")]
+    public void MarshallingWithinIsTheEntriesTheIntervalCrosses(string first, string second, string ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        RuntimeInterval interval = new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
+
+        Assert.Equal(
+            ids.Split(',', StringSplitOptions.RemoveEmptyEntries),
+            RuntimeChangeTable.Load().MarshallingWithin(interval).Select(static change => change.Id),
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void ATableWithNoMarshallingListHasNone()
+    {
+        Assert.Empty(Parse("[]").Marshalling);
+    }
+
+    /// <summary>Ticket P2-165: a <c>marshalling</c> entry's change point counts towards the table's coverage.</summary>
+    [Fact]
+    public void AMarshallingEntryIsParsedAndCountsTowardsCoverage()
+    {
+        RuntimeChangeTable table = ParseMarshalling(
+            """{ "id": "x", "reach": "everyImport", "changedIn": "net11.0", "source": "documented", "reason": "r", "url": "https://learn.microsoft.com/x" }""");
+
+        MarshallingChange change = Assert.Single(table.Marshalling);
+        Assert.Equal(new MarshallingChange("x", MarshallingReach.EveryImport, TargetRuntime.Parse("net11.0")!, "r", new Uri("https://learn.microsoft.com/x")), change);
+        Assert.Equal(TargetRuntime.Parse("net11.0"), table.Coverage.Newer);
+    }
+
+    [Theory]
+    [InlineData("none", MarshallingReach.None)]
+    [InlineData("everyImport", MarshallingReach.EveryImport)]
+    [InlineData("inexactEntryPoint", MarshallingReach.InexactEntryPoint)]
+    [InlineData("comObject", MarshallingReach.ComObject)]
+    [InlineData("searchPathsWithoutAssemblyDirectory", MarshallingReach.SearchPathsWithoutAssemblyDirectory)]
+    [InlineData("assemblyDirectoryOnly", MarshallingReach.AssemblyDirectoryOnly)]
+    public void AMarshallingReachIsParsed(string name, MarshallingReach reach)
+    {
+        RuntimeChangeTable table = ParseMarshalling(
+            $$"""{ "id": "x", "reach": "{{name}}", "changedIn": "net8.0", "source": "documented", "reason": "r", "url": "https://learn.microsoft.com/x" }""");
+
+        Assert.Equal(reach, Assert.Single(table.Marshalling).Reach);
+    }
+
+    [Theory]
+    [InlineData("""{ "id": "x", "reach": "everything", "changedIn": "net8.0", "source": "documented", "reason": "r", "url": "https://learn.microsoft.com/x" }""", "'x' has unknown reach 'everything'")]
+    [InlineData("""{ "id": "x", "reach": "none", "changedIn": null, "source": "documented", "reason": "r", "url": "https://learn.microsoft.com/x" }""", "'x' has malformed changedIn ''")]
+    [InlineData("""{ "id": "x", "reach": "none", "changedIn": "netstandard2.0", "source": "documented", "reason": "r", "url": "https://learn.microsoft.com/x" }""", "'x' has malformed changedIn 'netstandard2.0'")]
+    [InlineData("""{ "id": "x", "reach": "none", "changedIn": "net8.0", "source": "curated", "reason": "r", "url": "https://learn.microsoft.com/x" }""", "'x' has source 'curated', not 'documented'")]
+    [InlineData("""{ "id": "x", "reach": "none", "changedIn": "net8.0", "reason": "r", "url": "https://learn.microsoft.com/x" }""", "'x' has source '', not 'documented'")]
+    public void AMalformedMarshallingEntryIsRejected(string entry, string message)
+    {
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => ParseMarshalling(entry));
+
+        Assert.Contains(message, exception.Message, StringComparison.Ordinal);
+    }
+
+    private static RuntimeChangeTable ParseMarshalling(string entry) =>
+        ParseDocument($$"""{ "coveredFrom": "netcoreapp3.0", "rows": [], "marshalling": [{{entry}}] }""");
 
     /// <summary>Tickets P2-073 and P2-181: <c>precondition</c> is optional, and one of five names.</summary>
     [Theory]
