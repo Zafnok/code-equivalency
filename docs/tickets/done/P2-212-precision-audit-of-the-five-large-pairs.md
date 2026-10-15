@@ -1,5 +1,5 @@
 # P2-212 Precision audit: the five large pairs on one commit, adjudicated on fresh samples, and the README scoreboard from them
-Status: todo
+Status: done (PR #510)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-164
@@ -83,3 +83,20 @@ not change.
 - Last recorded wall-clock at `--jobs 4`: P2-130's three migrations 413 s, 547 s and 292 s (2026-10-14);
   the upgrades 4 min and 3 min (2026-10-12). The default `jobs` is the processor count since P2-132;
   P2-130 ran at `--jobs 4` so the run-time row keeps one meaning. Never stop a run in progress.
+- Ran 2026-10-15 17:05 to 17:29 at `bfbf413e` (`main`, holding P2-164), compare mode quick, `--jobs 4`, one pair at a
+  time from one build: 271 s, 168 s, 363 s, 447 s and 217 s, every run exit 1, no crash. `.corpus/` was fetched and
+  restored new in this worktree.
+- Decision: the fresh draw is P2-130's method with seed 212 (the ticket number, as P2-047 used 47), so it is a new
+  draw and not P2-130's sample again.
+- Decision: a result P2-124 or P2-130 adjudicated is matched by procedure identity and rule, not by fingerprint, which
+  moves between commits for the same procedure. Its cause counts as unchanged, and its classification is kept, when it
+  was confirmed or undetermined, or a false positive whose owner is still open; one whose owner is done was traced again.
+- Decision: P2-192's 9 sampled results keep their classification without a trace: they are the procedures P2-192's
+  Notes traced, and the run passes no declaration. They are counted under P2-213 (new), which commits the declaration
+  the way P2-197 committed OpenRA's runtime. `PatchManager::ToPatch(...)` is counted under P2-211, whose Goal traces it.
+- Decision: P2-130's definition of confirmed (an executed oracle) applies to new results; P2-124's six confirmed results
+  keep their class. Nothing could be executed (no replay; the box has .NET 6.0 and 10.0 only).
+- The 61 new hand traces were done by three sub-agents, one per migration pair, under one brief; their tables were
+  read in full and each cause checked against the open tickets before filing P2-213 to P2-220.
+- Found while running: `corpus.ps1 -Unchanged` prints its table to the host, not the success stream, so a script that
+  captures output gets nothing; the summaries' numbers were read from the console. Too small for a ticket; recorded here.
