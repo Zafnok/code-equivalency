@@ -12,12 +12,13 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering.Il;
 /// <summary>
 /// Each side of each <c>samples/</c> pair as one compilation of its sources, read from disk with their encoding as a loaded
 /// project's are, against this test run's own framework (ticket P1-014). A project's package references are not restored
-/// here, so the few web types <c>webapi-basic</c> uses come from a stub compilation it references. A side that does not
+/// here, so the few web types <c>webapi-basic</c> uses, and the remoting <c>CallContext</c> members .NET Framework has and
+/// this framework does not (<c>callee-replacement</c>, ticket P2-192), come from a stub compilation it references. A side that does not
 /// compile here (<see cref="DoesNotCompile"/>) is left out: it emits no IL.
 /// </summary>
 internal static class IlSamples
 {
-    private const string WebStubs = """
+    private const string Stubs = """
         namespace System.Web.Http
         {
             public interface IHttpActionResult { }
@@ -46,6 +47,14 @@ internal static class IlSamples
             public sealed class RouteAttribute(string template) : System.Attribute { public string Template => template; }
             public sealed class HttpGetAttribute(string template) : System.Attribute { public string Template => template; }
             public sealed class HttpHeadAttribute(string template) : System.Attribute { public string Template => template; }
+        }
+        namespace System.Runtime.Remoting.Messaging
+        {
+            public static class CallContext
+            {
+                public static object LogicalGetData(string name) => null;
+                public static void LogicalSetData(string name, object data) { }
+            }
         }
         """;
 
@@ -93,8 +102,8 @@ internal static class IlSamples
     private static ImmutableArray<(string, Compilation)> Load()
     {
         MetadataReference stubs = CSharpCompilation.Create(
-            "WebStubs",
-            [CSharpSyntaxTree.ParseText(WebStubs, cancellationToken: TestContext.Current.CancellationToken)],
+            "Stubs",
+            [CSharpSyntaxTree.ParseText(Stubs, cancellationToken: TestContext.Current.CancellationToken)],
             RoslynTestCompilations.References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)).ToMetadataReference();
         return

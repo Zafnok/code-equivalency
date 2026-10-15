@@ -1,4 +1,4 @@
-# P2-208 Precision bug: a path row fires on a valid path that a reassigned local, a private method's caller or a cached field holds
+# P2-207 Precision bug: a path row fires on a valid path that a reassigned local, a private method's caller or a cached field holds
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -45,3 +45,4 @@ Device-path prefixes (P2-130's undetermined four).
 
 ## Notes
 - Filed 2026-10-15 by P2-200 (criterion 1).
+- Renumbered from P2-202 on 2026-10-15 by P2-192: P2-184 filed another P2-202 first, and `check-ticket-ids.sh` failed.
