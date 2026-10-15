@@ -110,3 +110,31 @@ list what the run of criterion 5 shows). Modelling the native function.
   `TheMarshallingListCoversOnlyDotNetIntervalsFromCoveredFrom`; in the frontend,
   `AnExternMethodAcrossRuntimesIsRuntimeSensitiveByTheEntriesThatReachIt` (every reach kind, the
   uncovered intervals and `InternalCall`) and `TheComObjectReachTakesInACOMObjectAnywhereInTheSignature`.
+
+### Criterion 5: the corpus
+- `gitextensions-9860` (net5.0 to net6.0), compare mode quick, `--jobs 4`, one run per column on
+  2026-10-14/15, both through `corpus.ps1 -Compare`, exit 1 both (the pair has Divergent results).
+  Before is `main` at `0e18ba4c`; after is this branch. The checkouts were fetched fresh into this
+  worktree. The after run shared the box with this branch's test runs, so its wall-clock time (573 s,
+  against 400 s) says nothing.
+
+  | | before | after |
+  |---|---|---|
+  | results | 14097 | 14097 |
+  | EQ001 | 13783 | 13836 |
+  | EQ002 | 10 | 10 |
+  | EQ003 | 296 | 243 |
+  | of them `no-body` | **53** | **0** |
+  | EQ004 / EQ005 / EQ006 | 2 / 2 / 4 | 2 / 2 / 4 |
+  | `matchedPairs` | 14073 | 14073 |
+  | `pairsCongruent` | 13468 | 13521 |
+  | `changedPairs` | 605 | 552 |
+  | `no-body` bodies, each side | 53 | 53 |
+
+  Compared result by result, by identity: the 53 `no-body` Unknowns are each now EQ001 with
+  `proofMethod: congruence`. No other result changed its rule id, `proofMethod` or `unknownReason`, and
+  none left or is new. That fits the list: the only entry in (net5.0, net6.0] reaches nothing.
+- `[LibraryImport]` (Out of scope): none on this pair. The 53 `no-body` bodies on each side are the 53
+  `[DllImport]` methods, all congruent now. `[LibraryImport]` arrived in .NET 7, and both sides are
+  older.
+- The scoreboard is not touched: no file under `docs/runs/` is added here.
