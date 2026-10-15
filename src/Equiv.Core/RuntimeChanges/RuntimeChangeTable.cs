@@ -13,7 +13,9 @@ namespace Equiv.Core.RuntimeChanges;
 /// matches a call's <see cref="CallIdentity.Value"/> by prefix against the <see cref="Rows"/> whose
 /// <see cref="RuntimeChange.ChangedIn"/> the pair's runtimes cross (ADR 0040 decision 2; tickets P2-054, P2-055); a member
 /// listed in <c>equiv.config.json</c>'s <c>suppressRuntimeChanges</c> is excluded by the suppressing
-/// overload, which the frontend's flagging uses (ticket M3-001), so a suppressed call is never flagged.
+/// overload, which the frontend's flagging uses (ticket M3-001), so a suppressed call is never flagged. Its
+/// <see cref="Marshalling"/> list holds the interop changes the frontend reads off an imported function's declaration
+/// (ADR 0058; ticket P2-165).
 /// </summary>
 public sealed class RuntimeChangeTable
 {
@@ -24,13 +26,16 @@ public sealed class RuntimeChangeTable
     /// <summary>The oldest runtime a compared project can target (ADR 0040): .NET Framework 4.0, older than every change point.</summary>
     private static readonly TargetRuntime Oldest = new(TargetRuntime.RuntimeFamily.NetFramework, new Version(4, 0));
 
-    private RuntimeChangeTable(TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows, ValidPaths validPaths, FrozenDictionary<string, string> fieldValues)
+    private RuntimeChangeTable(
+        TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows, ImmutableArray<MarshallingChange> marshalling, ValidPaths validPaths, FrozenDictionary<string, string> fieldValues)
     {
         CoveredFrom = coveredFrom;
         Rows = rows;
+        Marshalling = marshalling;
         this.validPaths = validPaths;
         this.fieldValues = fieldValues;
-        Coverage = new RuntimeInterval(Oldest, rows.Select(static row => row.ChangedIn).OfType<TargetRuntime>().Append(coveredFrom).Max()!);
+        Coverage = new RuntimeInterval(
+            Oldest, rows.Select(static row => row.ChangedIn).OfType<TargetRuntime>().Concat(marshalling.Select(static change => change.ChangedIn)).Append(coveredFrom).Max()!);
     }
 
     private readonly ValidPaths validPaths;
@@ -48,6 +53,27 @@ public sealed class RuntimeChangeTable
 
     /// <summary>Every row, in file order.</summary>
     public ImmutableArray<RuntimeChange> Rows { get; }
+
+    /// <summary>Every entry of the <c>marshalling</c> list, in file order (ADR 0058 decision 3).</summary>
+    public ImmutableArray<MarshallingChange> Marshalling { get; }
+
+    /// <summary>
+    /// Whether the <see cref="Marshalling"/> list says every interop change inside <paramref name="interval"/> (ADR 0058
+    /// decision 2): the interval is empty, or it runs between .NET (Core) runtimes this table covers. No page lists the
+    /// interop changes at the .NET Framework boundary, nor before <see cref="CoveredFrom"/>.
+    /// </summary>
+    public bool CoversMarshalling(RuntimeInterval interval)
+    {
+        ArgumentNullException.ThrowIfNull(interval);
+        return interval.IsEmpty || (interval.Older.Family == TargetRuntime.RuntimeFamily.NetCore && interval.UncoveredRange(CoveredFrom) is null);
+    }
+
+    /// <summary>The <see cref="Marshalling"/> entries whose change point <paramref name="interval"/> crosses.</summary>
+    public ImmutableArray<MarshallingChange> MarshallingWithin(RuntimeInterval interval)
+    {
+        ArgumentNullException.ThrowIfNull(interval);
+        return [.. Marshalling.Where(change => interval.Crosses(change.ChangedIn))];
+    }
 
     /// <summary>The <see cref="RuntimeChange.Member"/> of every row that <see cref="RuntimeChange.Requires"/> <paramref name="precondition"/>.</summary>
     public ImmutableArray<string> MembersRequiring(RowPrecondition precondition) =>
@@ -203,8 +229,46 @@ public sealed class RuntimeChangeTable
             });
         }
 
-        return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable(), ParseValidPaths(root), ParseFieldValues(root));
+        return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable(), ParseMarshalling(root), ParseValidPaths(root), ParseFieldValues(root));
     }
+
+    /// <summary>
+    /// The optional <c>marshalling</c> list (ADR 0058; ticket P2-165): each entry has an <c>id</c>, a <c>reach</c> that is one
+    /// of <see cref="MarshallingReach"/>'s JSON names, a <c>changedIn</c> that is a target framework moniker, a
+    /// <c>reason</c>, a <c>url</c> and the <c>source</c> <c>documented</c>; anything else is rejected with
+    /// <see cref="InvalidDataException"/>.
+    /// </summary>
+    private static ImmutableArray<MarshallingChange> ParseMarshalling(JsonElement root) =>
+        root.TryGetProperty("marshalling", out JsonElement list)
+            ? [.. list.EnumerateArray().Select(static element => ParseMarshallingChange(element))]
+            : [];
+
+    private static MarshallingChange ParseMarshallingChange(JsonElement element)
+    {
+        string id = element.GetProperty("id").GetString()!;
+        string? changedIn = element.GetProperty("changedIn").GetString();
+        string? source = element.TryGetProperty("source", out JsonElement value) ? value.GetString() : null;
+        TargetRuntime? runtime = changedIn is null ? null : TargetRuntime.Parse(changedIn);
+        return string.Equals(source, "documented", StringComparison.Ordinal)
+            ? new MarshallingChange(
+                id,
+                ParseReach(id, element.GetProperty("reach").GetString()),
+                runtime ?? throw new InvalidDataException($"runtime-changes marshalling '{id}' has malformed changedIn '{changedIn}'"),
+                element.GetProperty("reason").GetString()!,
+                new Uri(element.GetProperty("url").GetString()!, UriKind.Absolute))
+            : throw new InvalidDataException($"runtime-changes marshalling '{id}' has source '{source}', not 'documented'");
+    }
+
+    private static MarshallingReach ParseReach(string id, string? reach) => reach switch
+    {
+        "none" => MarshallingReach.None,
+        "everyImport" => MarshallingReach.EveryImport,
+        "inexactEntryPoint" => MarshallingReach.InexactEntryPoint,
+        "comObject" => MarshallingReach.ComObject,
+        "searchPathsWithoutAssemblyDirectory" => MarshallingReach.SearchPathsWithoutAssemblyDirectory,
+        "assemblyDirectoryOnly" => MarshallingReach.AssemblyDirectoryOnly,
+        _ => throw new InvalidDataException($"runtime-changes marshalling '{id}' has unknown reach '{reach}'"),
+    };
 
     private static FrozenDictionary<string, string> ParseFieldValues(JsonElement root) =>
         root.TryGetProperty("fieldValues", out JsonElement fields)

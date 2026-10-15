@@ -20,6 +20,10 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 `- <title> — <url> — excluded: <reason>`. A prefix is matched against a call's identity
 (`Namespace.Type::Member(ParamType,...)`), exactly as the table matches it.
 
+An entry from the Interop category of a page also ends in ` — marshalling: <id>`, the entry of the table's `marshalling`
+list that holds it (ADR 0058; ticket P2-165). `ReviewFileAndTableAgree` checks that every such id is in that list
+with the same url, and that every entry of the list is tagged here.
+
 ## Allowed exclusion reasons
 
 - `not a BCL member`: the change is not observable through a call to a specific member the .NET
@@ -191,9 +195,9 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 
 ### .NET 5 — Interop
 
-- Support for WinRT is removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/built-in-support-for-winrt-removed — excluded: build-time only
-- Casting RCW to InterfaceIsIInspectable throws exception — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/casting-rcw-to-inspectable-interface-throws-exception — excluded: not a BCL member
-- No A/W suffix probing on non-Windows platforms — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/function-suffix-pinvoke — excluded: not reachable from .NET Framework code
+- Support for WinRT is removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/built-in-support-for-winrt-removed — excluded: build-time only — marshalling: winrtRemoved
+- Casting RCW to InterfaceIsIInspectable throws exception — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/casting-rcw-to-inspectable-interface-throws-exception — excluded: not a BCL member — marshalling: inspectableCast
+- No A/W suffix probing on non-Windows platforms — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/5.0/function-suffix-pinvoke — excluded: not reachable from .NET Framework code — marshalling: suffixProbing
 
 ### .NET 5 — Networking
 
@@ -248,7 +252,7 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 - Partial and zero-byte reads in DeflateStream, GZipStream, and CryptoStream — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/partial-byte-reads-in-streams — row: System.IO.Compression.DeflateStream::Read ; System.IO.Compression.DeflateStream::BeginRead( ; System.IO.Compression.GZipStream::Read ; System.IO.Compression.GZipStream::BeginRead( ; System.Security.Cryptography.CryptoStream::Read ; System.Security.Cryptography.CryptoStream::BeginRead(
 - Set timestamp on read-only file on Windows — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/set-timestamp-readonly-file — row: System.IO.File::SetCreationTime ; System.IO.File::SetLastAccessTime ; System.IO.File::SetLastWriteTime
 - Standard numeric format parsing precision — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision — row: System.Byte::ToString(string ; System.SByte::ToString(string ; System.Int16::ToString(string ; System.UInt16::ToString(string ; System.Int32::ToString(string ; System.UInt32::ToString(string ; System.Int64::ToString(string ; System.UInt64::ToString(string ; System.Decimal::ToString(string
-- Static abstract members in interfaces — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/static-abstract-interface-methods — excluded: build-time only
+- Static abstract members in interfaces — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/static-abstract-interface-methods — excluded: build-time only — marshalling: staticAbstractInterfaces
 - StringBuilder.Append overloads and evaluation order — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/stringbuilder-append-evaluation-order — row: System.Text.StringBuilder::Append(ref  ; System.Text.StringBuilder::AppendLine(ref 
 - Strong-name APIs throw PlatformNotSupportedException — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/strong-name-signing-exceptions — row: System.Reflection.StrongNameKeyPair:: ; System.Reflection.AssemblyName::get_KeyPair( ; System.Reflection.AssemblyName::set_KeyPair(
 - System.Drawing.Common only supported on Windows — https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/system-drawing-common-windows-only — excluded: not reachable from .NET Framework code
@@ -351,7 +355,7 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 
 ### .NET 7 — Interop
 
-- RuntimeInformation.OSArchitecture under emulation — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/7.0/osarchitecture-emulation — row: System.Runtime.InteropServices.RuntimeInformation::get_OSArchitecture(
+- RuntimeInformation.OSArchitecture under emulation — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/7.0/osarchitecture-emulation — row: System.Runtime.InteropServices.RuntimeInformation::get_OSArchitecture( — marshalling: osArchitectureEmulation
 
 ### .NET 7 — .NET MAUI
 
@@ -439,12 +443,12 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 
 ### .NET 8 — Interop
 
-- CreateObjectFlags.Unwrap only unwraps on target instance — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/comwrappers-unwrap — excluded: not reachable from .NET Framework code
-- Custom marshallers require additional members — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/marshal-modes — excluded: build-time only
-- IDispatchImplAttribute API is removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/idispatchimplattribute-removed — excluded: build-time only
-- JSFunctionBinding implicit public default constructor removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/jsfunctionbinding-constructor — excluded: not reachable from .NET Framework code
-- SafeHandle types must have public constructor — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/safehandle-constructor — excluded: build-time only
-- Linux native library resolution no longer uses netcoredeps — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/linux-netcoredeps — excluded: not reachable from .NET Framework code
+- CreateObjectFlags.Unwrap only unwraps on target instance — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/comwrappers-unwrap — excluded: not reachable from .NET Framework code — marshalling: comWrappersUnwrap
+- Custom marshallers require additional members — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/marshal-modes — excluded: build-time only — marshalling: customMarshallerShapes
+- IDispatchImplAttribute API is removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/idispatchimplattribute-removed — excluded: build-time only — marshalling: idispatchImplRemoved
+- JSFunctionBinding implicit public default constructor removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/jsfunctionbinding-constructor — excluded: not reachable from .NET Framework code — marshalling: jsFunctionBinding
+- SafeHandle types must have public constructor — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/safehandle-constructor — excluded: build-time only — marshalling: safeHandleConstructor
+- Linux native library resolution no longer uses netcoredeps — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/linux-netcoredeps — excluded: not reachable from .NET Framework code — marshalling: netcoredeps
 
 ### .NET 8 — Networking
 
@@ -506,7 +510,7 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 
 ### .NET 9 — Interop
 
-- CET supported by default — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/9.0/cet-support — excluded: not a BCL member
+- CET supported by default — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/9.0/cet-support — excluded: not a BCL member — marshalling: cet
 
 ### .NET 9 — JIT compiler
 
@@ -590,9 +594,9 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 
 ### .NET 10 — Interop
 
-- Casting IDispatchEx COM object to IReflect fails — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/idispatchex-ireflect-cast — excluded: not a BCL member
-- Single-file apps no longer look for native libraries in executable directory — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/native-library-search — excluded: configuration only
-- Specifying DllImportSearchPath.AssemblyDirectory only searches the assembly directory — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/search-assembly-directory — excluded: not a BCL member
+- Casting IDispatchEx COM object to IReflect fails — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/idispatchex-ireflect-cast — excluded: not a BCL member — marshalling: idispatchExCast
+- Single-file apps no longer look for native libraries in executable directory — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/native-library-search — excluded: configuration only — marshalling: singleFileSearch
+- Specifying DllImportSearchPath.AssemblyDirectory only searches the assembly directory — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/10.0/search-assembly-directory — excluded: not a BCL member — marshalling: assemblyDirectoryOnly
 
 ### .NET 10 — Networking
 
@@ -632,7 +636,7 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 - Handling corrupted-process-state exceptions is not supported — https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#handling-corrupted-state-exceptions-is-not-supported — excluded: not a BCL member
 - UriBuilder properties no longer prepend leading characters — https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#uribuilder-properties-no-longer-prepend-leading-characters — row: System.UriBuilder::set_Fragment( ; System.UriBuilder::set_Query(
 - Process.StartInfo throws InvalidOperationException for processes you didn't start — https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#processstartinfo-throws-invalidoperationexception-for-processes-you-didnt-start — row: System.Diagnostics.Process::get_StartInfo(
-- IDispatchImplAttribute API is removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/idispatchimplattribute-removed — excluded: build-time only
+- IDispatchImplAttribute API is removed — https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/8.0/idispatchimplattribute-removed — excluded: build-time only — marshalling: idispatchImplRemoved
 
 ### .NET Framework to .NET (porting) — Cryptography
 

@@ -45,8 +45,10 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
    .NET Framework host backed by VS Build Tools' MSBuild, so a .NET 10 engine can load a
    .NET Framework solution. Fail loudly on any workspace diagnostic; a silent partial load is a bug.
 2. Symbol enumeration -> `ProcedureIdentity` per method, constructor, property accessor and operator
-   that has a body or is `extern`. An `extern` member has no code to lower: on a same-runtime pair it
-   is compared by what it imports and by its attributes, and is otherwise Unknown (ADR 0054).
+   that has a body or is `extern`. An `extern` member has no code to lower: it is compared by what it
+   imports and by its attributes, and is otherwise Unknown (ADR 0054). Across runtimes that comparison
+   holds only where no interop change listed in `runtime-changes.json`'s `marshalling` list reaches the
+   declaration, and only between .NET (Core) runtimes that list covers (ADR 0058).
    A type the regex source generator wrote holds no procedure: the `[GeneratedRegex]` member it
    implements is compared by its declaration, and `run.properties.generatedProcedures` counts what
    was left out (ADR 0055).

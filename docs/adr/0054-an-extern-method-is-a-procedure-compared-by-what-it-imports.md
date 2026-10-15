@@ -1,6 +1,6 @@
 # ADR 0054: An `extern` method is a procedure, and it is Equivalent only when both sides import the same thing on one runtime
 
-Status: accepted (2026-10-08). Reverses ARCHITECTURE.md's frontend step 2 as M2-002 built it ("all with a
+Status: accepted (2026-10-08); decision 4 superseded in part by 0058 (a `[DllImport]` that crosses covered .NET runtimes is compared as on one runtime unless a documented interop change reaches it). Reverses ARCHITECTURE.md's frontend step 2 as M2-002 built it ("all with a
 body": `extern` members were left out), and extends ADR 0024 decision 1 to a member that has no bound body.
 
 ## Context

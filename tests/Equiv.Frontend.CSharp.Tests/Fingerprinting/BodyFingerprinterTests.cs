@@ -1265,15 +1265,120 @@ public sealed class BodyFingerprinterTests
         Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
     }
 
-    /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
+    /// <summary>
+    /// Ticket P2-165 (ADR 0058 decisions 1, 2 and 5): an <c>extern</c> method has its one-runtime text on every pair, and
+    /// across runtimes it is runtime-sensitive by the <c>marshalling</c> entries inside the interval that reach it, each
+    /// named <c>extern:</c> and its id. An interval that reaches .NET Framework or below the table's coverage, and an
+    /// <c>InternalCall</c>, keep ADR 0054 decision 4: the rule <c>extern</c>.
+    /// </summary>
     [Theory]
-    [InlineData("net48", "net10.0")]
-    [InlineData("net8.0", "net9.0")]
-    public void AnExternMethodHasNoFingerprintOnAPairThatCrossesARuntime(string legacy, string modern)
+    [InlineData(Imported, "", "net5.0", "net6.0", "")]
+    [InlineData(Imported, "", "net9.0", "net10.0", "")]
+    [InlineData(Imported, "", "netcoreapp3.1", "net6.0", "extern:suffixProbing")]
+    [InlineData(Imported, "", "net7.0", "net8.0", "extern:netcoredeps")]
+    [InlineData(Imported, "", "net8.0", "net9.0", "extern:cet")]
+    [InlineData(Imported, "", "net48", "net10.0", "extern")]
+    [InlineData(Imported, "", "netcoreapp2.1", "net6.0", "extern")]
+    [InlineData(Exact + "int M(int a);", "", "netcoreapp3.1", "net6.0", "")]
+    [InlineData(Exact + "int M(object a);", "", "netcoreapp3.1", "net6.0", "extern:winrtRemoved, extern:inspectableCast")]
+    [InlineData(Exact + "int M(object a);", "", "net9.0", "net10.0", "extern:idispatchExCast")]
+    [InlineData(Exact + "int M(object a);", "", "net48", "net6.0", "extern")]
+    [InlineData("[DllImport(\"a.dll\"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)] public static extern int M(int a);", "", "net9.0", "net10.0", "extern:singleFileSearch")]
+    [InlineData("[DllImport(\"a.dll\"), DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory)] public static extern int M(int a);", "", "net9.0", "net10.0", "extern:assemblyDirectoryOnly")]
+    [InlineData("[DllImport(\"a.dll\"), DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)] public static extern int M(int a);", "", "net9.0", "net10.0", "")]
+    [InlineData(Imported, AssemblySearchPaths, "net9.0", "net10.0", "extern:singleFileSearch")]
+    [InlineData("[MethodImpl(MethodImplOptions.InternalCall)] public static extern int M(int a);", "", "net5.0", "net6.0", "extern")]
+    public void AnExternMethodAcrossRuntimesIsRuntimeSensitiveByTheEntriesThatReachIt(string member, string assembly, string legacy, string modern, string rules)
     {
-        Compilation compilation = Interop("[DllImport(\"a.dll\")] public static extern int M(int a);");
+        Compilation compilation = Interop(member, assembly);
+        SideRuntime runtime = Runtimes.Between(legacy, modern);
 
-        Assert.Null(BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, Runtimes.Between(legacy, modern)));
+        BodyFingerprint fingerprint = BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, runtime)!;
+        BoundText bound = BodyFingerprinter.Bound(Method(compilation), compilation, EquivConfig.Default, legacy: false, runtime);
+
+        Assert.Equal(OnOneRuntime(compilation)!.Sha256Hex, fingerprint.Sha256Hex);
+        Assert.Equal(!string.IsNullOrEmpty(rules), fingerprint.RuntimeSensitive);
+        Assert.Equal(rules, string.Join(", ", bound.Rules));
+    }
+
+    /// <summary>
+    /// Ticket P2-165 (ADR 0058 decision 3): what the <c>comObject</c> reach takes in, between .NET 9 and .NET 10, where it
+    /// is the only entry an exactly spelled import with no search paths can meet. A COM or WinRT object in the signature,
+    /// in a type the signature is made of, or named by a <c>[MarshalAs]</c>; not a type with none.
+    /// </summary>
+    [Theory]
+    [InlineData("int M(object a)", true)]
+    [InlineData("int M(I a)", true)]
+    [InlineData("int M(dynamic a)", true)]
+    [InlineData("int M(K a)", true)]
+    [InlineData("int M(object[] a)", true)]
+    [InlineData("int M(System.Collections.Generic.List<object> a)", true)]
+    [InlineData("int M(D a)", true)]
+    [InlineData("int M(WithInterface a)", true)]
+    [InlineData("int M(WithEvent a)", true)]
+    [InlineData("int M(WithMarshalAs a)", true)]
+    [InlineData("int M(Derived a)", true)]
+    [InlineData("int M([MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.IUnknown)] System.IntPtr[] a)", true)]
+    [InlineData("int M([MarshalAs(UnmanagedType.HString)] string a)", true)]
+    [InlineData("int M(int a)", false)]
+    [InlineData("int M(int[] a)", false)]
+    [InlineData("int M(int* a)", false)]
+    [InlineData("int M([MarshalAs(UnmanagedType.LPWStr)] string a)", false)]
+    [InlineData("int M([In] int[] a)", false)]
+    [InlineData("int M(System.Action<int> a)", false)]
+    [InlineData("int M(Plain a)", false)]
+    [InlineData("int M(Linked a)", false)]
+    public void TheComObjectReachTakesInACOMObjectAnywhereInTheSignature(string signature, bool reached)
+    {
+        const string Types = "public interface I { } [ComImport, Guid(\"00000000-0000-0000-C000-000000000046\")] public class K { }"
+            + " public delegate void D(object o);"
+            + " public struct WithInterface { public int A; public I B; }"
+            + " public struct WithEvent { public event System.EventHandler Changed; }"
+            + " public struct WithMarshalAs { [MarshalAs(UnmanagedType.Interface)] public System.IntPtr P; }"
+            + " public class Base { public object O; } public class Derived : Base { public int V; }"
+            + " public struct Plain { public int A; public long B; }"
+            + " public class Linked { public Linked Next; public int V; }";
+        Compilation compilation = Interop($"{Exact}{signature};", type: Types);
+        SideRuntime runtime = Runtimes.Between("net9.0", "net10.0");
+
+        Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(
+            reached ? ["extern:idispatchExCast"] : [],
+            BodyFingerprinter.Bound(Method(compilation), compilation, EquivConfig.Default, legacy: false, runtime).Rules);
+    }
+
+    /// <summary>
+    /// Ticket P2-165 criterion 4 (ADR 0058 decision 1): an import edited on a pair that crosses a runtime has another
+    /// fingerprint, so it is not congruent, where an unedited one is.
+    /// </summary>
+    [Fact]
+    public void AnEditedImportAcrossRuntimesHasAnotherFingerprint()
+    {
+        SideRuntime runtime = Runtimes.Between("net5.0", "net6.0");
+        Compilation before = Interop(Imported);
+        Compilation after = Interop("[DllImport(\"b.dll\")] public static extern int M(int a);");
+
+        Assert.NotEqual(
+            BodyFingerprinter.Compute(Method(before), before, EquivConfig.Default, legacy: true, runtime),
+            BodyFingerprinter.Compute(Method(after), after, EquivConfig.Default, legacy: false, runtime));
+        Assert.Equal(
+            BodyFingerprinter.Compute(Method(before), before, EquivConfig.Default, legacy: true, runtime),
+            BodyFingerprinter.Compute(Method(before), before, EquivConfig.Default, legacy: false, runtime));
+    }
+
+    /// <summary>
+    /// Ticket P2-165 (ADR 0058 decision 1): a body that declares an <c>extern</c> local function follows the same rule as
+    /// an <c>extern</c> method. Between .NET 5 and .NET 6 no entry reaches it; from .NET Core 3.1 the suffix probing does.
+    /// </summary>
+    [Theory]
+    [InlineData("net5.0", "net6.0", "")]
+    [InlineData("netcoreapp3.1", "net6.0", "extern:suffixProbing")]
+    [InlineData("net48", "net10.0", "extern")]
+    public void ABodysLocalImportIsRuntimeSensitiveByTheEntriesThatReachIt(string legacy, string modern, string rules)
+    {
+        Compilation importer = Compile(Importer("\"a.dll\""));
+
+        Assert.Equal(rules, string.Join(", ", BodyFingerprinter.Bound(Method(importer), importer, EquivConfig.Default, legacy: false, Runtimes.Between(legacy, modern)).Rules));
     }
 
     /// <summary>
@@ -1474,6 +1579,12 @@ public sealed class BodyFingerprinterTests
 
     /// <summary>An <c>extern</c> method that names nothing but its library.</summary>
     private const string Imported = "[DllImport(\"a.dll\")] public static extern int M(int a);";
+
+    /// <summary>The start of an <c>extern</c> method whose entry point is spelled exactly, up to its signature.</summary>
+    private const string Exact = "[DllImport(\"a.dll\", ExactSpelling = true)] public static extern ";
+
+    private const string AssemblySearchPaths =
+        "[assembly: System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]";
 
     private const string Disabled = "[assembly: System.Runtime.CompilerServices.DisableRuntimeMarshalling]";
 
