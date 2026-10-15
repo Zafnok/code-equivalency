@@ -40,6 +40,14 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     public ImmutableArray<Abstraction> Abstractions { get; init; } = [];
 
     /// <summary>
+    /// For <see cref="UnknownReason.Abstraction"/>, the runtime-changed call or runtime-sensitive pure function (ADR 0040) at
+    /// which the candidate's two sides first answer differently on equal arguments, or null when they never do (ticket
+    /// P2-195): with equal texts, the reason a shared abstraction sees different arguments. SARIF
+    /// <c>properties.runtimeChangedCall</c>. Not part of the fingerprint.
+    /// </summary>
+    public CallIdentity? RuntimeChangedCall { get; init; }
+
+    /// <summary>
     /// Whether the modern side can fail where the legacy side does not, and the reverse (ADR 0037; tickets P1-013 and
     /// P1-035); null for an Unknown the backend did not query, such as <see cref="UnknownReason.Unbound"/>. Not part of the
     /// fingerprint.
@@ -56,14 +64,16 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     /// <summary>
     /// A divergence the replay found only in tainted observables (ADR 0026): <see cref="UnknownReason.Abstraction"/>,
     /// whose detail names the tainting identities, with <paramref name="candidate"/> and <paramref name="abstractions"/>
-    /// attached, and each abstraction with a span as a cause.
+    /// attached, and each abstraction with a span as a cause. A <paramref name="runtimeChangedCall"/> is named after them
+    /// (ticket P2-195).
     /// </summary>
-    public static Unknown DependingOn(Counterexample candidate, ImmutableArray<Abstraction> abstractions) =>
-        new(UnknownReason.Abstraction, $"the divergence depends on {string.Join(", ", abstractions.Select(static a => a.Identity.Value).Distinct(StringComparer.Ordinal))}")
+    public static Unknown DependingOn(Counterexample candidate, ImmutableArray<Abstraction> abstractions, CallIdentity? runtimeChangedCall = null) =>
+        new(UnknownReason.Abstraction, $"the divergence depends on {string.Join(", ", abstractions.Select(static a => a.Identity.Value).Distinct(StringComparer.Ordinal))}{FirstDifference(runtimeChangedCall)}")
         {
             Candidate = candidate,
             Abstractions = abstractions,
             Causes = [.. abstractions.Select(static a => a.Cause).OfType<UnknownCause>()],
+            RuntimeChangedCall = runtimeChangedCall,
         };
 
     public bool Equals(Unknown? other) =>
@@ -75,9 +85,13 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
             & (Scope == other.Scope)
             & (Candidate == other.Candidate)
             & IrEquality.SequenceEqual(Abstractions, other.Abstractions)
+            & (RuntimeChangedCall == other.RuntimeChangedCall)
             & (FailureRefinement == other.FailureRefinement)
             & (Conditions == other.Conditions);
 
     public override int GetHashCode() =>
-        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, HashCode.Combine(Candidate, IrEquality.Hash(Abstractions), FailureRefinement, Conditions));
+        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, HashCode.Combine(Candidate, IrEquality.Hash(Abstractions), RuntimeChangedCall, FailureRefinement, Conditions));
+
+    private static string FirstDifference(CallIdentity? runtimeChangedCall) =>
+        runtimeChangedCall is null ? string.Empty : $"; the two sides first differ at runtime-changed call {runtimeChangedCall.Value}";
 }

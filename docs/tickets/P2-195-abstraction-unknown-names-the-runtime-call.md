@@ -1,5 +1,5 @@
 # P2-195 An `abstraction` Unknown on a body a runtime rule keeps out of congruence names the runtime-changed call its candidate starts from
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -38,3 +38,17 @@ Deciding the 348 (P2-181 decided what its rules could).
 
 ## Notes
 - Filed 2026-10-14 by P2-181 (criterion 1).
+- Decision: where the member goes -> `properties.runtimeChangedCall`, beside `abstractions`, a string: the
+  identity of the call (as `notCongruent.identity` and an `abstractions` entry write one), also named in the
+  message's detail. Alternatives: an entry of `abstractions` (that list is what ADR 0053 refines on, and a
+  runtime-changed member is never interpretable, so it would stop refinement and change verdicts: the size
+  guard), an object with both sides' answers (the candidate's model already holds the inputs that give them).
+  Rule: 4.
+- Decision: which call -> the replay's oracle records, per side and in the order it answers them, every call
+  to a `RuntimeChanged` callee and every application of a pure function the encoding made side-specific (ADR
+  0040: `IrPure.RuntimeSensitive`); the k-th of one side is paired with the k-th of the other, and the first
+  pair with the same identity, equal arguments and different answers (value, `threw`, ref outputs, heap) is
+  named. Equal arguments, because only then is the difference the runtimes' own and not an earlier one's.
+  Alternatives: the first runtime-changed call whose answers differ whatever its arguments (would name a call
+  that only passes on an earlier difference), calls alone without pure functions (a runtime-sensitive getter
+  before the call would not be "first"). Rule: 1.

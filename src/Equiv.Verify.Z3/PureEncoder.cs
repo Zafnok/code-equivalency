@@ -31,7 +31,10 @@ internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applicat
 
     /// <summary>The name <paramref name="pure"/>'s function has on <paramref name="side"/>: its own, or prefixed with the side when side-specific.</summary>
     public string Name(Side side, IrPure pure) =>
-        sideSpecific.Contains(pure.Function) ? ProductEncoder.Prefix(side) + "." + pure.Function : pure.Function;
+        IsSideSpecific(pure.Function) ? ProductEncoder.Prefix(side) + "." + pure.Function : pure.Function;
+
+    /// <summary>Whether <paramref name="function"/> is side-specific: some application of it in the pair is runtime-sensitive.</summary>
+    public bool IsSideSpecific(string function) => sideSpecific.Contains(function);
 
     /// <summary><paramref name="pure"/>'s result and one flag per entry of its <see cref="IrPure.Throws"/>, applied to <paramref name="args"/>.</summary>
     public (Expr Result, ImmutableArray<BoolExpr> Threw) Apply(Side side, IrPure pure, Expr[] args) =>

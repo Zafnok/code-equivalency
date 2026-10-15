@@ -74,7 +74,7 @@ internal sealed class ModelDecoder
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
         return EnsureDiverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls) == Difference.Real
             ? new Divergent(counterexample)
-            : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
+            : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)], ModelOracle.FirstDifference(oldOracle, newOracle));
     }
 
     /// <summary>
@@ -266,6 +266,20 @@ internal sealed class ModelDecoder
         $"{run.Outcome} outs [{string.Join(", ", run.Outs)}] trace [{string.Join(", ", run.Trace.Select(static c => $"{c.Callee.Value}({string.Join(", ", c.Arguments)})"))}]";
 
     /// <summary>
+    /// One answer a <see cref="ModelOracle"/> gave a runtime-changed call or a side-specific pure function (ADR 0040; ticket
+    /// P2-195): its identity, its arguments, and its <see cref="IrCallResult"/> or <see cref="IrPureResult"/>.
+    /// </summary>
+    internal sealed record RuntimeChangedAnswer(CallIdentity Identity, ImmutableArray<IrValue> Arguments, object Result)
+    {
+        /// <summary>
+        /// Whether this and <paramref name="other"/>, the other side's, are the same call on equal arguments answered
+        /// differently: a difference the two runtimes make themselves, not one an argument carries from earlier.
+        /// </summary>
+        public bool DiffersFrom(RuntimeChangedAnswer other) =>
+            Identity == other.Identity && Arguments.SequenceEqual(other.Arguments) && !Result.Equals(other.Result);
+    }
+
+    /// <summary>
     /// Values a solver gives, as IR values: a model's, or the ground facts of rung 4's derivations (ticket P1-001). An
     /// element of an uninterpreted sort becomes <c>sort "S" n</c>: an element <see cref="Remember"/>ed for a literal keeps
     /// that literal's id, any other gets the next free id. A bitvector may come as an integer, in rung 4's integer mode,
@@ -384,6 +398,7 @@ internal sealed class ModelDecoder
         private readonly Side side;
         private readonly IrValue[] threaded;
         private readonly List<ImmutableArray<IrHeapSlice>> reads = [];
+        private readonly List<RuntimeChangedAnswer> runtimeChanged = [];
 
         public ModelOracle(ModelDecoder decoder, Side side)
         {
@@ -406,14 +421,28 @@ internal sealed class ModelDecoder
         /// </summary>
         public bool Taints(CallIdentity callee) => IsAbstraction(callee) || ClosedCallTaint.Taints(decoder.encoding.Calls, side, callee);
 
+        /// <summary>
+        /// The identity of the first runtime-changed call or side-specific pure function at which <paramref name="old"/>'s
+        /// and <paramref name="new"/>'s sides differ (<see cref="RuntimeChangedAnswer.DiffersFrom"/>), pairing each side's
+        /// such answers in the order given; null when no pair differs (ticket P2-195).
+        /// </summary>
+        public static CallIdentity? FirstDifference(ModelOracle old, ModelOracle @new) =>
+            old.runtimeChanged.Zip(@new.runtimeChanged).FirstOrDefault(static p => p.First.DiffersFrom(p.Second)).First?.Identity;
+
         public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
         {
             Expr[] applied = [.. arguments.Select(decoder.Encode)];
             PureEncoder pures = decoder.encoding.Pures;
             IrValue value = decoder.Decode(decoder.model.Eval(decoder.context.MkApp(pures.ResultFunction(side, pure), applied), completion: true), pure.Target.Type);
-            return new IrPureResult(
+            IrPureResult result = new(
                 value,
                 [.. pure.Throws.Select(t => decoder.model.Eval(decoder.context.MkApp(pures.ThrewFunction(side, pure, t.ExceptionType), applied), completion: true).IsTrue)]);
+            if (pures.IsSideSpecific(pure.Function))
+            {
+                runtimeChanged.Add(new(new CallIdentity(pure.Function), arguments, result));
+            }
+
+            return result;
         }
 
         public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
@@ -432,11 +461,17 @@ internal sealed class ModelDecoder
             }
 
             reads.Add([.. read.Select((v, i) => new IrHeapSlice(Heap[i].Name, v))]);
-            return new IrCallResult(value, threw)
+            IrCallResult result = new(value, threw)
             {
                 RefOuts = [.. refOuts.Select((type, i) => decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.RefOutFunction(side, callee, types, i, type), applied), completion: true), type))],
                 Heap = [.. heap.Select(h => Heap.ToList().FindIndex(m => Is(m, h)) is var i and >= 0 ? threaded[i] : h.Value)],
             };
+            if (callee.RuntimeChanged)
+            {
+                runtimeChanged.Add(new(callee, arguments, result));
+            }
+
+            return result;
         }
 
         /// <summary>

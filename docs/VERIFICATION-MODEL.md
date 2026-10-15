@@ -1096,7 +1096,15 @@ untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carr
 as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`. Each entry has an `identity` (an `IrPure` function name, such as `f64.add` or
 `delegate:<fingerprint>#0`, or `opaque:<fingerprint>`, or a closed call's identity), a `side` and, when known, a `span`; an `opaque:` entry also has `reason`, the
-fragment's `IrOpaque` reason, for example `DelegateCreation` (ticket P2-062). In the replay of a refined query's
+fragment's `IrOpaque` reason, for example `DelegateCreation` (ticket P2-062). Such a result also names, in
+`properties.runtimeChangedCall`, the call at which its candidate's two sides first answer differently because their
+runtimes do (ticket P2-195): the replay pairs each side's calls to a runtime-changed callee and applications of a
+side-specific pure function (ADR 0040), the k-th with the k-th in the order the run made them, and names the identity of
+the first pair with the same identity, equal arguments and different answers (result, `threw`, `ref` and `out`
+values, heap). The message's detail ends `; the two sides first differ at runtime-changed call <identity>`. On equal
+texts it is why a function both sides share, which is what `abstractions` names, sees different arguments; the
+reason stays `abstraction`, since whether that difference reaches the output is still not decided. A result whose
+pairs never differ so has neither. It is not part of the fingerprint, and ADR 0053's refinement does not read it. In the replay of a refined query's
 model (section 5; ADR 0053) the result of an interpreted function is no abstraction: the interpreter computes it,
 so it is tainted only if an argument is, and a divergence that depends on it is real. A floating-point to integer
 conversion of an argument outside its meaning is answered from the model and tainted, as any `IrPure` is.

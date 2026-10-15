@@ -471,7 +471,8 @@ public static class SarifReportWriter
     /// <summary>
     /// An <see cref="UnknownReason.Abstraction"/> result's candidate counterexample, rendered as a Divergent's
     /// <c>model</c> is, and the abstractions it depends on, each with its identity, side, for an opaque fragment its
-    /// <c>reason</c> (ticket P2-062) and, when known, source span (ADR 0026). Both are left out when absent.
+    /// <c>reason</c> (ticket P2-062) and, when known, source span (ADR 0026), and the runtime-changed call its two sides
+    /// first differ at, as <c>runtimeChangedCall</c> (ticket P2-195). Each is left out when absent.
     /// </summary>
     private static void SetAbstractionProperties(Result sarifResult, Unknown unknown)
     {
@@ -483,6 +484,11 @@ public static class SarifReportWriter
         if (!unknown.Abstractions.IsEmpty)
         {
             sarifResult.SetProperty("abstractions", unknown.Abstractions.Select(static a => Describe(a)).ToList());
+        }
+
+        if (unknown.RuntimeChangedCall is { } runtimeChangedCall)
+        {
+            sarifResult.SetProperty("runtimeChangedCall", runtimeChangedCall.Value);
         }
     }
 
