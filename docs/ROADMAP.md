@@ -1342,10 +1342,41 @@ They come before any other open ticket, in this order:
    done: items 1 to 4 and the upgrades' P2-163 and P2-164 cover nearly every false positive the two
    audits counted, the rest is one to six results a cause, and P2-130 found that a sample drawn before
    the fixes no longer describes the Divergent results, so P2-212 draws fresh samples to rank the rest.
+   Done 2026-10-15 by P2-212: see "Scoreboard milestone 3".
 
 Not on it: `timeout` (401) and `abstraction` (478) are 56% of the scoreboard's Unknowns, and P2-181's
 count says most of both are the unedited bodies; what is left of them after P2-181 is the next
 measurement, with P1-034 (Bitwuzla), which decided 103 of 142 rung 1 queries and proved no pair.
+
+### Scoreboard milestone 3 (2026-10-15)
+
+From P2-212, at equiv `bfbf413e`, verdict `docs/runs/2026-10-15-precision-verdict.md`: the five large pairs on one
+commit in compare mode quick, `--jobs 4`, with no crashed pair. Over them the solver proves 31.9% of changed pairs (from
+25.8%), 54.0% are Unknown (from 58.4%), and Divergent falls from 426 to 341. Divergent precision is 85.7% (6 of 7) on the
+upgrades, from 40.0%, and 2.2% (1 of 46) on the migrations, from 1.4%: the fixes cleared what they claimed in a default
+run, and the fresh samples found 45 migration false positives with fifteen causes of 1 to 9 results each. Ranked by the
+false positives and Unknowns that verdict counts against each, they come before any other open ticket, in this order:
+
+1. P2-213 (S) Duplicati's replaced callees declared in the pair's committed config: 9 of the 45 false positives (all 11
+   of P2-192's results), which a default run cannot show without it.
+2. Valid paths, 16 false EQ006: P2-218 (M, 5, five routes no done ticket follows), P2-207 (M, 4), P2-217 (M, 4, a
+   `File.Exists` guard on a member read again), P2-208 (M, 3).
+3. Rows that cannot reach their change, 8 false EQ006: P2-216 (M, 5, five rows), P2-220 (M, 2, and P2-190's kept
+   `OAuthHttpClient::.cctor()`: an exclusion from another method's data flow), P2-219 (S, 1, the RSA XML rows that
+   .NET Core 3.0 implements).
+4. The EQ002 causes, 13 false positives: P2-193 (S, 4), P2-185 (2), P2-186 (2), P2-211 (1, the upgrades' last),
+   P2-187, P2-097, P2-205, P2-206 (1 each).
+5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs alone: P2-179 (`rebound-call`, 121 on
+   `gitextensions-8522`), P2-214 (M, `no-body`, 51 there and 76 `runtime-rule` Unknowns over three pairs), P2-182
+   (`DelegateCreation`, 20 on OpenRA and 28 on `gitextensions-9860`), P2-180 (`CaughtException`, 36 on Duplicati and
+   14 on OpenRA), P2-215 (M, `Conversion`, 8 on Jellyfin).
+6. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates fresh samples as P2-212 did, and names
+   the milestone after this one, once items 1 to 4 are done.
+
+Not on it: P2-191's one false positive is congruent since P2-197's config, so it has nothing counted against it. 620 of
+the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture
+rows (`Path.Combine` 79, `String.StartsWith` 68, `File.Delete` 26); the valid-path tickets take some, and what is left
+of them is the next measurement. `timeout` (326) is the solver budget.
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
