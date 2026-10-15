@@ -1335,7 +1335,10 @@ They come before any other open ticket, in this order:
    runtime-changed call). P2-195 named one for every such Unknown on its reruns and left P2-209 (M, 70
    of them named by a lambda's `delegate:` function, not the member the lambda calls).
 7. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates the same samples again,
-   and names the milestone after this one. Not filed until the tickets above are done.
+   and names the milestone after this one. Filed 2026-10-15 as P2-212 (M), before items 5 and 6 are
+   done: items 1 to 4 and the upgrades' P2-163 and P2-164 cover nearly every false positive the two
+   audits counted, the rest is one to six results a cause, and P2-130 found that a sample drawn before
+   the fixes no longer describes the Divergent results, so P2-212 draws fresh samples to rank the rest.
 
 Not on it: `timeout` (401) and `abstraction` (478) are 56% of the scoreboard's Unknowns, and P2-181's
 count says most of both are the unedited bodies; what is left of them after P2-181 is the next
