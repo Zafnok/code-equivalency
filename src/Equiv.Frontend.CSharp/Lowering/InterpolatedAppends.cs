@@ -27,7 +27,7 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// </summary>
 internal sealed class InterpolatedAppends
 {
-    private const string Handler = "System.Text.StringBuilder+AppendInterpolatedStringHandler";
+    private const string HandlerType = "System.Text.StringBuilder+AppendInterpolatedStringHandler";
 
     private readonly Dictionary<IInvocationOperation, Append> appends = [];
 
@@ -41,7 +41,7 @@ internal sealed class InterpolatedAppends
     public static InterpolatedAppends Find(ControlFlowGraph cfg, Compilation compilation)
     {
         InterpolatedAppends found = new();
-        INamedTypeSymbol? handler = compilation.GetTypeByMetadataName(Handler);
+        INamedTypeSymbol? handler = compilation.GetTypeByMetadataName(HandlerType);
         ImmutableArray<IOperation> statements = [.. cfg.Blocks.SelectMany(static b => b.Operations.Append(b.BranchValue)).OfType<IOperation>()];
         // The handler with no IFormatProvider takes the literal length, the hole count and the builder; the one with takes the provider too.
         foreach (IFlowCaptureOperation made in statements.OfType<IFlowCaptureOperation>().Where(c =>

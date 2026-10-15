@@ -398,8 +398,8 @@ public static class LoweringOracleGen
                 case Parse parse:
                     text.Append(pad).Append($"z = {Cell}.{TryParse}(").Append(parse.Argument.Render()).Append(", out x);\n");
                     break;
-                case Guard or Builder:
-                    text.Append(pad).Append(statement is Builder ? BuilderBlock : $"try {{ {Cell}.{Check}(x); }} catch (System.Exception t) {{ z = t.Message != null; }}").Append('\n');
+                case IFixedStmt fixedStatement:
+                    text.Append(pad).Append(fixedStatement.Text).Append('\n');
                     break;
                 case Deconstruction deconstruct:
                     text.Append(pad).Append(deconstruct.Render()).Append('\n');
@@ -486,6 +486,12 @@ public static class LoweringOracleGen
 
     internal interface IStmt;
 
+    /// <summary>A statement that is always the same text.</summary>
+    internal interface IFixedStmt : IStmt
+    {
+        string Text { get; }
+    }
+
     internal sealed record Assign(string Local, IExpr Value) : IStmt;
 
     internal sealed record Compound(string Local, string Op, IExpr Value, bool IsChecked) : IStmt;
@@ -518,10 +524,16 @@ public static class LoweringOracleGen
     /// local, so the call is the only thing in the <c>try</c> that throws, and a message is never null, so <c>z</c> is
     /// true when <c>x</c> is odd and is left as it was otherwise.
     /// </summary>
-    internal sealed record Guard : IStmt;
+    internal sealed record Guard : IFixedStmt
+    {
+        public string Text => $"try {{ {Cell}.{Check}(x); }} catch (System.Exception t) {{ z = t.Message != null; }}";
+    }
 
     /// <summary><see cref="BuilderBlock"/> (ticket P2-164).</summary>
-    internal sealed record Builder : IStmt;
+    internal sealed record Builder : IFixedStmt
+    {
+        public string Text => BuilderBlock;
+    }
 
     internal sealed record While(IExpr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
 
