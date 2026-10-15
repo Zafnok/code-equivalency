@@ -29,6 +29,9 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
 {
     private static readonly SmtUnknown NotSent = new("not sent: a constant array cannot be rewritten exactly");
 
+    /// <summary>How Z3 prints the start of a sequence concatenation (<see cref="UnwrapUnaryConcat"/>).</summary>
+    private const string ConcatHead = "(seq.++";
+
     /// <summary>Whether the second solver answered one of the queries asked so far.</summary>
     public bool Answered { get; private set; }
 
@@ -151,7 +154,6 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
     /// </summary>
     internal static string UnwrapUnaryConcat(string text)
     {
-        const string Concat = "(seq.++";
         StringBuilder output = new(text.Length);
 
         // One frame per open parenthesis: where it starts in the output, whether it is a seq.++, and its arguments so far.
@@ -163,19 +165,8 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
             char c = text[i];
             if (c == ')')
             {
-                (int start, bool concat, int arguments) = open.Pop();
                 inAtom = false;
-                if (concat && arguments == 1)
-                {
-                    string argument = output.ToString(start + Concat.Length, output.Length - start - Concat.Length).Trim();
-                    output.Length = start;
-                    output.Append(argument);
-                }
-                else
-                {
-                    output.Append(c);
-                }
-
+                Close(output, open.Pop());
                 continue;
             }
 
@@ -194,7 +185,7 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
             inAtom = c != '(';
             if (c == '(')
             {
-                open.Push((output.Length, string.CompareOrdinal(text, i, Concat, 0, Concat.Length) == 0 && char.IsWhiteSpace(text[i + Concat.Length]), -1));
+                open.Push((output.Length, string.CompareOrdinal(text, i, ConcatHead, 0, ConcatHead.Length) == 0 && char.IsWhiteSpace(text[i + ConcatHead.Length]), -1));
             }
 
             // A quoted symbol or a string literal runs to its closing mark, whatever it holds.
@@ -204,6 +195,24 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
         }
 
         return output.ToString();
+    }
+
+    /// <summary>
+    /// Closes the parenthesis <paramref name="frame"/> opened: a <c>seq.++</c> of one argument is replaced in
+    /// <paramref name="output"/> by that argument, and anything else gets its closing parenthesis.
+    /// </summary>
+    private static void Close(StringBuilder output, (int Start, bool Concat, int Arguments) frame)
+    {
+        if (frame.Concat && frame.Arguments == 1)
+        {
+            string argument = output.ToString(frame.Start + ConcatHead.Length, output.Length - frame.Start - ConcatHead.Length).Trim();
+            output.Length = frame.Start;
+            output.Append(argument);
+        }
+        else
+        {
+            output.Append(')');
+        }
     }
 
     /// <summary>
@@ -269,20 +278,31 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
             for (int i = 0; i < arguments.Length; i++)
             {
                 pending.Push(arguments[i]);
-                if (arguments[i].Sort is ArraySort)
-                {
-                    if (!uses.TryGetValue(arguments[i].Id, out List<(Expr Parent, int Index)>? of))
-                    {
-                        of = [];
-                        uses.Add(arguments[i].Id, of);
-                    }
-
-                    of.Add((term, i));
-                }
+                Use(uses, arguments[i], term, i);
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Records in <paramref name="uses"/> that <paramref name="parent"/> takes <paramref name="argument"/> as its argument
+    /// <paramref name="index"/>, when <paramref name="argument"/> is an array.
+    /// </summary>
+    private static void Use(Dictionary<uint, List<(Expr Parent, int Index)>> uses, Expr argument, Expr parent, int index)
+    {
+        if (argument.Sort is not ArraySort)
+        {
+            return;
+        }
+
+        if (!uses.TryGetValue(argument.Id, out List<(Expr Parent, int Index)>? of))
+        {
+            of = [];
+            uses.Add(argument.Id, of);
+        }
+
+        of.Add((parent, index));
     }
 
     /// <summary>

@@ -1779,19 +1779,7 @@ internal sealed class IrLowerer
             slices.Add(lvalue is IFieldReferenceOperation field ? heap.Field(field, context) : null);
         }
 
-        List<IrVar> values = [];
-        if (literal is null)
-        {
-            IrVar tuple = Value(deconstruction.Value, context);
-            values.AddRange(((INamedTypeSymbol)deconstruction.Value.Type!).TupleElements.Select(e => Element(tuple, e, context)));
-        }
-        else
-        {
-            foreach (IOperation element in literal.Elements)
-            {
-                values.Add(Value(element, context));
-            }
-        }
+        List<IrVar> values = DeconstructedValues(deconstruction, literal, context);
 
         // Each null shadow is read before any store, so a swap of references swaps their nullness too.
         List<IrVar?> nulls = [];
@@ -1806,6 +1794,29 @@ internal sealed class IrLowerer
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The values <paramref name="deconstruction"/> stores, left to right: each element of <paramref name="literal"/>,
+    /// or, when its value is no tuple literal, each element read from that value (<see cref="Element"/>).
+    /// </summary>
+    private List<IrVar> DeconstructedValues(IDeconstructionAssignmentOperation deconstruction, ITupleOperation? literal, LoweringContext context)
+    {
+        List<IrVar> values = [];
+        if (literal is null)
+        {
+            IrVar tuple = Value(deconstruction.Value, context);
+            values.AddRange(((INamedTypeSymbol)deconstruction.Value.Type!).TupleElements.Select(e => Element(tuple, e, context)));
+        }
+        else
+        {
+            foreach (IOperation element in literal.Elements)
+            {
+                values.Add(Value(element, context));
+            }
+        }
+
+        return values;
     }
 
     /// <summary>
