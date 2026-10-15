@@ -127,7 +127,7 @@ public sealed class IlLoweringParityTests
     /// <summary>
     /// The IOperation lowering keeps <c>x as string ?? "c"</c> a string; the compiler's IL leaves the <c>isinst</c> result
     /// and the constant in one stack slot the IL lowering types <c>object</c>, so the value is read back through the
-    /// <c>cast</c> maps from <c>string</c> to <c>object</c> and back, which the solver does not know cancel (ticket P2-192).
+    /// <c>cast</c> maps from <c>string</c> to <c>object</c> and back, which the solver does not know cancel (ticket P2-192; P2-204 owns it).
     /// </summary>
     private const string AsThroughObjectSlot = "IOperation keeps an 'as string ?? constant' a string; the IL holds it in an object stack slot, read back through two cast maps";
 
