@@ -1,5 +1,5 @@
 # P2-184 Precision bug: a call an API-equivalence entry rewrites is never closed, so it writes the heap on the legacy side only
-Status: in-progress
+Status: done (PR #503)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
