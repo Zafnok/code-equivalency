@@ -1,5 +1,5 @@
 # P2-197 Precision bug: OpenRA's mod assemblies count as unhosted, so a .NET Framework to .NET 5 pair gets the .NET 9 float-to-integer rule
-Status: in-progress
+Status: done (PR #505)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
