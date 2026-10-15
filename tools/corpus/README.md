@@ -8,6 +8,7 @@ through the skill `.claude/skills/equiv-corpus-run`, not by hand.
 | `poly-migrationbench-dotnet.csv` | Verbatim copy of Amazon's Poly-MigrationBench .NET list: 100 MIT or Apache-2.0 .NET Framework repos, each pinned at a commit where the build and unit tests pass. The columns are `repo,base_commit,license,num_cs_files,root_sln_or_csproj_files,verify_command`. |
 | `pairs.csv` | Public before-and-after migrations pinned by commit. Kind `human`: a person migrated it. Kind `tool`: raw output of .NET Upgrade Assistant or AWS Porting Assistant. Kind `cleanup`: a commit whose author says it changes no behaviour, on any runtimes (ADR 0040 decision 5). |
 | `corpus.ps1` | Lists, selects, fetches and cleans pairs; computes ADR 0028's unchanged share; refreshes the upstream list; `-SeedMechanical` drives the seeder (ticket M4-010); `-RuntimeDiff` runs `tools/runtime-diff` on a census's `externalCallees` (ADR 0035, ticket M3-033). |
+| `configs/` | A pair's own `equiv.json`, which `-Compare` passes as `--config` (ticket P2-197; see "Pair configs"). |
 | `migration-prompt.md` | The fixed prompt an agent gets when it migrates an agent pair. |
 | `seeds.md` | The catalogue of hand-written behaviour changes injected in `seeded` mode, used to measure recall. |
 | `seeder/` | Console tool (ticket M4-010) that applies M0-012's mutation operators to real methods on the modern side, at scale, by Roslyn syntax rewriting (`Equiv.TestSupport`'s `PairGen` shares its implementation for the differential soundness gate). `-SeedMechanical` copies the modern side to `.corpus/pairs/<slug>/seeded-mech/`, runs it, and writes `seeds.json` there. |
@@ -108,6 +109,17 @@ branch and the legacy commit is its first parent, so the pair's diff is exactly 
 Steps 3, 4 and 6 are the parts of PowerShell's `Start-PSBuild` that write source the compiler reads.
 None of them compiles a product assembly. With all six the pair has no `unbound` result (ticket
 P2-172; 17 with the first three only).
+
+### Pair configs (ticket P2-197)
+
+`configs/<slug>.json` is a pair's own `equiv.json`; `-Compare` passes it as `--config` unless
+`-CompareArgs` names another. It states only what equiv cannot read from the solution. Today that is a
+side's runtime for `netstandard` projects no project references (ADR 0040 decision 1's `runtimes`), each
+with the source below.
+
+| Slug | States | Source |
+|---|---|---|
+| `openra-17989` | `runtimes.modern`: `net5.0` | `OpenRA.Mods.Cnc`, `OpenRA.Mods.Common`, `OpenRA.Mods.D2k` and `OpenRA.Platforms.Default` target `netstandard2.1` and no project references them: the game loads them by path at run time, through the pair's new `AssemblyLoader` (an `AssemblyLoadContext`, `OpenRA.Game/Support/AssemblyLoader.cs`) outside a Mono build: `OpenRA.Game/ObjectCreator.cs` for the mods, `OpenRA.Game/Game.cs` for the renderer. The executables that run `OpenRA.Game` (`OpenRA.Launcher`, `OpenRA.Server`, `OpenRA.Utility`) target `net5.0` outside a Mono build, and `OpenRA.WindowsLauncher` targets `net5.0`, so the mods run on .NET 5. The legacy side's projects all name `net472` and state nothing. |
 
 ### Version-upgrade pairs (ticket P2-066)
 

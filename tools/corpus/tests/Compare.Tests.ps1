@@ -50,6 +50,31 @@ Describe 'corpus.ps1 -Compare and the compare mode' {
         Assert-Throws { Get-CompareArguments -Legacy 'a.sln' -ModernSolution 'b.sln' -RunDir 'run' -CompareMode 'quick' -Census $true -Extra @() } '*takes no -Mode*'
     }
 
+    It 'Compare_PassesThePairsOwnConfig' {
+        $arguments = @(Get-CompareArguments -Legacy 'a.sln' -ModernSolution 'b.sln' -RunDir 'run' -CompareMode 'quick' -Census $false -Extra @() -Config 'pair.json')
+        $at = [array]::IndexOf($arguments, '--config')
+        if ($at -lt 0 -or $arguments[$at + 1] -ne 'pair.json') { throw "the pair's config was not passed: $($arguments -join ' ')" }
+        $census = @(Get-CompareArguments -Legacy 'a.sln' -ModernSolution 'b.sln' -RunDir 'run' -CompareMode '' -Census $true -Extra @() -Config 'pair.json')
+        if ($census -notcontains 'pair.json') { throw "the census was not given the pair's config: $($census -join ' ')" }
+        $none = @(Get-CompareArguments -Legacy 'a.sln' -ModernSolution 'b.sln' -RunDir 'run' -CompareMode 'quick' -Census $false -Extra @())
+        if ($none -contains '--config') { throw "a pair without a config got one: $($none -join ' ')" }
+    }
+
+    It 'Compare_ACommandLineConfigReplacesThePairs' {
+        $arguments = @(Get-CompareArguments -Legacy 'a.sln' -ModernSolution 'b.sln' -RunDir 'run' -CompareMode 'quick' -Census $false -Extra @('--config', 'mine.json') -Config 'pair.json')
+        if (@($arguments | Where-Object { $_ -eq '--config' }).Count -ne 1 -or $arguments -contains 'pair.json') { throw "expected only --config mine.json: $($arguments -join ' ')" }
+    }
+
+    It 'PairConfig_OpenRaStatesItsModsRunOnNet5' {
+        # P2-197: OpenRA's modern mods (netstandard2.1, loaded as plugins) run in the net5.0 launcher's process.
+        $path = Get-PairConfig 'openra-17989'
+        if (-not $path) { throw 'openra-17989 has no pair config' }
+        $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        if ($config.runtimes.modern -ne 'net5.0') { throw "runtimes.modern is '$($config.runtimes.modern)', not net5.0" }
+        if ($config.runtimes.PSObject.Properties['legacy']) { throw 'the legacy side reads its runtime from its projects; it states none' }
+        if (Get-PairConfig 'no-such-pair') { throw 'a pair with no config file got one' }
+    }
+
     It 'Compare_AVerifyingRunMustNameItsMode' {
         Assert-Throws { Get-CompareArguments -Legacy 'a.sln' -ModernSolution 'b.sln' -RunDir 'run' -CompareMode '' -Census $false -Extra @() } '*names its compare mode*'
     }
