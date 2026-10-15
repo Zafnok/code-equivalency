@@ -1,5 +1,5 @@
 # P2-163 Precision bug: the `TreeNodeCollection::get_Item(` row fires on every read of the indexer
-Status: in-progress
+Status: done (PR #507)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-075
