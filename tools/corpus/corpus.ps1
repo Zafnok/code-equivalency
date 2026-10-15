@@ -312,16 +312,27 @@ function Read-PairJson([string]$Slug) {
     Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
 }
 
+# A pair's own equiv.json (ticket P2-197): tools/corpus/configs/<slug>.json, or '' when the pair has none. It states
+# what equiv cannot read from the solution, such as the runtime of a side whose netstandard projects no project
+# references (ADR 0040 decision 1's runtimes); README.md's "Pair configs" gives each one's source.
+function Get-PairConfig([string]$Slug) {
+    $path = Join-Path (Join-Path $PSScriptRoot 'configs') "$Slug.json"
+    if (Test-Path -LiteralPath $path) { return $path }
+    return ''
+}
+
 # The arguments of one corpus run of `equiv compare` (ticket P1-032; ADR 0049). A verifying run names its compare
 # mode, so its SUMMARY.md can and two runs are compared only within one; the census (--lower-only) verifies nothing
-# and takes none. Every run writes the debug progress log (ADR 0038).
+# and takes none. Every run writes the debug progress log (ADR 0038). $Config is the pair's own equiv.json (P2-197),
+# passed as --config unless -CompareArgs already names one.
 function Get-CompareArguments {
-    param([string]$Legacy, [string]$ModernSolution, [string]$RunDir, [string]$CompareMode, [bool]$Census, [string[]]$Extra)
+    param([string]$Legacy, [string]$ModernSolution, [string]$RunDir, [string]$CompareMode, [bool]$Census, [string[]]$Extra, [string]$Config = '')
     if ($Census -and $CompareMode) { throw '-LowerOnly verifies nothing, so it takes no -Mode.' }
     if (-not $Census -and -not $CompareMode) { throw 'A verifying run names its compare mode: -Mode thorough or -Mode quick (equiv-corpus-run, section 5).' }
     $arguments = @('compare', '--legacy', $Legacy, '--modern', $ModernSolution, '--out', (Join-Path $RunDir 'equiv.sarif'),
         '--verbosity', 'debug', '--log', (Join-Path $RunDir 'progress.log'))
     if ($Census) { $arguments += '--lower-only' } else { $arguments += @('--mode', $CompareMode) }
+    if ($Config -and $Extra -notcontains '--config') { $arguments += @('--config', $Config) }
     return @($arguments) + @($Extra | Where-Object { $_ })
 }
 
@@ -929,7 +940,7 @@ switch ($PSCmdlet.ParameterSetName) {
         if ($Tag) { $kind = "$kind-$Tag" }
         $runDir = Join-Path (Join-Path (Get-PairDir $slug) 'runs') ('{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmm'), $kind)
         $modernSolution = if ($Modern) { $Modern } else { $pair.modernSolution }
-        $arguments = Get-CompareArguments -Legacy $pair.legacySolution -ModernSolution $modernSolution -RunDir $runDir -CompareMode $Mode -Census ([bool]$LowerOnly) -Extra $CompareArgs
+        $arguments = Get-CompareArguments -Legacy $pair.legacySolution -ModernSolution $modernSolution -RunDir $runDir -CompareMode $Mode -Census ([bool]$LowerOnly) -Extra $CompareArgs -Config (Get-PairConfig $slug)
         New-Item -ItemType Directory -Force -Path $runDir | Out-Null
         Show-Step "run     $runDir"
         Show-Step "equiv   $($arguments -join ' ')"
