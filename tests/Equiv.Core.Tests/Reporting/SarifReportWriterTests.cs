@@ -658,6 +658,27 @@ public sealed class SarifReportWriterTests
         return VerifyJson(Serialize(result));
     }
 
+    /// <summary>
+    /// Ticket P2-195: an abstraction Unknown whose candidate's sides first differ at a runtime-changed call names it in
+    /// <c>runtimeChangedCall</c>, beside the shared function in <c>abstractions</c>; one without such a call has no property.
+    /// </summary>
+    [Fact]
+    public Task TheRuntimeChangedCallTheSidesFirstDifferAtIsWritten()
+    {
+        Unknown unknown = Core.Verdicts.Unknown.DependingOn(
+            Fixtures.Counterexample(),
+            [
+                new Abstraction(Codebase.Legacy, new CallIdentity("System.String::Concat(string,string)"), Span: null),
+                new Abstraction(Codebase.Modern, new CallIdentity("System.String::Concat(string,string)"), Span: null),
+            ],
+            new CallIdentity("System.IO.Path::Combine(string,string)", RuntimeChanged: true));
+        VerificationResult result = Fixtures.Result(unknown);
+
+        Assert.Equal("System.IO.Path::Combine(string,string)", SarifReportWriter.Write([result]).Runs[0].Results[0].GetProperty<string>("runtimeChangedCall"));
+        Assert.False(SarifReportWriter.Write([Fixtures.Result(unknown with { RuntimeChangedCall = null })]).Runs[0].Results[0].TryGetProperty("runtimeChangedCall", out string? _));
+        return VerifyJson(Serialize(result));
+    }
+
     /// <summary>Ticket P2-062 criterion 1: an opaque fragment's entry names the fragment's <c>IrOpaque</c> reason.</summary>
     [Fact]
     public void AnOpaqueAbstractionCarriesItsReason()

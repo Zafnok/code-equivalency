@@ -46,6 +46,7 @@ public sealed class TaintReplayTests
         Assert.Equal("the divergence depends on opaque:add", unknown.Detail);
         Assert.Equal([new Abstraction(Codebase.Legacy, Add, Span: null), new Abstraction(Codebase.Modern, Add, Span: null)], unknown.Abstractions);
         Assert.Empty(unknown.Causes);
+        Assert.Null(unknown.RuntimeChangedCall);
         Counterexample candidate = Assert.IsType<Counterexample>(unknown.Candidate);
         Assert.NotEqual(candidate.Old.Outcome, candidate.New.Outcome);
         Assert.True(candidate.Old.Taint.Value);
@@ -185,6 +186,64 @@ public sealed class TaintReplayTests
             """;
 
         Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(Verify(old, @new)).Reason);
+    }
+
+    /// <summary>
+    /// Ticket P2-195: an unedited body whose runtime-changed call feeds a function both sides share is Unknown(abstraction)
+    /// on that function, and names the call, whose two runtimes answered the same arguments differently.
+    /// </summary>
+    [Fact]
+    public void AnAbstractionUnknownNamesTheRuntimeChangedCallItsSidesFirstDifferAt()
+    {
+        const string body = """
+            proc "T::M(string,string)" (%a: sort "System.String", %b: sort "System.String") -> sort "System.String" entry B0
+            B0:
+              %p: sort "System.String" = call "System.IO.Path::Combine(string,string)"!(%a, %b)
+              %c: sort "System.String" = pure "op:System.String::Concat(string,string)"(%p, %a)
+              ret %c
+            """;
+        CallIdentity concat = new("op:System.String::Concat(string,string)");
+
+        Unknown unknown = Assert.IsType<Unknown>(Verify(body, body));
+
+        Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
+        Assert.Equal([new Abstraction(Codebase.Legacy, concat, Span: null), new Abstraction(Codebase.Modern, concat, Span: null)], unknown.Abstractions);
+        Assert.Equal(new CallIdentity("System.IO.Path::Combine(string,string)", RuntimeChanged: true), unknown.RuntimeChangedCall);
+        Assert.Equal("the divergence depends on op:System.String::Concat(string,string)", unknown.Detail);
+    }
+
+    /// <summary>Ticket P2-195: a pure function the pair makes side-specific (ADR 0040) is named as a runtime-changed call is.</summary>
+    [Fact]
+    public void AnAbstractionUnknownNamesTheRuntimeSensitivePureFunctionItsSidesFirstDifferAt()
+    {
+        const string body = """
+            proc "T::M(double)" (%a: sort "System.Double") -> bv32 entry B0
+            B0:
+              %i: bv32 = pure "conv.f64.i32"!(%a)
+              %r: bv32 = pure "op:T::Mix(int)"(%i)
+              ret %r
+            """;
+
+        Unknown unknown = Assert.IsType<Unknown>(Verify(body, body));
+
+        Assert.Equal(new CallIdentity("conv.f64.i32"), unknown.RuntimeChangedCall);
+    }
+
+    /// <summary>
+    /// Ticket P2-195: two answers are where the sides first differ only for the same identity and equal arguments; a
+    /// difference in arguments comes from earlier.
+    /// </summary>
+    [Theory]
+    [InlineData("F", 1, 7, false)]
+    [InlineData("G", 1, 8, false)]
+    [InlineData("F", 2, 8, false)]
+    [InlineData("F", 1, 8, true)]
+    public void AnswersDifferOnlyForTheSameCallOnEqualArguments(string identity, ulong argument, ulong result, bool differs)
+    {
+        ModelDecoder.RuntimeChangedAnswer legacy = new(new CallIdentity("F", RuntimeChanged: true), [Bv(1)], new IrCallResult(Bv(7), Threw: false));
+        ModelDecoder.RuntimeChangedAnswer modern = new(new CallIdentity(identity, RuntimeChanged: true), [Bv(argument)], new IrCallResult(Bv(result), Threw: false));
+
+        Assert.Equal(differs, legacy.DiffersFrom(modern));
     }
 
     /// <summary>

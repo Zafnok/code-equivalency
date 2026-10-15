@@ -37,7 +37,7 @@ cover a member's result).
 A string theory for every `string` value, or a rule for members other than the trims: stop and split.
 
 ## Out of scope
-P2-202's null source. Open calls.
+P2-210's null source. Open calls.
 
 ## Notes
 - Filed 2026-10-15 by P2-184 (its sample results).

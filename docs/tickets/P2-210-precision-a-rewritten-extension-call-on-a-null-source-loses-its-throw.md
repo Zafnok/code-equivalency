@@ -1,4 +1,4 @@
-# P2-202 Precision bug: a rewritten extension call on a null source passes the null to a closed member, so the legacy side's ArgumentNullException is lost
+# P2-210 Precision bug: a rewritten extension call on a null source passes the null to a closed member, so the legacy side's ArgumentNullException is lost
 Status: todo
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -41,3 +41,4 @@ The closed-call taint rule (ADR 0056). P2-203's closed members that differ in th
 
 ## Notes
 - Filed 2026-10-15 by P2-184, whose fix closed the rewritten call (the `HasX` sample result).
+- Renumbered from P2-202 by P2-195: P2-184 and P2-200 each filed a P2-202, which failed `ticket-ids` on `main`. P2-184's Notes still say P2-202.

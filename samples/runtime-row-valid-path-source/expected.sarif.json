@@ -232,6 +232,7 @@
                 "side": "modern"
               }
             ],
+            "runtimeChangedCall": "System.IO.Path::GetFullPath(string)",
             "failureRefinement": {
               "newFailures": {
                 "outcome": "unknown"

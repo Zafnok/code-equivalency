@@ -1319,7 +1319,7 @@ They come before any other open ticket, in this order:
    written through a local function, a trailing separator or a private setter), after P2-207.
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
    migrations. P2-184 cleared 7 of the 8 on Git Extensions and OpenRA (the eighth is P2-181's) and
-   left two tickets for sample Divergents that ADR 0056's taint now reaches: P2-202 (S, a rewritten
+   left two tickets for sample Divergents that ADR 0056's taint now reaches: P2-210 (S, a rewritten
    extension call on a null source) and P2-203 (M, two different answers of a closed `TrimEnd`).
 4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same. P2-192 made a call the
    config's call-identity map declares an unproven assumption the result names (ADR 0059) and left P2-205
@@ -1332,7 +1332,8 @@ They come before any other open ticket, in this order:
 6. The other false-positive causes, one or two results each: P2-185, P2-186, P2-187, P2-191, P2-097.
    From P2-181's count: P2-197 (S, 69 OpenRA bodies under the .NET 9 float rule because its mods count
    as unhosted) and P2-195 (M, the 347 `abstraction` Unknowns that name a shared function, not the
-   runtime-changed call).
+   runtime-changed call). P2-195 named one for every such Unknown on its reruns and left P2-209 (M, 70
+   of them named by a lambda's `delegate:` function, not the member the lambda calls).
 7. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates the same samples again,
    and names the milestone after this one. Not filed until the tickets above are done.
 

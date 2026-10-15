@@ -231,6 +231,27 @@ public sealed class VerdictTests
         Assert.Same(candidate, unknown.Candidate);
         Assert.Equal(abstractions, unknown.Abstractions);
         Assert.Equal([new UnknownCause(Codebase.Modern, "abstraction opaque:b", span)], unknown.Causes);
+        Assert.Null(unknown.RuntimeChangedCall);
+    }
+
+    /// <summary>
+    /// Ticket P2-195: a candidate whose two sides first differ at a runtime-changed call names that call beside the shared
+    /// functions the divergence depends on. The detail, which the result's fingerprint hashes, does not change.
+    /// </summary>
+    [Fact]
+    public void DependingOnNamesTheRuntimeChangedCallTheSidesFirstDifferAt()
+    {
+        CallIdentity combine = new("System.IO.Path::Combine(string,string)", RuntimeChanged: true);
+
+        Unknown unknown = Unknown.DependingOn(
+            new Counterexample(new IrInputs([]), SampleRun, SampleRun),
+            [new(Codebase.Legacy, new CallIdentity("System.String::Concat(string,string)"), Span: null)],
+            combine);
+
+        Assert.Same(combine, unknown.RuntimeChangedCall);
+        Assert.Equal(
+            "the divergence depends on System.String::Concat(string,string)",
+            unknown.Detail);
     }
 
     [Fact]
@@ -258,6 +279,8 @@ public sealed class VerdictTests
         Assert.NotEqual(first, second with { Scope = UnknownScope.Line });
         Assert.NotEqual(first, second with { Candidate = null });
         Assert.NotEqual(first, second with { Abstractions = [] });
+        Assert.NotEqual(first, second with { RuntimeChangedCall = new CallIdentity("f", RuntimeChanged: true) });
+        Assert.NotEqual(first.GetHashCode(), (second with { RuntimeChangedCall = new CallIdentity("f", RuntimeChanged: true) }).GetHashCode());
         Assert.NotEqual(first, second with { Ladder = [new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, "x")] });
         Assert.False(first.Equals(Null.Of<Unknown>()));
     }
