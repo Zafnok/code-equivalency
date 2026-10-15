@@ -1373,6 +1373,9 @@ false positives and Unknowns that verdict counts against each, they come before 
 6. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates fresh samples as P2-212 did, and names
    the milestone after this one, once items 1 to 4 are done.
 
+Ahead of the list: P2-221 (M), an encoder bug in the refinement of a float-to-int conversion of NaN. A property
+test's random seed hits it on `main`, so any CI run that draws such a seed goes red. Filed 2026-10-15 from GH-407's PR.
+
 Not on it: P2-191's one false positive is congruent since P2-197's config, so it has nothing counted against it. 620 of
 the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture
 rows (`Path.Combine` 79, `String.StartsWith` 68, `File.Delete` 26); the valid-path tickets take some, and what is left
