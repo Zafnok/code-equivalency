@@ -165,7 +165,6 @@ public sealed class ValidPathsTests
     [InlineData("static object M() { var d = Dir(); return new StreamReader(d); }\nstatic string Dir() => AppContext.BaseDirectory;", false)]
     [InlineData("static string Same(string p) => p;\nstatic object M(string p) => new StreamReader(Same(p));", true)]
     [InlineData("static string Pick(bool b) { if (b) { return AppContext.BaseDirectory; } return Environment.MachineName; }\nstatic object M(bool b) => new StreamReader(Pick(b));", true)]
-    [InlineData("static string Root { get; } = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(Root);", true)]
     [InlineData("static string Dir() { throw new InvalidOperationException(); }\nstatic object M() => new StreamReader(Dir());", true)]
     [InlineData("protected virtual string Dir() => AppContext.BaseDirectory;\nobject M() => new StreamReader(Dir());", true)]
     [InlineData("static object M() { return new StreamReader(Dir()); string Dir() => AppContext.BaseDirectory; }", true)]
@@ -255,6 +254,78 @@ public sealed class ValidPathsTests
         Compilation library = RoslynTestCompilations.Compile(
             "public static class Translator { public static string Dir() => Paths.Root(); }", [paths.ToMetadataReference()], "Library");
         Compilation app = RoslynTestCompilations.Compile("class C { static object M() => new System.IO.StreamReader(Translator.Dir()); }", [library.ToMetadataReference()], "App");
+        IMethodSymbol method = app.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+
+        Assert.DoesNotContain(Calls(IrLowerer.Lower(method, app, RenameMap.Empty, [], Runtimes.Migration)), static call => call.Callee.RuntimeChanged);
+    }
+
+    /// <summary>
+    /// Ticket P2-201: a <c>readonly</c> field of a class is a valid path when its initializer and every write in a constructor
+    /// or <c>init</c> accessor of its type is one. A field that something else can write, or with a write whose value is not
+    /// known or not valid, still fires the row.
+    /// </summary>
+    [Theory]
+    [InlineData("static readonly string F = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(F);", false)]
+    [InlineData("readonly string f = Path.Combine(AppContext.BaseDirectory, \"TAGMESSAGE\");\nobject M() => new StreamReader(Path.Combine(f, \"a.txt\"));", false)]
+    [InlineData("readonly string f;\nC() { f = Path.GetTempPath(); }\nobject M() => new StreamReader(f);", false)]
+    [InlineData("readonly string f;\nC(string p) { if (!Directory.Exists(p)) { throw new ArgumentException(p); } f = p; }\nobject M() => new StreamReader(f);", false)]
+    [InlineData("static readonly string F;\nstatic C() { F = AppContext.BaseDirectory; }\nstatic object M() => new StreamReader(F);", false)]
+    [InlineData("readonly string f = AppContext.BaseDirectory;\nC() { }\nC(int n) : this() { f = Path.GetTempPath(); }\nobject M() => new StreamReader(f);", false)]
+    [InlineData("static readonly string A = AppContext.BaseDirectory;\nstatic readonly string B = Path.Combine(A, \"x\");\nstatic object M() => new StreamReader(B);", false)]
+    [InlineData("static string F = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(F);", true)]
+    [InlineData("readonly string f;\nC(string p) { f = p; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("readonly string f = AppContext.BaseDirectory;\nC() { }\nC(string p) { f = p; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("static readonly string F;\nstatic object M() => new StreamReader(F);", true)]
+    [InlineData("static readonly string F = Environment.MachineName;\nstatic object M() => new StreamReader(F);", true)]
+    [InlineData("readonly string f = AppContext.BaseDirectory;\nC() { f += \"|\"; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("static void Fill(ref string s) { }\nreadonly string f = AppContext.BaseDirectory;\nC() { Fill(ref f); }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("readonly string f = AppContext.BaseDirectory;\nC() { ref string r = ref f; r = \"a|b\"; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("readonly string f = AppContext.BaseDirectory;\nreadonly string g = AppContext.BaseDirectory;\nC(bool b) { (b ? ref f : ref g) = \"a|b\"; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("readonly string f = AppContext.BaseDirectory;\nC() { string s = \"\"; ref string r = ref s; r = ref f; r = \"a|b\"; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("readonly string f = AppContext.BaseDirectory;\npublic string Other { init { f = value; } }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("static readonly string A = B;\nstatic readonly string B = A;\nstatic object M() => new StreamReader(A);", true)]
+    public void AReadonlyFieldThatOnlyHoldsValidPathsIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-201: a get-only auto-property is a valid path when its initializer and every assignment in a constructor of
+    /// its type is one. A property with a setter, one whose getter has a body, and one an override can replace still fire.
+    /// </summary>
+    [Theory]
+    [InlineData("static string Root { get; } = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(Root);", false)]
+    [InlineData("string Root { get; }\nC() { Root = Path.GetTempPath(); }\nobject M() => new StreamReader(Root);", false)]
+    [InlineData("string Root { get; }\nC(string p) { Root = p; }\nobject M() => new StreamReader(Root);", true)]
+    [InlineData("static string Root { get; set; } = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(Root);", true)]
+    [InlineData("public static string Root { get; private set; } = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(Root);", true)]
+    [InlineData("string Root { get; init; } = AppContext.BaseDirectory;\nobject M() => new StreamReader(Root);", true)]
+    [InlineData("static string Root => Environment.MachineName;\nstatic object M() => new StreamReader(Root);", true)]
+    [InlineData("static string Root { get { return Environment.MachineName; } }\nstatic object M() => new StreamReader(Root);", true)]
+    [InlineData("static string Root { get => field + \"|\"; } = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(Root);", true)]
+    [InlineData("protected virtual string Root { get; } = AppContext.BaseDirectory;\nobject M() => new StreamReader(Root);", true)]
+    public void AGetOnlyAutoPropertyThatOnlyHoldsValidPathsIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-201: another object's field or property is read through its type's own writes, a generic type's through its
+    /// definition and a sealed type's override auto-property through that override; a struct's is not read, since
+    /// <c>this = ...</c> in any of its members writes every field.
+    /// </summary>
+    [Theory]
+    [InlineData("sealed class Helper { public string TemporaryPath { get; } public Helper() { TemporaryPath = Path.Combine(Path.GetTempPath(), \"repo1\"); } }\nclass C\n{\nstatic object M(Helper h) => new StreamReader(h.TemporaryPath);\n}\n", false)]
+    [InlineData("class H<T> { public readonly string F; public H() { F = AppContext.BaseDirectory; } }\nclass C\n{\nstatic object M(H<int> h) => new StreamReader(h.F);\n}\n", false)]
+    [InlineData("class H<T> { public readonly string F; public H(string p) { F = p; } }\nclass C\n{\nstatic object M(H<int> h) => new StreamReader(h.F);\n}\n", true)]
+    [InlineData("abstract class B { public abstract string Root { get; } }\nsealed class C : B\n{\npublic override string Root { get; } = AppContext.BaseDirectory;\nobject M() => new StreamReader(Root);\n}\n", false)]
+    [InlineData("struct S { public readonly string F; public S(int n) { F = AppContext.BaseDirectory; } }\nclass C\n{\nstatic object M(S s) => new StreamReader(s.F);\n}\n", true)]
+    [InlineData("partial class C\n{\npublic partial string Root { get; }\npublic partial string Root { get => field + \"|\"; }\nC() { Root = AppContext.BaseDirectory; }\nobject M() => new StreamReader(Root);\n}\n", true)]
+    public void AnotherTypesFieldIsReadThroughItsOwnWrites(string types, bool flagged) =>
+        Assert.Equal(flagged, Calls(Source("using System;\nusing System.IO;\n" + types)).Any(static call => call.Callee.RuntimeChanged));
+
+    /// <summary>Ticket P2-201: a field declared in a project the caller's references as source is read with that project's compilation.</summary>
+    [Fact]
+    public void AFieldInAnotherProjectIsRead()
+    {
+        Compilation library = RoslynTestCompilations.Compile(
+            "public class TestHelper { public readonly string WorkingDir = System.AppContext.BaseDirectory; }", "Library");
+        Compilation app = RoslynTestCompilations.Compile(
+            "class C { static object M(TestHelper h) => new System.IO.StreamReader(System.IO.Path.Combine(h.WorkingDir, \"TAGMESSAGE\")); }", [library.ToMetadataReference()], "App");
         IMethodSymbol method = app.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
 
         Assert.DoesNotContain(Calls(IrLowerer.Lower(method, app, RenameMap.Empty, [], Runtimes.Migration)), static call => call.Callee.RuntimeChanged);

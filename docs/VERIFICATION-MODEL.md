@@ -659,7 +659,10 @@ Migration-specific normalisations (applied to both sides before matching):
   valid path by these rules. Ticket P2-200 reads a returned call in that body the same way, up to four
   calls deep, and a virtual call on a receiver of a sealed type through the override that type
   declares; each caller's verdict assumes its callee's pair equivalent (ADR 0019). The header of
-  `runtime-changes.json` has the exact shapes. A path that came from a caller or a field is not followed, and the row flags it.
+  `runtime-changes.json` has the exact shapes. Ticket P2-201 reads a `readonly` field or a get-only
+  auto-property of a class the same way, through its initializer and every write in a constructor or
+  `init` accessor of its type, the only places the language lets such a member be written. A path that
+  came from a caller is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
   where the reference assemblies have the type (.NET Core 3.0 and later) and

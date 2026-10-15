@@ -32,12 +32,12 @@ internal static class LocalValues
     /// <summary>
     /// What is written to <paramref name="symbol"/> under <paramref name="root"/> after its declaration: the value of each
     /// assignment, or null for a write whose value is not known (a compound assignment, a <c>ref</c> or <c>out</c>
-    /// argument, a tuple it is part of).
+    /// argument, a tuple it is part of, or a <c>ref</c> to it that a ref local or a ref conditional takes, ticket P2-201).
     /// </summary>
     public static ImmutableArray<IOperation?> Writes(ISymbol symbol, IOperation root) =>
         [.. References(symbol, root).Select(Write).Where(static w => w.Written).Select(static w => w.Value)];
 
-    /// <summary>Every read or write of the local variable or parameter <paramref name="symbol"/> under <paramref name="root"/>.</summary>
+    /// <summary>Every read or write of the local variable, parameter, field or property <paramref name="symbol"/> under <paramref name="root"/>.</summary>
     public static IEnumerable<IOperation> References(ISymbol symbol, IOperation root) =>
         root.DescendantsAndSelf().Where(o => SymbolEqualityComparer.Default.Equals(Symbol(o), symbol));
 
@@ -46,14 +46,32 @@ internal static class LocalValues
         ISimpleAssignmentOperation assignment when assignment.Target == reference => (true, assignment.Value),
         IAssignmentOperation assignment when assignment.Target == reference => (true, null),
         IArgumentOperation { Parameter.RefKind: not RefKind.None } or ITupleOperation => (true, null),
-        _ => (false, null),
+        var parent => (TakesRef(parent), null),
     };
 
-    /// <summary>The local variable or parameter <paramref name="operation"/> reads; null for any other operation.</summary>
+    /// <summary>
+    /// Whether <paramref name="parent"/> takes a <c>ref</c> to its operand, through which it can be written (ticket P2-201):
+    /// a <c>ref</c> local's initializer, a <c>ref</c> reassignment's value or a <c>ref</c> conditional's branch.
+    /// </summary>
+    private static bool TakesRef(IOperation? parent) => parent switch
+    {
+        // A C# variable initializer always belongs to a declarator.
+        IVariableInitializerOperation initializer => ((IVariableDeclaratorOperation)initializer.Parent!).Symbol.RefKind != RefKind.None,
+        ISimpleAssignmentOperation assignment => assignment.IsRef,
+        IConditionalOperation conditional => conditional.IsRef,
+        _ => false,
+    };
+
+    /// <summary>
+    /// The local variable, parameter, field or property (ticket P2-201) <paramref name="operation"/> reads; null for any other
+    /// operation.
+    /// </summary>
     public static ISymbol? Symbol(IOperation operation) => operation switch
     {
         ILocalReferenceOperation local => local.Local,
         IParameterReferenceOperation parameter => parameter.Parameter,
+        IFieldReferenceOperation field => field.Field,
+        IPropertyReferenceOperation property => property.Property,
         _ => null,
     };
 

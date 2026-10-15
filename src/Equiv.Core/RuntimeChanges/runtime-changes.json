@@ -85,8 +85,14 @@
 //     own when no override can replace it (not virtual, abstract or an override), or, when the receiver's type is sealed,
 //     the override that type itself declares (P2-200). A returned call there to another of the solution's members is
 //     read the same way, up to four calls from the method that makes the call (P2-200). A verdict assumes each callee
-//     pair equivalent (ADR 0019 and its P2-200 clarification), and each callee's own rows are its own results.
-// A path that a caller passed in is not followed, and neither is a field.
+//     pair equivalent (ADR 0019 and its P2-200 clarification), and each callee's own rows are its own results;
+//   - a read of a readonly field, or of a get-only auto-property (no setter, a getter with no body) whose getter is the
+//     one that runs, of a class, whose initializer and every write in a constructor or init accessor of its type are
+//     valid paths by these rules, each read in its own body, and of which there is at least one (P2-201). The language
+//     lets nothing else write such a member; a write of a value not known (a ref or out argument, a ref local or ref
+//     conditional that takes it, a compound assignment) makes it not valid. A struct's is not read: this = ... in any of
+//     its members writes every field. Each such step counts as a call toward the bound of four.
+// A path that a caller passed in is not followed.
 //
 // "ordinalUnaffected" (P2-075), when true, marks a row for a culture-sensitive comparison: a call that passes
 // StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant argument is not flagged by it.
