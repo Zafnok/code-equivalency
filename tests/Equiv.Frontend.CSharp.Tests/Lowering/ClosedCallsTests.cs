@@ -1,3 +1,4 @@
+using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Frontend.CSharp.Lowering;
@@ -56,6 +57,29 @@ public sealed class ClosedCallsTests
             Assert.Equal(closed, call.Heap.IsEmpty);
         }
     }
+
+    /// <summary>
+    /// Ticket P2-184: the rule read from a member's identity, as a call an API-equivalence entry rewrites to it names it.
+    /// A type that does not resolve, a generic type and a generic containing type are not inert.
+    /// </summary>
+    [Theory]
+    [InlineData("System.String::Split(char,System.StringSplitOptions)", true)]
+    [InlineData("System.String::TrimEnd()", true)]
+    [InlineData("System.String::Contains(char)", true)]
+    [InlineData("System.Int32::TryParse(string,out int)", true)]
+    [InlineData("System.Int32::M(ref System.DayOfWeek?)", true)]
+    [InlineData("System.String::M`1(int?)<bool>", true)]
+    [InlineData("System.String::M`1(int)<object>", false)]
+    [InlineData("System.String::M(System.DateTime?)", false)]
+    [InlineData("System.String::Join(char,System.ReadOnlySpan<string>)", false)]
+    [InlineData("System.String::Format(System.IFormatProvider,string,System.ReadOnlySpan<object>)", false)]
+    [InlineData("System.String::M((int, int))", false)]
+    [InlineData("System.IO.FileSystemInfo::get_FullName()", false)]
+    [InlineData("System.Enum::IsDefined`1(System.DayOfWeek)<System.DayOfWeek>", false)]
+    [InlineData("System.Nullable`1::GetValueOrDefault()<int>", false)]
+    [InlineData("No.Such.Type::M()", false)]
+    public void AnIdentityNamesAClosedMemberWhenEveryTypeItNamesIsInert(string identity, bool closed) =>
+        Assert.Equal(closed, ClosedCalls.IsClosed(new CallIdentity(identity), RoslynTestCompilations.Compile("class C { }")));
 
     public static TheoryData<string, bool> Throwing => new()
     {

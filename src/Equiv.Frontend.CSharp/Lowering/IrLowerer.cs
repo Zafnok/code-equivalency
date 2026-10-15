@@ -2815,8 +2815,8 @@ internal sealed class IrLowerer
     {
         ImmutableArray<IrVar> adapted = Adapt(rewrite, invocation, context);
         catalogue.Applied.Add(rewrite.Entry.Id);
-        string modern = rewrite.Entry.ModernOf(rewrite.Plan.TypeArgument?.ToDisplayString(TypeMapper.Unannotated));
-        return Call(new Callee(CallIdentityFactory.Of(modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
+        CallIdentity modern = CallIdentityFactory.Of(rewrite.Entry.ModernOf(rewrite.Plan.TypeArgument?.ToDisplayString(TypeMapper.Unannotated)), suppressedRuntimeChanges, runtime.Interval);
+        return Call(new Callee(modern, ClosedCalls.IsClosed(modern, compilation), invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
     }
 
     /// <summary>
