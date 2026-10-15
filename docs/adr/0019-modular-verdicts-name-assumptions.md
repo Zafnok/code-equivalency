@@ -55,3 +55,13 @@ equivalent. The CLI makes that condition visible without changing any verdict or
   for a self-recursive pair no rung of the loop ladder decides; a self-call is not listed in
   `assumedCallees` (M3-015). Not done: passing the call graph to the backend to return
   `Unknown(Recursion)` for cycles. That would change a Core contract only to lose precision.
+- 2026-10-15 (P2-200). **A precondition read through a chain of callees.** Ticket P2-188 decides that a path row does
+  not fire on the result of a matched solution callee whose legacy body returns only valid paths, one call deep. Reading
+  a returned call inside that body the same way, up to four calls deep, is the same decision applied link by link: each
+  caller assumes the callee it names equivalent, so on both sides that callee returns what its legacy body returns, and
+  that body's own returned call is the callee's assumption, named in the callee's `unprovenAssumptions` when not proved.
+  A divergence in the chain is reported where it starts, by the row of the validator that ends it or by the callee whose
+  pair differs, and the exit code is unchanged. A virtual call whose receiver's type is sealed runs the override that
+  type declares, and the frontend reads that body; its pair's equivalence is the assumption every virtual call already
+  rests on, since both sides share the call's function. This reads only the returned values that a row's argument
+  depends on, demand-driven from one call site; it builds no call graph and inlines nothing (Rejected, first bullet).

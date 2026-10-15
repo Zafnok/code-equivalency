@@ -80,10 +80,12 @@
 //     returned true for it: under the guard in an if or a conditional expression, to the right of it in && (or of its
 //     negation in ||), or after an if that returns or throws when the guard is false. A guard returns false, and does
 //     not throw, for a path that validation rejects;
-//   - the result of a call to one of the solution's own ordinary methods or property getters that no override can
-//     replace (not virtual, abstract or an override), whose body returns at least once and only values that are valid
-//     paths by these rules, read in that body alone: a call there to another of the solution's members is not followed
-//     (P2-188). A verdict assumes the callee pair equivalent (ADR 0019), and the callee's own rows are its own results.
+//   - the result of a call to one of the solution's own ordinary methods or property getters whose body returns at least
+//     once and only values that are valid paths by these rules (P2-188). The body read is the one that runs: the member's
+//     own when no override can replace it (not virtual, abstract or an override), or, when the receiver's type is sealed,
+//     the override that type itself declares (P2-200). A returned call there to another of the solution's members is
+//     read the same way, up to four calls from the method that makes the call (P2-200). A verdict assumes each callee
+//     pair equivalent (ADR 0019 and its P2-200 clarification), and each callee's own rows are its own results.
 // A path that a caller passed in is not followed, and neither is a field.
 //
 // "ordinalUnaffected" (P2-075), when true, marks a row for a culture-sensitive comparison: a call that passes
