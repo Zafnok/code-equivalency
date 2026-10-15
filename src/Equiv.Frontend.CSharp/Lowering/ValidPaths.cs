@@ -6,6 +6,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.RuntimeChanges;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
 
 namespace Equiv.Frontend.CSharp.Lowering;
@@ -19,12 +20,15 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// the solution's own methods or properties yields one when the body that runs is known, because no override can replace
 /// it or the receiver's type is sealed (ticket P2-200), and every value that body returns is one by these rules, read in
 /// that body and in the bodies its own returned calls run, at most <see cref="CalleeDepth"/> calls deep (tickets P2-188
-/// and P2-200). A path from a caller or a field is not followed.
+/// and P2-200). A read of a <c>readonly</c> field or a get-only auto-property of a class yields one when its initializer and
+/// every write in a constructor or <c>init</c> accessor of its type is one by these rules (ticket P2-201), each a step of
+/// that depth. A path from a caller is not followed.
 /// </summary>
 internal static class ValidPaths
 {
     /// <summary>
-    /// How many calls deep a returned value is followed into the solution's own bodies (ticket P2-200). The deepest chain
+    /// How many calls deep a returned value is followed into the solution's own bodies (ticket P2-200), a field's stored
+    /// values counting as one call (ticket P2-201). The deepest chain
     /// in the corpus is three, from a sealed snapshot class's override through a nested type's method to a helper ending
     /// in <c>Path.GetFullPath</c>; the bound keeps the work per argument small, recursion included.
     /// </summary>
@@ -47,9 +51,11 @@ internal static class ValidPaths
     private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, Compilation compilation, int depth) => value switch
     {
         // A property that overrides only the setter has no getter of its own to be a source (ticket P2-158).
-        IPropertyReferenceOperation property => property.Property.GetMethod is { } getter
-            && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), [])
-                || ReturnsOnlyValidPaths(getter, property.Instance, compilation, depth)),
+        IPropertyReferenceOperation property => (property.Property.GetMethod is { } getter
+                && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), [])
+                    || ReturnsOnlyValidPaths(getter, property.Instance, compilation, depth)))
+            || StoresOnlyValidPaths(property, compilation, depth),
+        IFieldReferenceOperation => StoresOnlyValidPaths(value, compilation, depth),
         IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
                 Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, seen, compilation, depth)))
             || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, compilation, depth),
@@ -104,11 +110,67 @@ internal static class ValidPaths
     /// The operation of the member <paramref name="declaration"/> declares, read with the compilation whose source holds it:
     /// <paramref name="compilation"/> itself or a project it references as source. Null for a member with no body.
     /// </summary>
-    private static IOperation? Body(SyntaxReference declaration, Compilation compilation) =>
+    private static IOperation? Body(SyntaxReference declaration, Compilation compilation) => Operation(declaration.GetSyntax(), compilation);
+
+    /// <summary>
+    /// The operation of <paramref name="syntax"/>, read with the compilation whose source holds it: <paramref name="compilation"/>
+    /// itself or a project it references as source. Null when neither holds it or the syntax is no operation.
+    /// </summary>
+    private static IOperation? Operation(SyntaxNode syntax, Compilation compilation) =>
         compilation.References.OfType<CompilationReference>().Select(static reference => reference.Compilation).Prepend(compilation)
-            .Where(owner => owner.ContainsSyntaxTree(declaration.SyntaxTree))
-            .Select(owner => owner.GetSemanticModel(declaration.SyntaxTree).GetOperation(declaration.GetSyntax()))
+            .Where(owner => owner.ContainsSyntaxTree(syntax.SyntaxTree))
+            .Select(owner => owner.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax))
             .FirstOrDefault();
+
+    /// <summary>
+    /// Whether the field or property <paramref name="reference"/> reads only ever holds valid paths (ticket P2-201): it is
+    /// <see cref="Stored"/> of a class, it is given a value at least once, and every value it is given, read by these rules
+    /// in the body that gives it, is a valid path while <paramref name="depth"/> is under <see cref="CalleeDepth"/>. A
+    /// struct's is not read: <c>this = ...</c> in any member of a struct writes every field.
+    /// </summary>
+    private static bool StoresOnlyValidPaths(IOperation reference, Compilation compilation, int depth) =>
+        depth < CalleeDepth
+        && Stored(reference) is { ContainingType.TypeKind: TypeKind.Class } member
+        && Writes(member, compilation).ToImmutableArray() is [_, ..] written
+        && written.All(value => value is not null && IsValid(value, [], value.SemanticModel!.Compilation, depth + 1));
+
+    /// <summary>
+    /// The definition of the member whose stored value <paramref name="reference"/> reads, when only its own type's
+    /// construction can write it: a <c>readonly</c> field, or a get-only auto-property (no setter, a getter with no body,
+    /// not a partial definition whose implementation has one) whose getter is the one that runs, as for a solution callee.
+    /// Null for any other read.
+    /// </summary>
+    private static ISymbol? Stored(IOperation reference) => reference switch
+    {
+        IFieldReferenceOperation { Field: { IsReadOnly: true } field } => field.OriginalDefinition,
+        IPropertyReferenceOperation { Property.GetMethod: { } getter } property =>
+            Dispatched(getter, property.Instance)?.AssociatedSymbol is IPropertySymbol
+            {
+                SetMethod: null,
+                IsPartialDefinition: false,
+                GetMethod.DeclaringSyntaxReferences: [SyntaxReference accessor],
+            } auto
+            && accessor.GetSyntax() is AccessorDeclarationSyntax { Body: null, ExpressionBody: null }
+                ? auto.OriginalDefinition
+                : null,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Every value given to <paramref name="member"/>: its initializer's, then each write in a constructor or <c>init</c>
+    /// accessor of its type, the only places the language lets a <c>readonly</c> field or a get-only auto-property be
+    /// written or passed by writable <c>ref</c>. Null for a value that is not known (<see cref="LocalValues.Writes"/>).
+    /// </summary>
+    private static IEnumerable<IOperation?> Writes(ISymbol member, Compilation compilation) =>
+        member.DeclaringSyntaxReferences
+            .SelectMany(static declaration => declaration.GetSyntax().ChildNodes().OfType<EqualsValueClauseSyntax>())
+            .Select(initializer => Operation(initializer.Value, compilation))
+            .Concat(member.ContainingType.GetMembers().OfType<IMethodSymbol>()
+                .Where(static method => method.MethodKind is MethodKind.Constructor or MethodKind.StaticConstructor || method.IsInitOnly)
+                .SelectMany(static method => method.DeclaringSyntaxReferences)
+                .Select(declaration => Body(declaration, compilation))
+                .OfType<IOperation>()
+                .SelectMany(body => LocalValues.Writes(member, body)));
 
     /// <summary>
     /// The values the <c>return</c> statements of <paramref name="operation"/> return, leaving out those of the lambdas and
