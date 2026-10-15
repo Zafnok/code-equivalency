@@ -1011,10 +1011,10 @@ internal static class CompareCommand
             .. verified.Select(result =>
             {
                 (IrProcedure old, IrProcedure @new) = bodies[result.Identity.Value];
-                string[] mapped = [.. Callees(old).Where(callIdentityMap.ContainsKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+                string[] mapped = [.. CalleeNames(old).Where(callIdentityMap.ContainsKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
                 ImmutableArray<string> assumed =
                 [
-                    .. Callees(old).Concat(Callees(@new))
+                    .. CalleeNames(old).Concat(CalleeNames(@new))
                         .Where(callee => matched.Contains(callee) && !string.Equals(callee, result.Identity.Value, StringComparison.Ordinal))
                         .Concat(mapped)
                         .Distinct(StringComparer.Ordinal)
@@ -1111,7 +1111,7 @@ internal static class CompareCommand
         }, null);
     }
 
-    private static IEnumerable<string> Callees(IrProcedure body) =>
+    private static IEnumerable<string> CalleeNames(IrProcedure body) =>
         body.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static call => call.Callee.Value);
 
     /// <summary>Whether <paramref name="exception"/> fails one pair (ADR 0023) rather than the run: cancellation and running out of memory end the run.</summary>

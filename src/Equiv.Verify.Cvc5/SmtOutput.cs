@@ -38,9 +38,9 @@ internal static partial class SmtOutput
     private static ImmutableDictionary<string, string> Values(string text)
     {
         ImmutableDictionary<string, string>.Builder values = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
-        foreach (Match pair in Pair.Matches(text))
+        foreach (GroupCollection groups in Pair.Matches(text).Select(static pair => pair.Groups))
         {
-            values[pair.Groups["name"].Value] = pair.Groups["value"].Value;
+            values[groups["name"].Value] = groups["value"].Value;
         }
 
         return values.ToImmutable();

@@ -879,11 +879,11 @@ internal sealed class IrLowerer
             return;
         }
 
-        if (operation is IDeconstructionAssignmentOperation variables)
+        if (operation is IDeconstructionAssignmentOperation deconstruction)
         {
             // A `foreach` that deconstructs its element: the graph makes the deconstruction a statement of its own, whose
             // value nothing uses (ticket P2-170).
-            Deconstruct(variables, context);
+            Deconstruct(deconstruction, context);
             return;
         }
 
