@@ -1,5 +1,5 @@
 # P2-165 An unedited `extern` method is Unknown on every pair that crosses a runtime
-Status: in-progress
+Status: done (PR #501)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-145, P2-146
