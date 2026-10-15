@@ -46,9 +46,20 @@ internal static class LocalValues
         ISimpleAssignmentOperation assignment when assignment.Target == reference => (true, assignment.Value),
         IAssignmentOperation assignment when assignment.Target == reference => (true, null),
         IArgumentOperation { Parameter.RefKind: not RefKind.None } or ITupleOperation => (true, null),
-        IVariableInitializerOperation { Parent: IVariableDeclaratorOperation { Symbol.RefKind: not RefKind.None } } => (true, null),
-        ISimpleAssignmentOperation { IsRef: true } or IConditionalOperation { IsRef: true } => (true, null),
-        _ => (false, null),
+        var parent => (TakesRef(parent), null),
+    };
+
+    /// <summary>
+    /// Whether <paramref name="parent"/> takes a <c>ref</c> to its operand, through which it can be written (ticket P2-201):
+    /// a <c>ref</c> local's initializer, a <c>ref</c> reassignment's value or a <c>ref</c> conditional's branch.
+    /// </summary>
+    private static bool TakesRef(IOperation? parent) => parent switch
+    {
+        // A C# variable initializer always belongs to a declarator.
+        IVariableInitializerOperation initializer => ((IVariableDeclaratorOperation)initializer.Parent!).Symbol.RefKind != RefKind.None,
+        ISimpleAssignmentOperation assignment => assignment.IsRef,
+        IConditionalOperation conditional => conditional.IsRef,
+        _ => false,
     };
 
     /// <summary>
