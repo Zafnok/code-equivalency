@@ -22,6 +22,7 @@ public sealed class SamplesFixtureTests
             ["bcl-overload-rebinding"] = ["Equivalent", "Unknown"],
             ["bcl-rebound-overloads"] = ["Equivalent", "Unknown"],
             ["callee-changed"] = ["Divergent", "Equivalent"],
+            ["callee-replacement"] = ["Equivalent", "Divergent", "Added"],
             ["callee-changed-invisible"] = ["Divergent", "Equivalent"],
             ["loop-to-linq"] = ["Equivalent"],
             ["loop-fusion"] = ["Equivalent"],

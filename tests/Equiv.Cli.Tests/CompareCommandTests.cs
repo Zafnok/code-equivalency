@@ -1968,6 +1968,64 @@ public sealed partial class CompareCommandTests
     }
 
     /// <summary>
+    /// Ticket P2-192 (ADR 0059): a legacy callee the config maps to another member is a callee pair nothing in the run proves,
+    /// so the result assumes it, lists it as unproven and names its counterpart. An entry no legacy body calls is listed
+    /// nowhere, and a modern body's call to a mapped identity is not mapped, since the map renames legacy calls only.
+    /// </summary>
+    [Fact]
+    public void MappedCallee_IsAnUnprovenAssumptionNamedWithItsCounterpart()
+    {
+        Dictionary<string, Result> results = AssumptionRun(
+            [
+                Caller("T::Current()", "Remoting::Set()", "Remoting::Get()", "Remoting::Set()", "T::Tax()") with
+                {
+                    NewBody = Caller("T::Current()", "Shim::Set()", "Shim::Get()", "Shim::Set()", "T::Tax()").NewBody,
+                },
+                Caller("T::Later()") with { NewBody = Caller("T::Later()", "Remoting::Get()").NewBody },
+                Caller("T::Tax()"),
+            ],
+            new Dictionary<string, Verdict>(StringComparer.Ordinal)
+            {
+                ["T::Current()"] = new Equivalent(ProofMethod.Bounded),
+                ["T::Later()"] = new Divergent(Counterexample()),
+                ["T::Tax()"] = new Equivalent(ProofMethod.Bounded),
+            },
+            config: """{ "callIdentityRenames": { "Remoting::Set()": "Shim::Set()", "Remoting::Get()": "Shim::Get()", "Remoting::Clear()": "Shim::Clear()" } }""");
+
+        Result current = results["T::Current()"];
+        Assert.Equal(["Remoting::Get()", "Remoting::Set()", "T::Tax()"], current.GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal(["Remoting::Get()", "Remoting::Set()"], current.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal(
+            [("Remoting::Get()", "Shim::Get()"), ("Remoting::Set()", "Shim::Set()")],
+            current.GetProperty<List<Dictionary<string, string>>>("callIdentitiesMapped").Select(static m => (m["legacy"], m["modern"])));
+        Assert.Equal("T::Current() is equivalent. Assumes callees equivalent; not proved for: Remoting::Get(), Remoting::Set().", current.Message.Text);
+        Assert.False(results["T::Later()"].TryGetProperty("callIdentitiesMapped", out List<Dictionary<string, string>>? _));
+        Assert.False(results["T::Later()"].TryGetProperty("assumedCallees", out List<string> _));
+    }
+
+    /// <summary>
+    /// Ticket P2-192 (ADR 0059): a mapped callee has no callee pair to prove a contract on, even when its legacy identity is
+    /// also a lowered pair of the run, so the contracts pass leaves it unproven.
+    /// </summary>
+    [Fact]
+    public void MappedCallee_IsNeverTakenByTheContractsPass()
+    {
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            ["T::C()"] = new Equivalent(ProofMethod.Bounded),
+            ["T::F()"] = new Divergent(Counterexample()),
+        });
+
+        (Dictionary<string, Result> results, _) = ContractRun(
+            [Caller("T::C()", "T::F()"), Caller("T::F()")],
+            backend,
+            config: """{ "callIdentityRenames": { "T::F()": "T::G()" } }""");
+
+        Assert.Empty(backend.ContractCalls);
+        Assert.Equal(["T::F()"], results["T::C()"].GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket M3-015: a congruent result assumes its callees like any other (ADR 0024 decision 1), and the assumption changes
     /// neither its verdict nor the exit code, which the callee's own Divergent sets (ADR 0019).
     /// </summary>
@@ -2069,27 +2127,31 @@ public sealed partial class CompareCommandTests
         Assert.False(proved["T::C()"].TryGetProperty("unprovenAssumptions", out List<string> _));
     }
 
-    private static (Dictionary<string, Result> Results, string StdErr) ContractRun(ImmutableArray<ProcedurePair> pairs, FakeBackend backend)
+    private static (Dictionary<string, Result> Results, string StdErr) ContractRun(ImmutableArray<ProcedurePair> pairs, FakeBackend backend, string? config = null)
     {
         using TempFile legacy = new();
         using TempFile modern = new();
+        using TempFile configFile = new();
+        File.WriteAllText(configFile.Path, config ?? "{}");
         InMemoryReportSink sink = new();
         string stderr = CaptureStdErr(() => CompareCommand.Run(
-            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { Mode = "thorough" },
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, configFile.Path, FailOn: null, DryRun: false) { Mode = "thorough" },
             [new FakeFrontend("csharp", _ => true, new MatchResult(pairs, [], [], []))], backend, sink, NullRunLog.Instance));
         return (sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal), stderr);
     }
 
     private static Dictionary<string, Result> AssumptionRun(
-        ImmutableArray<ProcedurePair> pairs, IReadOnlyDictionary<string, Verdict> verdicts, ImmutableArray<LoweringFailure> failures = default, Action<int>? onExit = null)
+        ImmutableArray<ProcedurePair> pairs, IReadOnlyDictionary<string, Verdict> verdicts, ImmutableArray<LoweringFailure> failures = default, Action<int>? onExit = null, string? config = null)
     {
         using TempFile legacy = new();
         using TempFile modern = new();
+        using TempFile configFile = new();
+        File.WriteAllText(configFile.Path, config ?? "{}");
         MatchResult matchResult = new MatchResult(pairs, [], [], []) with { LoweringFailures = failures.IsDefault ? [] : failures };
         InMemoryReportSink sink = new();
         int exitCode = ExitCodes.UsageError;
         CaptureStdErr(() => exitCode = CompareCommand.Run(
-            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, configFile.Path, FailOn: null, DryRun: false),
             [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(verdicts), sink, NullRunLog.Instance));
         onExit?.Invoke(exitCode);
         return sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal);

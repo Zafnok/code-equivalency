@@ -1,0 +1,420 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CalleeReplacement.Culture::Current() is equivalent. Assumes callees equivalent; not proved for: System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Culture.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 30,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CalleeReplacement.Culture::Current()",
+            "resultFingerprint/v1": "552dbff4e342eb8e1684c925abfb8d5989ca4dcb714ce79b9cef97484d8becba"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "assumedCallees": [
+              "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)"
+            ],
+            "unprovenAssumptions": [
+              "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)"
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)"
+            },
+            "callIdentitiesMapped": [
+              {
+                "legacy": "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)",
+                "modern": "Equiv.Samples.CalleeReplacement.Slots::GetData(string)"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CalleeReplacement.Culture::Enter(string) is equivalent. Assumes callees equivalent; not proved for: System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Culture.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 28,
+                  "endLine": 11,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CalleeReplacement.Culture::Enter(string)",
+            "resultFingerprint/v1": "83e98116155fc3f618b14ea67047e40696a04487cf9a5c0dcfdbae879cf47224"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "assumedCallees": [
+              "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)"
+            ],
+            "unprovenAssumptions": [
+              "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)"
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)"
+            },
+            "callIdentitiesMapped": [
+              {
+                "legacy": "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)",
+                "modern": "Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.CalleeReplacement.Culture::Leave() diverges: inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(threw \"System.Exception\" outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981852) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Culture.cs"
+                },
+                "region": {
+                  "startLine": 13,
+                  "startColumn": 28,
+                  "endLine": 13,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CalleeReplacement.Culture::Leave()",
+            "resultFingerprint/v1": "64b545275a66720ad0b5d4880d9c0d1c63975798bf6b32948d9ae35df5b38c4d"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(threw \"System.Exception\" outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981852) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(threw \"System.Exception\" outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 0) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+              },
+              "removedFailures": {
+                "outcome": "found",
+                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(threw \"System.Exception\" outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(returned outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 0) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(returned outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981852) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+              }
+            },
+            "divergenceKind": "result-changed",
+            "assumedCallees": [
+              "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)"
+            ],
+            "unprovenAssumptions": [
+              "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)"
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)"
+            },
+            "callIdentitiesMapped": [
+              {
+                "legacy": "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)",
+                "modern": "Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)"
+              }
+            ],
+            "reviewGroup": "calls:Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)|System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)"
+          }
+        },
+        {
+          "ruleId": "EQ004",
+          "kind": "informational",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CalleeReplacement.Slots::SetData(string,object) was added."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Culture.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 28,
+                  "endLine": 10,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)",
+            "resultFingerprint/v1": "d82925f3a415be89c538b3df3d22d90af00179cb99171b8395d20be0a16cc9d1"
+          },
+          "baselineState": "new"
+        },
+        {
+          "ruleId": "EQ004",
+          "kind": "informational",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CalleeReplacement.Slots::GetData(string) was added."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Culture.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 30,
+                  "endLine": 12,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CalleeReplacement.Slots::GetData(string)",
+            "resultFingerprint/v1": "f24f77dbd509ff53c614533dc3f1692ac3aedaffab22045936bf5059bf21c8ab"
+          },
+          "baselineState": "new"
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 3,
+            "modern": 5
+          },
+          "matchedPairs": 3,
+          "pairsWithoutOpaque": 3,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 3,
+          "changedPairsWithoutOpaque": 3,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 3
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)",
+                "callSites": 2
+              },
+              {
+                "member": "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)",
+                "callSites": 1
+              }
+            ],
+            "modern": []
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 0,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 28,
+          "modern": 30
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.CalleeReplacement",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.CalleeReplacement",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "calls:Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)|System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CalleeReplacement.Culture::Leave()"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

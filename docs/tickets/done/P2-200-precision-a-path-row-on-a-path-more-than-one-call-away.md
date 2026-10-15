@@ -115,7 +115,7 @@ Fields and get-only properties (P2-201). Device-path prefixes (P2-130's undeterm
   | Git Extensions | 43 | `GitModuleTestHelper::Dispose()` | EQ006 | EQ006 | EQ006 |
 
   The public `CreateLocal(GitModule,bool)` is Equivalent (`congruence`) at `main` and here, naming the private overload
-  above as unproven. The six left are P2-202 (filed by this ticket), after P2-201.
+  above as unproven. The six left are P2-207 (filed by this ticket as P2-202, renumbered because P2-184 took that id), after P2-201.
 - Criterion 2, path-row EQ006 (counted as P2-188 did: an EQ006 whose `reviewGroup` names a row with the `invalidPath`
   precondition) and all EQ006:
 
