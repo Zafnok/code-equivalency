@@ -1,4 +1,4 @@
-# P2-202 Precision bug: a path row fires on a valid path that a reassigned local, a private method's caller or a cached field holds
+# P2-208 Precision bug: a path row fires on a valid path that a reassigned local, a private method's caller or a cached field holds
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
