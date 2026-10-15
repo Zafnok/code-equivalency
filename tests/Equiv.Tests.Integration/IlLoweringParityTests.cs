@@ -46,6 +46,9 @@ public sealed class IlLoweringParityTests
         [$"business-layer/modern {SkusOver}"] = Lambda,
         [$"business-layer/legacy {CappedLineCount}"] = Lambda,
         [$"business-layer/modern {CappedLineCount}"] = Lambda,
+        [$"callee-replacement/legacy {Current}"] = AsThroughObjectSlot,
+        [$"callee-replacement/modern {Current}"] = AsThroughObjectSlot,
+        [$"callee-replacement/modern {SetData}"] = Lambda,
         [$"cleanup-modern-syntax/legacy {LengthOf}"] = NullableValue,
         [$"cleanup-modern-syntax/modern {LengthOf}"] = NullableValue,
         [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
@@ -86,6 +89,10 @@ public sealed class IlLoweringParityTests
 
     private const string CappedLineCount = "Equiv.Samples.BusinessLayer.OrderService::CappedLineCount(Equiv.Samples.BusinessLayer.Order,int)";
 
+    private const string Current = "Equiv.Samples.CalleeReplacement.Culture::Current()";
+
+    private const string SetData = "Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)";
+
     private const string Positives = "Equiv.Samples.CleanupModernSyntax.Tidy::Positives(System.Collections.Generic.List<int>)";
 
     private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
@@ -116,6 +123,13 @@ public sealed class IlLoweringParityTests
     /// calls <c>Nullable&lt;T&gt;</c>'s constructor, which the IL lowering names as it is.
     /// </summary>
     private const string NullableValue = "IOperation lowers a value converted to Nullable<T> as a cast map read; the IL calls Nullable<T>'s constructor";
+
+    /// <summary>
+    /// The IOperation lowering keeps <c>x as string ?? "c"</c> a string; the compiler's IL leaves the <c>isinst</c> result
+    /// and the constant in one stack slot the IL lowering types <c>object</c>, so the value is read back through the
+    /// <c>cast</c> maps from <c>string</c> to <c>object</c> and back, which the solver does not know cancel (ticket P2-192).
+    /// </summary>
+    private const string AsThroughObjectSlot = "IOperation keeps an 'as string ?? constant' a string; the IL holds it in an object stack slot, read back through two cast maps";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
