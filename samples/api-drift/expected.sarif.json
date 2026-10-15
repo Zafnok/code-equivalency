@@ -114,10 +114,11 @@
           }
         },
         {
-          "ruleId": "EQ002",
-          "level": "error",
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
           "message": {
-            "text": "Equiv.Samples.ApiDrift.Text::HasX(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace()). Equivalent when s != null."
+            "text": "Equiv.Samples.ApiDrift.Text::HasX(string) is unknown (Abstraction): the divergence depends on System.String::Contains(char). Equivalent when s != null."
           },
           "locations": [
             {
@@ -136,12 +137,28 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.ApiDrift.Text::HasX(string)",
-            "resultFingerprint/v1": "abef246bad2517d8d4dfe9581bb196daee2635833c121b11111ed2789f59385a"
+            "resultFingerprint/v1": "b1563c48f5938732e26a82b29df99a8ce0eff0150578f7aaea3b14ca87c4a36c"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 0.004,
           "properties": {
-            "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())",
+            "unknownReason": "abstraction",
+            "scope": "method",
+            "candidateCounterexample": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())",
+            "abstractions": [
+              {
+                "identity": "System.String::Contains(char)",
+                "side": "legacy"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              }
+            },
             "agreesWhen": {
               "smt": "(not (select in.null.System.String in.s))",
               "text": "s != null",
@@ -151,23 +168,10 @@
             "ladderTrace": [
               {
                 "rung": "bounded",
-                "outcome": "refuted",
-                "detail": "a divergence within 3 iterations"
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
               }
             ],
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool false outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())"
-              },
-              "removedFailures": {
-                "outcome": "none-proved"
-              },
-              "resultChanges": {
-                "outcome": "none-proved"
-              }
-            },
-            "divergenceKind": "new-failures-only",
             "equivalencesApplied": [
               "bcl.string-contains-char"
             ],
@@ -175,7 +179,162 @@
               "component": "callee",
               "identity": "System.Linq.Enumerable::Contains`1(System.Collections.Generic.IEnumerable<char>,char)<char>"
             },
-            "reviewGroup": "calls:System.String::Contains(char)"
+            "reviewGroup": "abstraction"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ApiDrift.Tally::Count(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Text.cs"
+                },
+                "region": {
+                  "startLine": 16,
+                  "startColumn": 20,
+                  "endLine": 16,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ApiDrift.Tally::Count(string)",
+            "resultFingerprint/v1": "af32b958b361a692c12329faf9afe2712b4f7f7a3e4929839a1e848add88447a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-split-one-char"
+            ],
+            "assumedCallees": [
+              "Equiv.Samples.ApiDrift.Tally::Add(int)"
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.String::Split(char[])"
+            }
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ApiDrift.Tally::Total(string) is unknown (Abstraction): the divergence depends on System.String::Split(char,System.StringSplitOptions). Equivalent when s == null."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Text.cs"
+                },
+                "region": {
+                  "startLine": 24,
+                  "startColumn": 20,
+                  "endLine": 24,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ApiDrift.Tally::Total(string)",
+            "resultFingerprint/v1": "446a8f2e18ecfa12d0cc8ab49ff398ec9a3ada53e873efec66e0a09b0d656047"
+          },
+          "baselineState": "new",
+          "rank": 0.004,
+          "properties": {
+            "unknownReason": "abstraction",
+            "scope": "method",
+            "candidateCounterexample": "inputs(sort \"System.String\" 0, map<sort \"Equiv.Samples.ApiDrift.Tally\", bv32> [sort \"Equiv.Samples.ApiDrift.Tally\" 0 -> bv32 1267392224, sort \"Equiv.Samples.ApiDrift.Tally\" 1 -> bv32 1163668355] default bv32 4294967293, map<sort \"string[]\", bv32> [] default bv32 2146959094, map<sort \"System.String\", bool> [] default bool false, map<sort \"string[]\", bool> [] default bool false, sort \"Equiv.Samples.ApiDrift.Tally\" 2) old(threw \"System.Exception\" outs(map<sort \"Equiv.Samples.ApiDrift.Tally\", bv32> [sort \"Equiv.Samples.ApiDrift.Tally\" 1 -> bv32 446939152, sort \"Equiv.Samples.ApiDrift.Tally\" 2 -> bv32 16384] default bv32 523371104) trace(\"System.String::Split(char,System.StringSplitOptions)\"(sort \"System.String\" 0, bv16 44, sort \"System.StringSplitOptions\" 890022063), \"Equiv.Samples.ApiDrift.Tally::Add(int)\"(sort \"Equiv.Samples.ApiDrift.Tally\" 2, bv32 2146959094) heap(\"field.Equiv.Samples.ApiDrift.Tally.seen\" map<sort \"Equiv.Samples.ApiDrift.Tally\", bv32> [sort \"Equiv.Samples.ApiDrift.Tally\" 0 -> bv32 1267392224, sort \"Equiv.Samples.ApiDrift.Tally\" 1 -> bv32 1163668355] default bv32 4294967293))) new(returned bv32 3 outs(map<sort \"Equiv.Samples.ApiDrift.Tally\", bv32> [sort \"Equiv.Samples.ApiDrift.Tally\" 0 -> bv32 335806477, sort \"Equiv.Samples.ApiDrift.Tally\" 2 -> bv32 0] default bv32 1082654978) trace(\"System.String::Split(char,System.StringSplitOptions)\"(sort \"System.String\" 0, bv16 44, sort \"System.StringSplitOptions\" 890022063), \"Equiv.Samples.ApiDrift.Tally::Add(int)\"(sort \"Equiv.Samples.ApiDrift.Tally\" 2, bv32 2146959095) heap(\"field.Equiv.Samples.ApiDrift.Tally.seen\" map<sort \"Equiv.Samples.ApiDrift.Tally\", bv32> [sort \"Equiv.Samples.ApiDrift.Tally\" 0 -> bv32 1267392224, sort \"Equiv.Samples.ApiDrift.Tally\" 1 -> bv32 1163668355] default bv32 4294967293)))",
+            "abstractions": [
+              {
+                "identity": "System.String::Split(char,System.StringSplitOptions)",
+                "side": "legacy"
+              },
+              {
+                "identity": "System.String::Split(char,System.StringSplitOptions)",
+                "side": "modern"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "agreesWhen": {
+              "smt": "(select in.null.System.String in.s)",
+              "text": "s == null",
+              "proposedBy": "harvested-predicates",
+              "proofMethod": "bounded"
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-split-one-char"
+            ],
+            "assumedCallees": [
+              "Equiv.Samples.ApiDrift.Tally::Add(int)"
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.String::Split(char[])"
+            },
+            "reviewGroup": "abstraction"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ApiDrift.Tally::Add(int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Text.cs"
+                },
+                "region": {
+                  "startLine": 32,
+                  "startColumn": 22,
+                  "endLine": 32,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ApiDrift.Tally::Add(int)",
+            "resultFingerprint/v1": "07e6d32f21a1e13bbd4d2eb873673a5ef495a52202cebd81d340b68e00092ff8"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
           }
         }
       ],
@@ -183,23 +342,23 @@
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 2,
-            "modern": 2
+            "legacy": 5,
+            "modern": 5
           },
-          "matchedPairs": 2,
-          "pairsWithoutOpaque": 2,
+          "matchedPairs": 5,
+          "pairsWithoutOpaque": 5,
           "pairsWholeBodyOpaque": 0,
-          "pairsCongruent": 0,
+          "pairsCongruent": 1,
           "projectsSkipped": {
             "legacy": 0,
             "modern": 0
           },
           "opaqueByReason": {},
-          "changedPairs": 2,
-          "changedPairsWithoutOpaque": 2,
+          "changedPairs": 4,
+          "changedPairsWithoutOpaque": 4,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 2
+            "": 4
           },
           "runtimeChangeCalls": {
             "callSites": {
@@ -219,32 +378,32 @@
             "legacy": [],
             "modern": [
               {
-                "member": "System.String::Contains(char)",
-                "callSites": 1
+                "member": "System.String::Split(char,System.StringSplitOptions)",
+                "callSites": 3
               },
               {
-                "member": "System.String::Split(char,System.StringSplitOptions)",
+                "member": "System.String::Contains(char)",
                 "callSites": 1
               }
             ]
           },
           "unknownByScope": {
             "line": 0,
-            "method": 0
+            "method": 2
           },
-          "divergentRefinement": {
-            "pairs": 1,
+          "failureRefinement": {
+            "pairs": 2,
             "milliseconds": 0
           },
           "agreesWhen": {
-            "pairs": 1,
-            "admitted": 1,
+            "pairs": 2,
+            "admitted": 2,
             "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 26,
-          "modern": 20
+          "legacy": 48,
+          "modern": 42
         },
         "projectsNotBuilt": {
           "legacy": [],
@@ -281,12 +440,13 @@
         },
         "reviewList": [
           {
-            "group": "calls:System.String::Contains(char)",
-            "ruleId": "EQ002",
-            "rank": 60.002,
-            "count": 1,
+            "group": "abstraction",
+            "ruleId": "EQ003",
+            "rank": 0.004,
+            "count": 2,
             "identities": [
-              "Equiv.Samples.ApiDrift.Text::HasX(string)"
+              "Equiv.Samples.ApiDrift.Text::HasX(string)",
+              "Equiv.Samples.ApiDrift.Tally::Total(string)"
             ]
           }
         ]

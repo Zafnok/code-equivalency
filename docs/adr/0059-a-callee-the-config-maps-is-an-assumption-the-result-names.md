@@ -61,7 +61,7 @@ whose legacy body calls `L`:
   does not move. Ticket P2-192's Notes give `duplicati-3124`'s results with the two `CallContext` entries and the hashing helper's
   entry declared: 8 of its 11 false EQ002 become EQ001, each naming its declared callee.
 - A replacement that is not one call for one call (`Foo()` for `FooAsync().GetAwaiter().GetResult()`) is another kind of
-  equivalence and is not declarable this way. Ticket P2-202 owns it.
+  equivalence and is not declarable this way. Ticket P2-205 owns it.
 - SARIF gains `properties.callIdentitiesMapped`, so the change that implements this carries `Release: minor`. VERIFICATION-MODEL sections 1 and 6 change in the
   PR that accepts this ADR. Ticket P2-192 implements it, with `samples/callee-replacement`.
 - Proposed as ADR 0058 and renumbered on merge, since `main` took that number first (ADR 0058 is the cross-runtime

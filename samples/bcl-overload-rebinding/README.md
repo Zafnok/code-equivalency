@@ -14,7 +14,10 @@ The shipped API-equivalence catalogue rewrites each legacy call to its modern me
 lists the entry applied in `properties.equivalencesApplied`. The rewrite happens before call sites are
 compared, so none of these is a rebound call (ADR 0042). `StripOther` trims `'/'` on the legacy side
 and `'.'` on the modern side: the entry still applies, and the two calls of `TrimEnd(char)` have
-different arguments, so the pair stays Divergent.
+different arguments. A rewritten call is closed exactly when a direct call of its modern member is
+(ADR 0041, ticket P2-184), so both calls are closed and the replay taints what the solver chose for
+them (ADR 0056). The sides differ only in those answers, so the pair is Unknown (`abstraction`),
+naming `String.TrimEnd(char)` on both sides (ticket P2-203 owns giving it back its Divergent).
 
 ## Expected verdicts
 
@@ -23,6 +26,6 @@ different arguments, so the pair stays Divergent.
 | `Paths.Strip(string)` | Equivalent | `bcl.string-trim-end-one-char` |
 | `Paths.Indent(string)` | Equivalent | `bcl.string-trim-start-no-chars` |
 | `Paths.Full(DirectoryInfo)` | Equivalent | `bcl.directory-info-full-name` |
-| `Paths.StripOther(string)` | Divergent | `bcl.string-trim-end-one-char` |
+| `Paths.StripOther(string)` | Unknown (`abstraction`; equivalent when `s == null`) | `bcl.string-trim-end-one-char` |
 
-Exit code: 1 (a new Divergent result).
+Exit code: 0 (Unknown does not fail the run without `--fail-on unknown`).

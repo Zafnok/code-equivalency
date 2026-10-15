@@ -656,9 +656,10 @@ Migration-specific normalisations (applied to both sides before matching):
   row's, fires on that argument; the start of a valid path (`Substring(0, n)`); a conditional
   expression both of whose branches are valid paths; and the result of one of the solution's own
   methods or property getters that no override can replace, when every value its body returns is a
-  valid path by these rules read in that body alone. Such a callee is followed one call deep, and the
-  caller's verdict assumes its pair equivalent (ADR 0019). The header of `runtime-changes.json` has the
-  exact shapes. A path that came from a caller or a field is not followed, and the row flags it.
+  valid path by these rules. Ticket P2-200 reads a returned call in that body the same way, up to four
+  calls deep, and a virtual call on a receiver of a sealed type through the override that type
+  declares; each caller's verdict assumes its callee's pair equivalent (ADR 0019). The header of
+  `runtime-changes.json` has the exact shapes. A path that came from a caller or a field is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
   where the reference assemblies have the type (.NET Core 3.0 and later) and

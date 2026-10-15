@@ -1,4 +1,4 @@
-# P2-202 Precision bug: a synchronous call replaced by its `Async` twin and `GetAwaiter().GetResult()` is Divergent
+# P2-205 Precision bug: a synchronous call replaced by its `Async` twin and `GetAwaiter().GetResult()` is Divergent
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

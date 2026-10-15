@@ -218,16 +218,54 @@ public sealed partial class SamplesEndToEndTests
             StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-184: both sides' <c>Contains</c> calls are closed (ADR 0041), so <c>HasX</c>'s difference on a null
+    /// <c>s</c> rests on what the solver chose for the legacy call, which the replay taints (ADR 0056). It is
+    /// Unknown(Abstraction), naming that callee, and equivalent when <c>s</c> is not null.
+    /// </summary>
     [Fact]
-    public void ApiDrift_PartsIsEquivalentAndHasXIsDivergentOnANullString()
+    public void ApiDrift_PartsIsEquivalentAndHasXIsAnAbstractionOnANullString()
     {
-        SarifLog log = RunSample("api-drift").Log;
-        Result parts = log.Runs[0].Results.Single(static r => r.Message.Text.Contains("::Parts(", StringComparison.Ordinal));
-        Result hasX = log.Runs[0].Results.Single(static r => r.Message.Text.Contains("::HasX(", StringComparison.Ordinal));
+        Result parts = Single("api-drift", "::Parts(");
+        Result hasX = Single("api-drift", "::HasX(");
 
         Assert.Equal("EQ001", parts.RuleId);
-        Assert.Equal("EQ002", hasX.RuleId);
-        Assert.Contains("System.NullReferenceException", hasX.Message.Text, StringComparison.Ordinal);
+        Assert.Equal("EQ003", hasX.RuleId);
+        Assert.Equal("abstraction", hasX.GetProperty<string>("unknownReason"));
+        Assert.Equal("System.String::Contains(char)", Assert.Single(hasX.GetProperty<List<Dictionary<string, string>>>("abstractions"))["identity"]);
+        Assert.Contains("Equivalent when s != null.", hasX.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-184 criterion 2: the unedited <c>Count</c> reads a field and calls a member after a rewritten one-char
+    /// <c>Split</c>, which is closed on both sides as a direct call of its modern member is, so neither side's call writes
+    /// the heap and it is Equivalent.
+    /// </summary>
+    [Fact]
+    public void ApiDrift_AFieldReadAndACallAfterARewrittenSplitAreEquivalent()
+    {
+        Result count = Single("api-drift", "::Count(");
+
+        Assert.Equal("EQ001", count.RuleId);
+        Assert.Equal(["bcl.string-split-one-char"], count.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-184 criterion 2: <c>Total</c>'s modern body adds one more after the same call, so it is not Equivalent.
+    /// The difference shows only past a closed call that can throw, so it is Unknown(Abstraction) naming <c>Split</c>
+    /// (ADR 0056).
+    /// </summary>
+    [Fact]
+    public void ApiDrift_BodiesThatDifferAfterARewrittenSplitAreNotEquivalent()
+    {
+        Result total = Single("api-drift", "::Total(");
+
+        Assert.Equal("EQ003", total.RuleId);
+        Assert.Equal("abstraction", total.GetProperty<string>("unknownReason"));
+        Assert.All(
+            total.GetProperty<List<Dictionary<string, string>>>("abstractions"),
+            static a => Assert.Equal("System.String::Split(char,System.StringSplitOptions)", a["identity"]));
+        Assert.Equal(["bcl.string-split-one-char"], total.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -247,13 +285,19 @@ public sealed partial class SamplesEndToEndTests
         Assert.False(result.TryGetProperty("reboundCalls", out string? _));
     }
 
-    /// <summary>Ticket P2-070 criterion 2: trimming a different character on the modern side stays Divergent.</summary>
+    /// <summary>
+    /// Ticket P2-070 criterion 2: trimming a different character on the modern side is not Equivalent. Since ticket
+    /// P2-184 the rewritten call is closed as the modern one is, so the two differ only in what the solver chose for a
+    /// closed member, which the replay taints (ADR 0056): Unknown(Abstraction), naming <c>TrimEnd(char)</c>.
+    /// </summary>
     [Fact]
-    public void BclOverloadRebinding_TrimmingAnotherCharacterIsDivergent()
+    public void BclOverloadRebinding_TrimmingAnotherCharacterIsNotEquivalent()
     {
         Result result = Single("bcl-overload-rebinding", "::StripOther(");
 
-        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("abstraction", result.GetProperty<string>("unknownReason"));
+        Assert.All(result.GetProperty<List<Dictionary<string, string>>>("abstractions"), static a => Assert.Equal("System.String::TrimEnd(char)", a["identity"]));
         Assert.Equal(["bcl.string-trim-end-one-char"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
     }
 
@@ -271,13 +315,22 @@ public sealed partial class SamplesEndToEndTests
         Assert.False(result.TryGetProperty("reboundCalls", out string? _));
     }
 
-    /// <summary>Ticket P2-137 criterion 3: the entry does not hide an edit. Trimming a character on the modern side stays Divergent.</summary>
+    /// <summary>
+    /// Ticket P2-137 criterion 3: the entry does not hide an edit. Trimming a character on the modern side is not
+    /// Equivalent. Since ticket P2-184 both calls are closed, so the two differ only in what the solver chose for closed
+    /// members, which the replay taints (ADR 0056): Unknown(Abstraction), naming both.
+    /// </summary>
     [Fact]
-    public void BclReboundOverloads_TrimmingACharacterOnTheModernSideIsDivergent()
+    public void BclReboundOverloads_TrimmingACharacterOnTheModernSideIsNotEquivalent()
     {
         Result result = Single("bcl-rebound-overloads", "::TrimTailOther(");
 
-        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("abstraction", result.GetProperty<string>("unknownReason"));
+        Assert.Equal(
+            ["System.String::TrimEnd()", "System.String::TrimEnd(char)"],
+            result.GetProperty<List<Dictionary<string, string>>>("abstractions").Select(static a => a["identity"]),
+            StringComparer.Ordinal);
         Assert.Equal(["bcl.string-trim-end-no-chars"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
     }
 

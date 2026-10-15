@@ -61,7 +61,7 @@ Base class library one-call pairs (P2-137's catalogue).
   sample has one. The MCP parity test runs both sides without it, and they agree.
 - Size guard: the three groups are two kinds. The `CallContext` shim (7) and the hashing helper (3) are one call for
   one call, which the map declares. The AWS SDK call (1) is one call against `Async` plus `GetAwaiter().GetResult()`,
-  another kind: filed as P2-202. The hashing helper is not an ADR 0047 forwarder in the run (the legacy calls stay
+  another kind: filed as P2-205. The hashing helper is not an ADR 0047 forwarder in the run (the legacy calls stay
   `Duplicati.Library.Utility.HashAlgorithmHelper::Create(string)`), so its entry maps the helper itself.
 - Criterion 3. `duplicati-3124`, compare mode quick, `--jobs 4`, on this branch (main `0e18ba4c` plus this change),
   `./tools/corpus/corpus.ps1 -Compare duplicati-3124 -Mode quick -Tag p2-192 -CompareArgs '--jobs', '4', '--config', <file>`:
@@ -85,7 +85,7 @@ Base class library one-call pairs (P2-137's catalogue).
   | 2 | `Utility::CalculateHash(Stream)` | EQ002 | EQ002 | `HashAlgorithmHelper::Create` |
   | 7 | `BackendManager::CalculateFileHash(Stream)` | EQ002 | EQ001 bounded | `HashAlgorithmHelper::Create` |
   | 16 | `BackendManager::GetFileHasherStream(...)` | EQ002 | EQ001 bounded | `HashAlgorithmHelper::Create` |
-  | 20 | `S3IAM::CanCreateUser(string,string)` | EQ002 | EQ002 | none (P2-202) |
+  | 20 | `S3IAM::CanCreateUser(string,string)` | EQ002 | EQ002 | none (P2-205) |
   | 12 | `HashCalculatingStream::.ctor(Stream,string)` (undetermined) | EQ002 | EQ001 bounded | `HashAlgorithmHelper::Create` |
   | 22 | `Metahash::.ctor(...)` (undetermined) | EQ002 | EQ001 bounded | `HashAlgorithmHelper::Create` |
 
@@ -100,6 +100,6 @@ Base class library one-call pairs (P2-137's catalogue).
     No ticket: Divergent is the right verdict for the procedure.
   - row 2: the legacy side passes the `public static` property `Utility.HashAlgorithm`, the modern side the new
     `private static` `Utility.BlockHashAlgorithm`, and both getters are `=> "SHA256"`. ADR 0045 reads neither (an
-    accessor; the legacy one is public). Filed as P2-203.
-  - row 20: one call against `Async` plus `GetAwaiter().GetResult()`, P2-202.
+    accessor; the legacy one is public). Filed as P2-206.
+  - row 20: one call against `Async` plus `GetAwaiter().GetResult()`, P2-205.
   Totals are not compared: the before run predates P2-188 and P2-190 on `main`.
