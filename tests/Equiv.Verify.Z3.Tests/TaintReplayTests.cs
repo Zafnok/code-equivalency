@@ -209,7 +209,7 @@ public sealed class TaintReplayTests
         Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
         Assert.Equal([new Abstraction(Codebase.Legacy, concat, Span: null), new Abstraction(Codebase.Modern, concat, Span: null)], unknown.Abstractions);
         Assert.Equal(new CallIdentity("System.IO.Path::Combine(string,string)", RuntimeChanged: true), unknown.RuntimeChangedCall);
-        Assert.EndsWith("; the two sides first differ at runtime-changed call System.IO.Path::Combine(string,string)", unknown.Detail, StringComparison.Ordinal);
+        Assert.Equal("the divergence depends on op:System.String::Concat(string,string)", unknown.Detail);
     }
 
     /// <summary>Ticket P2-195: a pure function the pair makes side-specific (ADR 0040) is named as a runtime-changed call is.</summary>

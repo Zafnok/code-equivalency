@@ -73,11 +73,11 @@
           kind: open,
           level: none,
           message: {
-            text: Samples.Math::Add(int32,int32) is unknown (Abstraction): the divergence depends on System.String::Concat(string,string); the two sides first differ at runtime-changed call System.IO.Path::Combine(string,string)
+            text: Samples.Math::Add(int32,int32) is unknown (Abstraction): the divergence depends on System.String::Concat(string,string)
           },
           partialFingerprints: {
             procedureIdentity/v1: Samples.Math::Add(int32,int32),
-            resultFingerprint/v1: ea9dcdf34c007bea96236c1c2df39cf33b8d1066e0855a818abbbbe850e554b8
+            resultFingerprint/v1: 46eac0c610cf18feab04ad411ac857a546a08348cc313ddd471f976e19916f0f
           },
           baselineState: new,
           rank: 0.002,

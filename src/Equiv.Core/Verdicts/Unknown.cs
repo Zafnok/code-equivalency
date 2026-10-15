@@ -64,11 +64,12 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     /// <summary>
     /// A divergence the replay found only in tainted observables (ADR 0026): <see cref="UnknownReason.Abstraction"/>,
     /// whose detail names the tainting identities, with <paramref name="candidate"/> and <paramref name="abstractions"/>
-    /// attached, and each abstraction with a span as a cause. A <paramref name="runtimeChangedCall"/> is named after them
-    /// (ticket P2-195).
+    /// attached, and each abstraction with a span as a cause, and <paramref name="runtimeChangedCall"/> as
+    /// <see cref="RuntimeChangedCall"/> (ticket P2-195), which the detail leaves out: the detail is part of the result's
+    /// fingerprint.
     /// </summary>
     public static Unknown DependingOn(Counterexample candidate, ImmutableArray<Abstraction> abstractions, CallIdentity? runtimeChangedCall = null) =>
-        new(UnknownReason.Abstraction, $"the divergence depends on {string.Join(", ", abstractions.Select(static a => a.Identity.Value).Distinct(StringComparer.Ordinal))}{FirstDifference(runtimeChangedCall)}")
+        new(UnknownReason.Abstraction, $"the divergence depends on {string.Join(", ", abstractions.Select(static a => a.Identity.Value).Distinct(StringComparer.Ordinal))}")
         {
             Candidate = candidate,
             Abstractions = abstractions,
@@ -91,7 +92,4 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
 
     public override int GetHashCode() =>
         HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, HashCode.Combine(Candidate, IrEquality.Hash(Abstractions), RuntimeChangedCall, FailureRefinement, Conditions));
-
-    private static string FirstDifference(CallIdentity? runtimeChangedCall) =>
-        runtimeChangedCall is null ? string.Empty : $"; the two sides first differ at runtime-changed call {runtimeChangedCall.Value}";
 }

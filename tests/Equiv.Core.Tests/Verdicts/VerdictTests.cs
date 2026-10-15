@@ -235,8 +235,8 @@ public sealed class VerdictTests
     }
 
     /// <summary>
-    /// Ticket P2-195: a candidate whose two sides first differ at a runtime-changed call names that call, in the property
-    /// and in the detail, beside the shared functions the divergence depends on.
+    /// Ticket P2-195: a candidate whose two sides first differ at a runtime-changed call names that call beside the shared
+    /// functions the divergence depends on. The detail, which the result's fingerprint hashes, does not change.
     /// </summary>
     [Fact]
     public void DependingOnNamesTheRuntimeChangedCallTheSidesFirstDifferAt()
@@ -250,7 +250,7 @@ public sealed class VerdictTests
 
         Assert.Same(combine, unknown.RuntimeChangedCall);
         Assert.Equal(
-            "the divergence depends on System.String::Concat(string,string); the two sides first differ at runtime-changed call System.IO.Path::Combine(string,string)",
+            "the divergence depends on System.String::Concat(string,string)",
             unknown.Detail);
     }
 

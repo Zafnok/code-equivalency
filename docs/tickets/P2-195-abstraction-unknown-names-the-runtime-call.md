@@ -39,8 +39,10 @@ Deciding the 348 (P2-181 decided what its rules could).
 ## Notes
 - Filed 2026-10-14 by P2-181 (criterion 1).
 - Decision: where the member goes -> `properties.runtimeChangedCall`, beside `abstractions`, a string: the
-  identity of the call (as `notCongruent.identity` and an `abstractions` entry write one), also named in the
-  message's detail. Alternatives: an entry of `abstractions` (that list is what ADR 0053 refines on, and a
+  identity of the call (as `notCongruent.identity` and an `abstractions` entry write one), and not in the
+  message. The first commit also appended it to the Unknown's detail; the OpenRA rerun showed that moved
+  `resultFingerprint/v1` (which hashes the detail) on every result it named, which would turn a baselined
+  Unknown `new`, so it was taken out again. Alternatives: an entry of `abstractions` (that list is what ADR 0053 refines on, and a
   runtime-changed member is never interpretable, so it would stop refinement and change verdicts: the size
   guard), an object with both sides' answers (the candidate's model already holds the inputs that give them).
   Rule: 4.
