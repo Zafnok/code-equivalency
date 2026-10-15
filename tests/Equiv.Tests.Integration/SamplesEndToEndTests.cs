@@ -843,6 +843,42 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-163 criterion 1: a read of <c>TreeNodeCollection</c>'s indexer on a .NET 5 to .NET 6 pair cannot reach
+    /// the null-argument change, which only the setter has, so the pair is congruent.
+    /// </summary>
+    [Fact]
+    public void RuntimeRowIndexerGetter_AReadOfTheIndexerIsCongruent()
+    {
+        Result result = Assert.Single(RunSample("runtime-row-indexer-getter").Log.Runs[0].Results);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>Ticket P2-163 criterion 2: the same method assigning <c>null</c> through the indexer is EQ006 under the null-argument change.</summary>
+    [Fact]
+    public void RuntimeRowIndexerGetter_ANullAssignmentThroughTheIndexerIsEQ006()
+    {
+        string variantDir = Path.Combine(SamplesRoot, "runtime-row-indexer-getter", "null-assignment");
+        string legacy = Directory.GetFiles(Path.Combine(variantDir, "legacy"), "*.sln").Single();
+        string modern = Directory.GetFiles(Path.Combine(variantDir, "modern"), "*.slnx").Single();
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-163-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, .. Pinned]));
+
+            Assert.Equal(ExitCodes.Divergent, exitCode);
+            Result result = Assert.Single(SarifLog.Load(outPath).Runs[0].Results);
+            Assert.Equal("EQ006", result.RuleId);
+            Assert.Contains("between net5.0 and net6.0 (Assigning a null node throws ArgumentNullException", result.Message.Text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
+    }
+
+    /// <summary>
     /// Ticket P2-075 criterion 1: <c>s.IndexOf("x.exe", StringComparison.OrdinalIgnoreCase)</c> on a .NET Framework 4.8 to .NET 10
     /// pair is Equivalent, because the ICU row does not apply to an ordinal comparison; the same call with
     /// <c>CurrentCultureIgnoreCase</c> stays EQ006.

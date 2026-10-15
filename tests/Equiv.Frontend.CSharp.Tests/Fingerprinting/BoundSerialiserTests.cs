@@ -87,6 +87,28 @@ public sealed class BoundSerialiserTests
         Assert.Equal(expected, Fingerprint(Compile(member), Runtimes.Between(legacy, modern)).RuntimeSensitive);
 
     /// <summary>
+    /// Ticket P2-163: a property's row applies only where the reference runs the accessor it names. <c>UriBuilder</c>'s
+    /// row names <c>set_Query(</c> and <c>Calendar</c>'s names <c>get_TwoDigitYearMax(</c>: a read runs only the getter,
+    /// the target of an assignment, an initializer or a deconstruction only the setter, and a compound assignment, a
+    /// <c>??=</c> and an increment both. A list pattern's <c>Count</c> and indexer, which no row names, flag nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("string M(System.UriBuilder b) => b.Query;", false)]
+    [InlineData("void M(System.UriBuilder b) => b.Query = \"x\";", true)]
+    [InlineData("System.UriBuilder M() => new System.UriBuilder { Query = \"x\" };", true)]
+    [InlineData("void M(System.UriBuilder b) => (b.Query, b.Port) = (\"x\", 1);", true)]
+    [InlineData("void M(System.UriBuilder b) => b.Query += \"x\";", true)]
+    [InlineData("void M(System.UriBuilder b) => b.Query ??= \"x\";", true)]
+    [InlineData("int M(System.Globalization.Calendar c) => c.TwoDigitYearMax;", true)]
+    [InlineData("void M(System.Globalization.Calendar c) => c.TwoDigitYearMax = 2029;", false)]
+    [InlineData("void M(System.Globalization.Calendar c) => (c.TwoDigitYearMax, _) = (2029, 1);", false)]
+    [InlineData("void M(System.Globalization.Calendar c) => c.TwoDigitYearMax++;", true)]
+    [InlineData("void M(System.Globalization.Calendar c) => c.TwoDigitYearMax += 1;", true)]
+    [InlineData("bool M(System.Collections.Generic.List<int> l) => l is [1];", false)]
+    public void APropertyRowAppliesOnlyWhereItsAccessorRuns(string member, bool expected) =>
+        Assert.Equal(expected, Fingerprint(Compile(member), Runtimes.Between("net48", "net10.0")).RuntimeSensitive);
+
+    /// <summary>
     /// Ticket P2-116 criterion 2: a string constant that is not well-formed UTF-16 (the regex source generator writes
     /// character sets that way) is fingerprinted code unit by code unit, so the same constant has the same fingerprint
     /// and a constant that differs only in a lone surrogate, or holds the pair where the other holds two lone ones, has

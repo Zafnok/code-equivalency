@@ -643,6 +643,10 @@ Migration-specific normalisations (applied to both sides before matching):
   change cannot reach it. An unedited body all of whose calls their arguments keep from every row's
   change is congruent; one with a call that can reach a row stays out of congruence, and the solver
   gives that call's member a function per side as before.
+  A row that names one accessor of a property or indexer (`get_Item(`, `set_Item(`) flags only a reference that runs
+  that accessor, in the bound fingerprint as in the lowered body (ticket P2-163): a read runs the getter; the target of
+  an assignment, an object initializer or a deconstruction runs the setter; a compound assignment, a `??=` and an
+  increment run both.
   An operand that is not a constant still does not meet `invalidPath` when the method that makes the
   call shows it to be a valid path (ticket P2-074). The table's `validPaths` lists say how: the
   operand is the result of one of its `sources` (`Assembly.Location`, `AppContext.BaseDirectory`,
