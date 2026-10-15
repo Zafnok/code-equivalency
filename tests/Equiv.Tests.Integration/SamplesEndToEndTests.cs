@@ -819,6 +819,24 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
     }
 
+    /// <summary>
+    /// Ticket P2-164 criterion 1: an interpolated string appended to a <c>StringBuilder</c>, which binds <c>Append(string)</c>
+    /// on .NET 5 and the interpolated string handler on .NET 6, is no EQ002: each method is Equivalent, proved and not
+    /// congruent, since the two bound trees differ.
+    /// </summary>
+    [Fact]
+    public void AppendInterpolatedString_EachMethodIsEquivalentAcrossNet5AndNet6()
+    {
+        IList<Result> results = RunSample("append-interpolated-string").Log.Runs[0].Results;
+
+        Assert.Equal(3, results.Count);
+        Assert.All(results, static r =>
+        {
+            Assert.Equal("EQ001", r.RuleId);
+            Assert.NotEqual("congruence", r.GetProperty<string>("proofMethod"), StringComparer.Ordinal);
+        });
+    }
+
     /// <summary>Ticket P2-114 criterion 2: the same method with <c>ReadAsync</c> in place of <c>Read</c> stays EQ006.</summary>
     [Fact]
     public void RuntimeRowSyncPosition_AnAsyncReadKeepsTheRow()
