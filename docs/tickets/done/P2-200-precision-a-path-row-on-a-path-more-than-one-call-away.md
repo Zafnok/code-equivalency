@@ -1,5 +1,5 @@
 # P2-200 Precision bug: a path row fires on a valid path more than one call away, or validated by a partial validator
-Status: in-progress
+Status: done (PR #500)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-188
