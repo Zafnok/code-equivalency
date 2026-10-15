@@ -1310,7 +1310,9 @@ They come before any other open ticket, in this order:
    cannot be reached: 680 of the migrations' 1,222 Unknowns and 319 of their 411 Divergent.
 2. Divergent precision, the EQ006 rows' reach (37 of the 68 false positives): P2-188 (M, 13, valid
    paths P2-074 does not follow), P2-190 (M, 13, rows that match calls their change does not affect),
-   P2-189 (S, 11, rows with no precondition on a constant argument).
+   P2-189 (S, 11, rows with no precondition on a constant argument). P2-188 cleared 4 of its 16 and
+   left two tickets: P2-201 (M, 4, a field or get-only property holds the path) and P2-200 (M, 8, a
+   path more than one call away, from a private method's only caller, or past `Path.Combine` only).
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
    migrations.
 4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same.

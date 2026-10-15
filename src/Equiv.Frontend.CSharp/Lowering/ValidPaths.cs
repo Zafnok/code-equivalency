@@ -13,9 +13,12 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// <summary>
 /// Which operands of a call are paths that .NET Framework's validation accepts, by what the method that makes the call
 /// does with them (ticket P2-074; the header of <c>runtime-changes.json</c> has the rules). An operand is one when it is
-/// the result of a valid-path source, or of a transform of valid paths; a local variable that only ever holds such
-/// results; or a parameter or local variable that nothing assigns, used where a validating guard has passed on it. A
-/// path from a caller or a field is not followed.
+/// the result of a valid-path source or validator, of a transform of valid paths or of a valid path's start; a
+/// conditional expression both of whose branches are one; a local variable that only ever holds such results; or a
+/// parameter or local variable that nothing assigns, used where a validating guard has passed on it. A call to one of
+/// the solution's own methods or properties that no override can replace yields one when every value its body returns is
+/// one by these rules, read in that body without following its own calls further (ticket P2-188). A path from a caller
+/// or a field is not followed.
 /// </summary>
 internal static class ValidPaths
 {
@@ -26,27 +29,76 @@ internal static class ValidPaths
     /// operation of a control-flow graph does not.
     /// </summary>
     public static ImmutableArray<CallArgument> Of(IOperation site, IMethodSymbol method, Compilation compilation) =>
-        CallArguments.Of(compilation.GetSemanticModel(site.Syntax.SyntaxTree).GetOperation(site.Syntax), method, static value => IsValid(value, []));
+        CallArguments.Of(compilation.GetSemanticModel(site.Syntax.SyntaxTree).GetOperation(site.Syntax), method, value => IsValid(value, [], compilation));
 
-    /// <summary>Whether <paramref name="value"/> is a valid path; <paramref name="seen"/> are the locals whose assignments are being followed.</summary>
-    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen) => value switch
+    /// <summary>
+    /// Whether <paramref name="value"/> is a valid path; <paramref name="seen"/> are the locals whose assignments are being
+    /// followed, and <paramref name="compilation"/>, when it is not null, is the one a solution callee's body is read from.
+    /// </summary>
+    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, Compilation? compilation) => value switch
     {
         // A property that overrides only the setter has no getter of its own to be a source (ticket P2-158).
-        IPropertyReferenceOperation property => property.Property.GetMethod is { } getter && RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), []),
+        IPropertyReferenceOperation property => property.Property.GetMethod is { } getter
+            && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), []) || ReturnsOnlyValidPaths(getter, compilation)),
         IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
-            Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, seen))),
-        ILocalReferenceOperation local => IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen),
+                Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, seen, compilation)))
+            || ReturnsOnlyValidPaths(call.TargetMethod, compilation),
+
+        // Only an expression is a value, and a conditional expression has both branches.
+        IConditionalOperation conditional => IsValid(conditional.WhenTrue, seen, compilation) && IsValid(conditional.WhenFalse!, seen, compilation),
+        ILocalReferenceOperation local => IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, compilation),
         IParameterReferenceOperation parameter => IsGuarded(parameter.Parameter, value),
         _ => false,
     };
 
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
 
+    /// <summary>
+    /// Whether every value that the body of <paramref name="method"/> returns is a valid path, when the method is one of the
+    /// solution's own methods or property getters and no override can replace it (ticket P2-188). The values are read by
+    /// the rules in that body alone, so its own calls of the solution's methods are not followed: <paramref name="compilation"/>
+    /// is null there. False for a body that returns nothing, an auto-property's getter among them.
+    /// </summary>
+    private static bool ReturnsOnlyValidPaths(IMethodSymbol method, Compilation? compilation) =>
+        compilation is not null
+        && method is
+        {
+            MethodKind: MethodKind.Ordinary or MethodKind.PropertyGet,
+            IsVirtual: false,
+            IsAbstract: false,
+            IsOverride: false,
+            DeclaringSyntaxReferences: [SyntaxReference declaration],
+        }
+        && Body(declaration, compilation) is { } body
+        && Returned(body).ToImmutableArray() is [_, ..] returned
+        && returned.All(static value => IsValid(value, [], compilation: null));
+
+    /// <summary>
+    /// The operation of the member <paramref name="declaration"/> declares, read with the compilation whose source holds it:
+    /// <paramref name="compilation"/> itself or a project it references as source. Null for a member with no body.
+    /// </summary>
+    private static IOperation? Body(SyntaxReference declaration, Compilation compilation) =>
+        compilation.References.OfType<CompilationReference>().Select(static reference => reference.Compilation).Prepend(compilation)
+            .Where(owner => owner.ContainsSyntaxTree(declaration.SyntaxTree))
+            .Select(owner => owner.GetSemanticModel(declaration.SyntaxTree).GetOperation(declaration.GetSyntax()))
+            .FirstOrDefault();
+
+    /// <summary>
+    /// The values the <c>return</c> statements of <paramref name="operation"/> return, leaving out those of the lambdas and
+    /// local functions in it. A string-valued body, the only one a path is read from, has a value at each.
+    /// </summary>
+    private static IEnumerable<IOperation> Returned(IOperation operation) => operation switch
+    {
+        IReturnOperation returned => [returned.ReturnedValue!],
+        IAnonymousFunctionOperation or ILocalFunctionOperation => [],
+        _ => operation.ChildOperations.SelectMany(Returned),
+    };
+
     /// <summary>Whether <paramref name="local"/> is declared with a valid path and every later assignment gives it one.</summary>
-    private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen) =>
+    private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen, Compilation? compilation) =>
         !seen.Contains(local)
         && LocalValues.Initializer(local, root) is { } initial
-        && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local)));
+        && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local), compilation));
 
     /// <summary>
     /// Whether a validating guard has returned true for <paramref name="symbol"/> wherever <paramref name="use"/> runs.

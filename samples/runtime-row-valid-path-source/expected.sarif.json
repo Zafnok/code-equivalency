@@ -173,46 +173,167 @@
             },
             "reviewGroup": "runtime-change:System.IO.Path::Combine(string,string)"
           }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string) is unknown (Abstraction): the divergence depends on get:System.String::get_Length(), System.String::get_Chars(int), System.String::Substring(int,int)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Paths.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 30,
+                  "endLine": 11,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string)",
+            "resultFingerprint/v1": "bb31c28ff68deca5e4d1731cd9b0bb78d681e01646d7d3cd1e45ff805ff11864"
+          },
+          "baselineState": "new",
+          "rank": 0.002,
+          "properties": {
+            "unknownReason": "abstraction",
+            "scope": "method",
+            "candidateCounterexample": "inputs(sort \"System.String\" 0, map<sort \"System.IO.Path\", bv16> [sort \"System.IO.Path\" 1 -> bv16 8386] default bv16 2181, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs(map<sort \"System.IO.Path\", bv16> [sort \"System.IO.Path\" 1 -> bv16 22833, sort \"System.IO.Path\" 2 -> bv16 7168] default bv16 0) trace(\"System.IO.Path::GetFullPath(string)\"(sort \"System.String\" 0) heap(\"field.System.IO.Path.DirectorySeparatorChar\" map<sort \"System.IO.Path\", bv16> [sort \"System.IO.Path\" 1 -> bv16 8386] default bv16 2181), \"System.String::get_Chars(int)\"(sort \"System.String\" 1, bv32 32767), \"System.String::Substring(int,int)\"(sort \"System.String\" 1, bv32 0, bv32 32767))) new(threw \"System.Exception\" outs(map<sort \"System.IO.Path\", bv16> [sort \"System.IO.Path\" 2 -> bv16 24717, sort \"System.IO.Path\" 3 -> bv16 21840] default bv16 0) trace(\"System.IO.Path::GetFullPath(string)\"(sort \"System.String\" 0) heap(\"field.System.IO.Path.DirectorySeparatorChar\" map<sort \"System.IO.Path\", bv16> [sort \"System.IO.Path\" 1 -> bv16 8386] default bv16 2181), \"System.String::get_Chars(int)\"(sort \"System.String\" 3, bv32 1073741823), \"System.String::Substring(int,int)\"(sort \"System.String\" 3, bv32 0, bv32 1073741823)))",
+            "abstractions": [
+              {
+                "identity": "get:System.String::get_Length()",
+                "side": "legacy"
+              },
+              {
+                "identity": "System.String::get_Chars(int)",
+                "side": "legacy"
+              },
+              {
+                "identity": "System.String::Substring(int,int)",
+                "side": "legacy"
+              },
+              {
+                "identity": "get:System.String::get_Length()",
+                "side": "modern"
+              },
+              {
+                "identity": "System.String::get_Chars(int)",
+                "side": "modern"
+              },
+              {
+                "identity": "System.String::Substring(int,int)",
+                "side": "modern"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              }
+            ],
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.IO.Path::GetFullPath(string)"
+            },
+            "reviewGroup": "abstraction"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Create(string) is equivalent. Assumes callees equivalent; not proved for: Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Paths.cs"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 28,
+                  "endLine": 17,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Create(string)",
+            "resultFingerprint/v1": "51c39be00ce6d254f41ad21c245952ed4ae68a94f364a48b9d5a35c85c00f822"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string)"
+            ],
+            "unprovenAssumptions": [
+              "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string)"
+            ]
+          }
         }
       ],
       "columnKind": "utf16CodeUnits",
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 3,
-            "modern": 3
+            "legacy": 5,
+            "modern": 5
           },
-          "matchedPairs": 3,
-          "pairsWithoutOpaque": 3,
+          "matchedPairs": 5,
+          "pairsWithoutOpaque": 5,
           "pairsWholeBodyOpaque": 0,
-          "pairsCongruent": 2,
+          "pairsCongruent": 3,
           "projectsSkipped": {
             "legacy": 0,
             "modern": 0
           },
           "opaqueByReason": {},
-          "changedPairs": 1,
-          "changedPairsWithoutOpaque": 1,
+          "changedPairs": 2,
+          "changedPairsWithoutOpaque": 2,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 1
+            "": 2
           },
           "runtimeChangeCalls": {
             "callSites": {
-              "legacy": 3,
-              "modern": 3
+              "legacy": 5,
+              "modern": 5
             },
             "distinctMembers": {
-              "legacy": 3,
-              "modern": 3
+              "legacy": 5,
+              "modern": 5
             },
             "pairsWithAny": {
-              "legacy": 3,
-              "modern": 3
+              "legacy": 5,
+              "modern": 5
             }
           },
           "externalCallees": {
             "legacy": [
+              {
+                "member": "System.IO.Directory::CreateDirectory(string)",
+                "callSites": 1
+              },
               {
                 "member": "System.IO.File::Exists(string)",
                 "callSites": 1
@@ -226,6 +347,10 @@
                 "callSites": 1
               },
               {
+                "member": "System.IO.Path::GetFullPath(string)",
+                "callSites": 1
+              },
+              {
                 "member": "System.IO.StreamReader::.ctor(string)",
                 "callSites": 1
               },
@@ -235,6 +360,14 @@
               },
               {
                 "member": "System.Reflection.Assembly::get_Location()",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::Substring(int,int)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::get_Chars(int)",
                 "callSites": 1
               },
               {
@@ -244,6 +377,10 @@
             ],
             "modern": [
               {
+                "member": "System.IO.Directory::CreateDirectory(string)",
+                "callSites": 1
+              },
+              {
                 "member": "System.IO.File::Exists(string)",
                 "callSites": 1
               },
@@ -256,6 +393,10 @@
                 "callSites": 1
               },
               {
+                "member": "System.IO.Path::GetFullPath(string)",
+                "callSites": 1
+              },
+              {
                 "member": "System.IO.StreamReader::.ctor(string)",
                 "callSites": 1
               },
@@ -265,6 +406,14 @@
               },
               {
                 "member": "System.Reflection.Assembly::get_Location()",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::Substring(int,int)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::get_Chars(int)",
                 "callSites": 1
               },
               {
@@ -275,7 +424,11 @@
           },
           "unknownByScope": {
             "line": 0,
-            "method": 0
+            "method": 1
+          },
+          "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           },
           "divergentRefinement": {
             "pairs": 1,
@@ -283,8 +436,8 @@
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 26,
-          "modern": 21
+          "legacy": 32,
+          "modern": 27
         },
         "projectsNotBuilt": {
           "legacy": [],
@@ -327,6 +480,15 @@
             "count": 1,
             "identities": [
               "Equiv.Samples.RuntimeRowValidPathSource.Paths::Under(string)"
+            ]
+          },
+          {
+            "group": "abstraction",
+            "ruleId": "EQ003",
+            "rank": 0.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string)"
             ]
           }
         ]

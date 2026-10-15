@@ -55,15 +55,27 @@ public sealed class RuntimeChangeTable
 
     /// <summary>
     /// Whether the result of a call to <paramref name="member"/> with <paramref name="arguments"/> is a path .NET Framework's
-    /// validation accepts (ticket P2-074): the member is one of the table's valid-path sources, or it is one of its
-    /// transforms and the call's arguments cannot reach <see cref="RuntimeChangePrecondition.InvalidPath"/>.
+    /// validation accepts (ticket P2-074): the member is one of the table's valid-path sources or validators (ticket
+    /// P2-188), whatever its arguments; one of its transforms, and the call's arguments cannot reach
+    /// <see cref="RuntimeChangePrecondition.InvalidPath"/>; or one of its prefixes, called on a valid path with the constant
+    /// 0 as its <c>startIndex</c> (ticket P2-188).
     /// </summary>
     public bool YieldsValidPath(CallIdentity member, ImmutableArray<CallArgument> arguments)
     {
         ArgumentNullException.ThrowIfNull(member);
         return Lists(validPaths.Sources, member)
+            || Lists(validPaths.Validators, member)
+            || (Lists(validPaths.Prefixes, member) && IsStartOfValidPath(arguments))
             || (Lists(validPaths.Transforms, member) && !RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, arguments));
     }
+
+    /// <summary>The members that return their argument only once .NET Framework's validation has accepted it (ticket P2-188).</summary>
+    internal ImmutableArray<string> PathValidators => validPaths.Validators;
+
+    /// <summary>A call on a valid path whose <c>startIndex</c> is the constant 0, so it returns the path's start.</summary>
+    private static bool IsStartOfValidPath(ImmutableArray<CallArgument> arguments) =>
+        arguments.Any(static a => string.Equals(a.Parameter, CallArgument.Receiver, StringComparison.Ordinal) && a.ValidPath)
+        && arguments.Any(static a => string.Equals(a.Parameter, "startIndex", StringComparison.Ordinal) && a.IsConstant && a.Value is 0);
 
     /// <summary>Whether <paramref name="member"/> is one of the table's validating guards: it returns true only for a path .NET Framework's validation accepts (ticket P2-074).</summary>
     public bool ValidatesPath(CallIdentity member)
@@ -153,8 +165,9 @@ public sealed class RuntimeChangeTable
 
     /// <summary>
     /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c>, <c>rows</c> and, optionally,
-    /// <c>validPaths</c> (its <c>sources</c>, <c>transforms</c> and <c>guards</c>, each a list of member prefixes; ticket
-    /// P2-074) and <c>fieldValues</c> (a field's identity to its documented string value; ticket P2-189). A row whose
+    /// <c>validPaths</c> (its <c>sources</c>, <c>validators</c>, <c>transforms</c>, <c>prefixes</c> and <c>guards</c>, each a
+    /// list of member prefixes; tickets P2-074 and P2-188) and <c>fieldValues</c> (a field's identity to its documented
+    /// string value; ticket P2-189). A row whose
     /// <c>source</c> is missing, or is not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), or whose
     /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
     /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c>, a <c>precondition</c>
@@ -200,8 +213,8 @@ public sealed class RuntimeChangeTable
 
     private static ValidPaths ParseValidPaths(JsonElement root) =>
         root.TryGetProperty("validPaths", out JsonElement lists)
-            ? new ValidPaths(Members(lists, "sources"), Members(lists, "transforms"), Members(lists, "guards"))
-            : new ValidPaths([], [], []);
+            ? new ValidPaths(Members(lists, "sources"), Members(lists, "validators"), Members(lists, "transforms"), Members(lists, "prefixes"), Members(lists, "guards"))
+            : new ValidPaths([], [], [], [], []);
 
     private static ImmutableArray<string> Members(JsonElement lists, string name) =>
         [.. lists.GetProperty(name).EnumerateArray().Select(static member => member.GetString()!)];
@@ -270,6 +283,7 @@ public sealed class RuntimeChangeTable
         };
     }
 
-    /// <summary>The members <c>validPaths</c> lists (ticket P2-074), each a prefix matched as a row's <see cref="RuntimeChange.Member"/> is.</summary>
-    private sealed record ValidPaths(ImmutableArray<string> Sources, ImmutableArray<string> Transforms, ImmutableArray<string> Guards);
+    /// <summary>The members <c>validPaths</c> lists (tickets P2-074 and P2-188), each a prefix matched as a row's <see cref="RuntimeChange.Member"/> is.</summary>
+    private sealed record ValidPaths(
+        ImmutableArray<string> Sources, ImmutableArray<string> Validators, ImmutableArray<string> Transforms, ImmutableArray<string> Prefixes, ImmutableArray<string> Guards);
 }
