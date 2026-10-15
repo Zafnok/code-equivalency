@@ -248,11 +248,12 @@ public sealed class RuntimeChangeTable
         string id = element.GetProperty("id").GetString()!;
         string? changedIn = element.GetProperty("changedIn").GetString();
         string? source = element.TryGetProperty("source", out JsonElement value) ? value.GetString() : null;
+        TargetRuntime? runtime = changedIn is null ? null : TargetRuntime.Parse(changedIn);
         return string.Equals(source, "documented", StringComparison.Ordinal)
             ? new MarshallingChange(
                 id,
                 ParseReach(id, element.GetProperty("reach").GetString()),
-                (changedIn is null ? null : TargetRuntime.Parse(changedIn)) ?? throw new InvalidDataException($"runtime-changes marshalling '{id}' has malformed changedIn '{changedIn}'"),
+                runtime ?? throw new InvalidDataException($"runtime-changes marshalling '{id}' has malformed changedIn '{changedIn}'"),
                 element.GetProperty("reason").GetString()!,
                 new Uri(element.GetProperty("url").GetString()!, UriKind.Absolute))
             : throw new InvalidDataException($"runtime-changes marshalling '{id}' has source '{source}', not 'documented'");
