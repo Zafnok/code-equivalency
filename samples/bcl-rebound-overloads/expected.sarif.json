@@ -114,10 +114,11 @@
           }
         },
         {
-          "ruleId": "EQ002",
-          "level": "error",
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
           "message": {
-            "text": "Equiv.Samples.BclReboundOverloads.Calls::TrimTailOther(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 1 outs() trace(\"System.String::TrimEnd()\"(sort \"System.String\" 0))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46))). Equivalent when s == null."
+            "text": "Equiv.Samples.BclReboundOverloads.Calls::TrimTailOther(string) is unknown (Abstraction): the divergence depends on System.String::TrimEnd(), System.String::TrimEnd(char). Equivalent when s == null."
           },
           "locations": [
             {
@@ -136,12 +137,32 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.BclReboundOverloads.Calls::TrimTailOther(string)",
-            "resultFingerprint/v1": "da4dc37cdd9434d5ad104ba71a09fd46103fb5eca1e6cc4c06243440c0426d66"
+            "resultFingerprint/v1": "73b0bd7f272299b4772564a8ec49a4f9928ad6ddc92ae2b3b2a66d67c3802449"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 0.002,
           "properties": {
-            "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 1 outs() trace(\"System.String::TrimEnd()\"(sort \"System.String\" 0))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))",
+            "unknownReason": "abstraction",
+            "scope": "method",
+            "candidateCounterexample": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 1 outs() trace(\"System.String::TrimEnd()\"(sort \"System.String\" 0))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))",
+            "abstractions": [
+              {
+                "identity": "System.String::TrimEnd()",
+                "side": "legacy"
+              },
+              {
+                "identity": "System.String::TrimEnd(char)",
+                "side": "modern"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              }
+            },
             "agreesWhen": {
               "smt": "(select in.null.System.String in.s)",
               "text": "s == null",
@@ -151,23 +172,10 @@
             "ladderTrace": [
               {
                 "rung": "bounded",
-                "outcome": "refuted",
-                "detail": "a divergence within 3 iterations"
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
               }
             ],
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "none-proved"
-              },
-              "removedFailures": {
-                "outcome": "none-proved"
-              },
-              "resultChanges": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 1 outs() trace(\"System.String::TrimEnd()\"(sort \"System.String\" 0))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))"
-              }
-            },
-            "divergenceKind": "result-changed",
             "equivalencesApplied": [
               "bcl.string-trim-end-no-chars"
             ],
@@ -175,7 +183,7 @@
               "component": "operation",
               "identity": "Argument"
             },
-            "reviewGroup": "calls:System.String::TrimEnd()|System.String::TrimEnd(char)"
+            "reviewGroup": "abstraction"
           }
         },
         {
@@ -330,14 +338,10 @@
           },
           "unknownByScope": {
             "line": 1,
-            "method": 0
+            "method": 1
           },
           "failureRefinement": {
-            "pairs": 1,
-            "milliseconds": 0
-          },
-          "divergentRefinement": {
-            "pairs": 1,
+            "pairs": 2,
             "milliseconds": 0
           },
           "agreesWhen": {
@@ -385,21 +389,21 @@
         },
         "reviewList": [
           {
-            "group": "calls:System.String::TrimEnd()|System.String::TrimEnd(char)",
-            "ruleId": "EQ002",
-            "rank": 60.002,
-            "count": 1,
-            "identities": [
-              "Equiv.Samples.BclReboundOverloads.Calls::TrimTailOther(string)"
-            ]
-          },
-          {
             "group": "opaque:rebound-call",
             "ruleId": "EQ003",
             "rank": 20.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.BclReboundOverloads.Calls::Hours(int)"
+            ]
+          },
+          {
+            "group": "abstraction",
+            "ruleId": "EQ003",
+            "rank": 0.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.BclReboundOverloads.Calls::TrimTailOther(string)"
             ]
           }
         ]

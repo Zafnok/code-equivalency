@@ -8,4 +8,30 @@ namespace Equiv.Samples.ApiDrift
 
         public static bool HasX(string s) => s.Contains('x');
     }
+
+    public sealed class Tally
+    {
+        private int seen;
+
+        public int Count(string s)
+        {
+            string[] parts = s.Split(',');
+            int before = seen;
+            Add(parts.Length);
+            return seen - before;
+        }
+
+        public int Total(string s)
+        {
+            string[] parts = s.Split(',');
+            int before = seen;
+            Add(parts.Length);
+            return seen - before;
+        }
+
+        private void Add(int n)
+        {
+            seen += n;
+        }
+    }
 }

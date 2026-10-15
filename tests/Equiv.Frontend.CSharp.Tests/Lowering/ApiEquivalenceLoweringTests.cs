@@ -59,7 +59,7 @@ public sealed class ApiEquivalenceLoweringTests
 
         IrCall call = Assert.Single(Calls(body));
         Assert.Equal("System.String::Split(char,System.StringSplitOptions)", call.Callee.Value);
-        Assert.False(call.Closed); // the adapter names its modern member only by string (ADR 0041)
+        Assert.True(call.Closed); // as a direct call of String.Split(char, StringSplitOptions) is (ADR 0041; ticket P2-184)
         Assert.Equal(3, call.Args.Length);
         Assert.Equal("s", call.Args[0].SourceName);
         Assert.Equal(["bcl.string-split-one-char"], applied);
@@ -158,7 +158,7 @@ public sealed class ApiEquivalenceLoweringTests
 
         IrCall call = Assert.Single(Calls(body));
         Assert.Equal("System.String::TrimEnd()", call.Callee.Value);
-        Assert.False(call.Closed);
+        Assert.True(call.Closed);
         Assert.Equal("s", Assert.Single(call.Args).SourceName);
         Assert.Equal(["bcl.string-trim-end-no-chars"], applied);
     }
@@ -201,6 +201,25 @@ public sealed class ApiEquivalenceLoweringTests
         Assert.False(call.Closed);
         Assert.Equal("d", Assert.Single(call.Args).SourceName);
         Assert.Equal(["bcl.directory-info-full-name"], applied);
+    }
+
+    /// <summary>
+    /// Ticket P2-184: a rewritten call takes its closedness from its modern member, as a direct call of that member does
+    /// (ADR 0041). A closed one gets no heap pairs, so the legacy side's heap after it is the modern side's; an open one
+    /// pairs the heap maps the body touches.
+    /// </summary>
+    [Theory]
+    [InlineData(Splitter + "class C { int f; string[] M(S s) { f++; return s.Split(','); } }", "string[] M(string s) { f++; return s.Split(','); }", true)]
+    [InlineData(Trimmer + "class C { int f; string M(S s) { f++; return s.TrimEnd('/'); } }", "string M(string s) { f++; return s.TrimEnd('/'); }", true)]
+    [InlineData(Directories + "class C { int f; string M(D d) { f++; return d.FullName; } }", "string M(System.IO.DirectoryInfo d) { f++; return d.FullName; }", false)]
+    public void ARewrittenCallIsClosedExactlyWhenADirectCallOfTheModernMemberIs(string legacy, string modern, bool closed)
+    {
+        IrCall rewritten = Assert.Single(Calls(Legacy(legacy, [.. Split, .. Rebinding]).Body));
+        IrCall direct = Assert.Single(Calls(Method("int f; " + modern)));
+
+        Assert.Equal(direct.Callee.Value, rewritten.Callee.Value);
+        Assert.Equal((closed, closed), (direct.Closed, rewritten.Closed));
+        Assert.Equal(closed, rewritten.Heap.IsEmpty);
     }
 
     /// <summary>The rewritten getter call keeps the legacy call's receiver null check.</summary>

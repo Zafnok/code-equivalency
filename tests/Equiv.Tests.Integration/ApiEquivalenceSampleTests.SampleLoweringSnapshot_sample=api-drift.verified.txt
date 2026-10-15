@@ -1,4 +1,156 @@
-﻿Equiv.Samples.ApiDrift.Text::HasX(string) [bcl.string-contains-char]
+﻿Equiv.Samples.ApiDrift.Tally::Add(int) []
+legacy:
+proc "Equiv.Samples.ApiDrift.Tally::Add(int)" (%n "n": bv32, ref %field.Equiv.Samples.ApiDrift.Tally.seen: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>, %this: sort "Equiv.Samples.ApiDrift.Tally") entry B0
+B0:
+  goto B1
+B1:
+  %$1: bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen, %this
+  %$3: bv32 = add %$1, %n
+  %field.Equiv.Samples.ApiDrift.Tally.seen.6: map<sort "Equiv.Samples.ApiDrift.Tally", bv32> = mapwrite %field.Equiv.Samples.ApiDrift.Tally.seen, %this, %$3
+  goto B2
+B2:
+  ret outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.6)
+
+modern:
+proc "Equiv.Samples.ApiDrift.Tally::Add(int)" (%n "n": bv32, ref %field.Equiv.Samples.ApiDrift.Tally.seen: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>, %this: sort "Equiv.Samples.ApiDrift.Tally") entry B0
+B0:
+  goto B1
+B1:
+  %$1: bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen, %this
+  %$3: bv32 = add %$1, %n
+  %field.Equiv.Samples.ApiDrift.Tally.seen.6: map<sort "Equiv.Samples.ApiDrift.Tally", bv32> = mapwrite %field.Equiv.Samples.ApiDrift.Tally.seen, %this, %$3
+  goto B2
+B2:
+  ret outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.6)
+
+
+Equiv.Samples.ApiDrift.Tally::Count(string) [bcl.string-split-one-char]
+legacy:
+proc "Equiv.Samples.ApiDrift.Tally::Count(string)" (%s "s": sort "System.String", ref %field.Equiv.Samples.ApiDrift.Tally.seen: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>, %length.string__: map<sort "string[]", bv32>, %null.System.String: map<sort "System.String", bool>, %null.string__: map<sort "string[]", bool>, %this: sort "Equiv.Samples.ApiDrift.Tally") -> bv32 entry B0
+B0:
+  %s.isNull.20 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
+  br %s.isNull.20, B3, B4
+B3:
+  throw "System.NullReferenceException" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen)
+B4:
+  %parts.21 "parts": sort "string[]" = call closed "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
+  br %$6, B5, B6
+B5:
+  %field.Equiv.Samples.ApiDrift.Tally.seen.25: map<sort "Equiv.Samples.ApiDrift.Tally", bv32> = phi [B4: %field.Equiv.Samples.ApiDrift.Tally.seen, B7: %field.Equiv.Samples.ApiDrift.Tally.seen.24]
+  throw "System.Exception" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.25)
+B6:
+  %parts.isNull.22 "parts": bool = mapread %null.string__, %parts.21
+  %before.23 "before": bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen, %this
+  br %parts.isNull.22, B3, B7
+B7:
+  %$13: bv32 = mapread %length.string__, %parts.21
+  call "Equiv.Samples.ApiDrift.Tally::Add(int)"(%this, %$13) threw %$14: bool heap("field.Equiv.Samples.ApiDrift.Tally.seen" %field.Equiv.Samples.ApiDrift.Tally.seen -> %field.Equiv.Samples.ApiDrift.Tally.seen.24: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>)
+  br %$14, B5, B8
+B8:
+  %$16: bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen.24, %this
+  %$18: bv32 = sub %$16, %before.23
+  ret %$18 outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.24)
+
+modern:
+proc "Equiv.Samples.ApiDrift.Tally::Count(string)" (%s "s": sort "System.String", ref %field.Equiv.Samples.ApiDrift.Tally.seen: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>, %length.string__: map<sort "string[]", bv32>, %null.System.String: map<sort "System.String", bool>, %null.string__: map<sort "string[]", bool>, %this: sort "Equiv.Samples.ApiDrift.Tally") -> bv32 entry B0
+B0:
+  %s.isNull.20 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
+  br %s.isNull.20, B3, B4
+B3:
+  throw "System.NullReferenceException" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen)
+B4:
+  %parts.21 "parts": sort "string[]" = call closed "System.String::Split(char,System.StringSplitOptions)"@(%s, %$2, %$3) threw %$6: bool
+  br %$6, B5, B6
+B5:
+  %field.Equiv.Samples.ApiDrift.Tally.seen.25: map<sort "Equiv.Samples.ApiDrift.Tally", bv32> = phi [B4: %field.Equiv.Samples.ApiDrift.Tally.seen, B7: %field.Equiv.Samples.ApiDrift.Tally.seen.24]
+  throw "System.Exception" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.25)
+B6:
+  %parts.isNull.22 "parts": bool = mapread %null.string__, %parts.21
+  %before.23 "before": bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen, %this
+  br %parts.isNull.22, B3, B7
+B7:
+  %$13: bv32 = mapread %length.string__, %parts.21
+  call "Equiv.Samples.ApiDrift.Tally::Add(int)"(%this, %$13) threw %$14: bool heap("field.Equiv.Samples.ApiDrift.Tally.seen" %field.Equiv.Samples.ApiDrift.Tally.seen -> %field.Equiv.Samples.ApiDrift.Tally.seen.24: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>)
+  br %$14, B5, B8
+B8:
+  %$16: bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen.24, %this
+  %$18: bv32 = sub %$16, %before.23
+  ret %$18 outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.24)
+
+
+Equiv.Samples.ApiDrift.Tally::Total(string) [bcl.string-split-one-char]
+legacy:
+proc "Equiv.Samples.ApiDrift.Tally::Total(string)" (%s "s": sort "System.String", ref %field.Equiv.Samples.ApiDrift.Tally.seen: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>, %length.string__: map<sort "string[]", bv32>, %null.System.String: map<sort "System.String", bool>, %null.string__: map<sort "string[]", bool>, %this: sort "Equiv.Samples.ApiDrift.Tally") -> bv32 entry B0
+B0:
+  %s.isNull.20 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
+  br %s.isNull.20, B3, B4
+B3:
+  throw "System.NullReferenceException" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen)
+B4:
+  %parts.21 "parts": sort "string[]" = call closed "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
+  br %$6, B5, B6
+B5:
+  %field.Equiv.Samples.ApiDrift.Tally.seen.25: map<sort "Equiv.Samples.ApiDrift.Tally", bv32> = phi [B4: %field.Equiv.Samples.ApiDrift.Tally.seen, B7: %field.Equiv.Samples.ApiDrift.Tally.seen.24]
+  throw "System.Exception" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.25)
+B6:
+  %parts.isNull.22 "parts": bool = mapread %null.string__, %parts.21
+  %before.23 "before": bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen, %this
+  br %parts.isNull.22, B3, B7
+B7:
+  %$13: bv32 = mapread %length.string__, %parts.21
+  call "Equiv.Samples.ApiDrift.Tally::Add(int)"(%this, %$13) threw %$14: bool heap("field.Equiv.Samples.ApiDrift.Tally.seen" %field.Equiv.Samples.ApiDrift.Tally.seen -> %field.Equiv.Samples.ApiDrift.Tally.seen.24: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>)
+  br %$14, B5, B8
+B8:
+  %$16: bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen.24, %this
+  %$18: bv32 = sub %$16, %before.23
+  ret %$18 outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.24)
+
+modern:
+proc "Equiv.Samples.ApiDrift.Tally::Total(string)" (%s "s": sort "System.String", ref %field.Equiv.Samples.ApiDrift.Tally.seen: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>, %length.string__: map<sort "string[]", bv32>, %null.System.String: map<sort "System.String", bool>, %null.string__: map<sort "string[]", bool>, %this: sort "Equiv.Samples.ApiDrift.Tally") -> bv32 entry B0
+B0:
+  %s.isNull.22 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
+  br %s.isNull.22, B3, B4
+B3:
+  throw "System.NullReferenceException" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen)
+B4:
+  %parts.23 "parts": sort "string[]" = call closed "System.String::Split(char,System.StringSplitOptions)"@(%s, %$2, %$3) threw %$6: bool
+  br %$6, B5, B6
+B5:
+  %field.Equiv.Samples.ApiDrift.Tally.seen.27: map<sort "Equiv.Samples.ApiDrift.Tally", bv32> = phi [B4: %field.Equiv.Samples.ApiDrift.Tally.seen, B7: %field.Equiv.Samples.ApiDrift.Tally.seen.26]
+  throw "System.Exception" outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.27)
+B6:
+  %parts.isNull.24 "parts": bool = mapread %null.string__, %parts.23
+  %before.25 "before": bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen, %this
+  br %parts.isNull.24, B3, B7
+B7:
+  %$13: bv32 = mapread %length.string__, %parts.23
+  %$14: bv32 = const bv32 1
+  %$15: bv32 = add %$13, %$14
+  call "Equiv.Samples.ApiDrift.Tally::Add(int)"(%this, %$15) threw %$16: bool heap("field.Equiv.Samples.ApiDrift.Tally.seen" %field.Equiv.Samples.ApiDrift.Tally.seen -> %field.Equiv.Samples.ApiDrift.Tally.seen.26: map<sort "Equiv.Samples.ApiDrift.Tally", bv32>)
+  br %$16, B5, B8
+B8:
+  %$18: bv32 = mapread %field.Equiv.Samples.ApiDrift.Tally.seen.26, %this
+  %$20: bv32 = sub %$18, %before.25
+  ret %$20 outs(%field.Equiv.Samples.ApiDrift.Tally.seen = %field.Equiv.Samples.ApiDrift.Tally.seen.26)
+
+
+Equiv.Samples.ApiDrift.Text::HasX(string) [bcl.string-contains-char]
 legacy:
 proc "Equiv.Samples.ApiDrift.Text::HasX(string)" (%s "s": sort "System.String", %null.System.String: map<sort "System.String", bool>) -> bool entry B0
 B0:
@@ -6,7 +158,7 @@ B0:
   goto B1
 B1:
   %$2: bv16 = const bv16 120
-  %$3: bool = call "System.String::Contains(char)"(%s, %$2) threw %$4: bool
+  %$3: bool = call closed "System.String::Contains(char)"(%s, %$2) threw %$4: bool
   br %$4, B3, B4
 B3:
   throw "System.Exception"
@@ -45,7 +197,7 @@ B1:
 B3:
   throw "System.NullReferenceException"
 B4:
-  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
+  %$5: sort "string[]" = call closed "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
   br %$6, B5, B6
 B5:
   throw "System.Exception"

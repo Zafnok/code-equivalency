@@ -27,6 +27,25 @@ internal static class ClosedCalls
         IsInert(method.ContainingType) && method.Parameters.Select(static p => p.Type).Concat(method.TypeArguments).All(IsInert);
 
     /// <summary>
+    /// Whether a call to the member <paramref name="callee"/> names reaches no heap map, read from the identity with each
+    /// type it names resolved in <paramref name="compilation"/>, so that a call an API-equivalence entry rewrites to that
+    /// member (ADR 0020), which the legacy side may not declare, is closed exactly when a direct call of it is (ticket
+    /// P2-184). A type is named by its C# keyword, its metadata name, or either followed by <c>?</c>; one that does not
+    /// resolve here, a generic one and a generic containing type are not inert, so such a call is open, as any call is
+    /// unless shown closed.
+    /// </summary>
+    public static bool IsClosed(CallIdentity callee, Compilation compilation)
+    {
+        string value = callee.Value;
+        int member = value.IndexOf("::", StringComparison.Ordinal);
+        int open = value.IndexOf('(', member);
+        int close = value.IndexOf(')', open);
+        string suffix = value[(close + 1)..];
+        string typeArguments = suffix.StartsWith('<') ? suffix[1..^1] : string.Empty;
+        return IsInert(value[..member], compilation) && Names(value[(open + 1)..close]).Concat(Names(typeArguments)).All(name => IsInert(name, compilation));
+    }
+
+    /// <summary>
     /// Whether a call to <paramref name="callee"/> has no <c>threw</c> flag (ADR 0056): the member is on the list, by its
     /// identity, and throws for no argument. It is read from the identity and not the symbol, so that a call an
     /// API-equivalence entry rewrites to a listed member (ADR 0020) and a direct call to that member agree.
@@ -77,6 +96,26 @@ internal static class ClosedCalls
         "System.Nullable`1::GetValueOrDefault(",
         "System.Nullable`1::.ctor(",
     ];
+
+    /// <summary>The C# keywords of the inert special types, as an identity names them.</summary>
+    private static readonly FrozenSet<string> InertKeywords = FrozenSet.ToFrozenSet(
+        ["bool", "char", "sbyte", "byte", "short", "ushort", "int", "uint", "long", "ulong", "float", "double", "decimal", "string"],
+        StringComparer.Ordinal);
+
+    /// <summary>The comma-separated type names of an identity's parameter or type-argument list; none when it is empty.</summary>
+    private static string[] Names(string list) => list.Length == 0 ? [] : list.Split(',');
+
+    /// <summary>
+    /// Whether the type an identity names <paramref name="name"/> is inert. A <c>ref</c> or <c>out</c> prefix is dropped,
+    /// with anything else before a space, which no inert type's name has.
+    /// </summary>
+    private static bool IsInert(string name, Compilation compilation)
+    {
+        string type = name[(name.LastIndexOf(' ') + 1)..];
+        return type.EndsWith('?')
+            ? IsInert(type[..^1], compilation)
+            : InertKeywords.Contains(type) || (compilation.GetTypeByMetadataName(type) is { } symbol && IsInert(symbol));
+    }
 
     private static bool IsInert(ITypeSymbol type) => type switch
     {
