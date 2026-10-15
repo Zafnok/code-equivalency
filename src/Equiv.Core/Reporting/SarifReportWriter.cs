@@ -49,6 +49,12 @@ public static class SarifReportWriter
     /// <summary>What <c>unboundDiagnostics</c> lists for a cause that has no compiler diagnostic.</summary>
     internal const string NoDiagnostic = "none";
 
+    /// <summary>The key, and the side name, of a property's legacy half: <c>reboundCalls</c>, <c>callIdentitiesMapped</c>, runtimes.</summary>
+    private const string LegacyKey = "legacy";
+
+    /// <summary>The key, and the side name, of a property's modern half.</summary>
+    private const string ModernKey = "modern";
+
     /// <param name="results">One SARIF result each, in order, ahead of any baseline carry-overs.</param>
     /// <param name="baseline">The previous log <c>baselineState</c> is computed against.</param>
     /// <param name="runProperties">
@@ -270,8 +276,8 @@ public static class SarifReportWriter
         {
             sarifResult.SetProperty("reboundCalls", result.ReboundCalls.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["legacy"] = r.Legacy,
-                ["modern"] = r.Modern,
+                [LegacyKey] = r.Legacy,
+                [ModernKey] = r.Modern,
             }).ToList());
         }
 
@@ -288,8 +294,8 @@ public static class SarifReportWriter
         {
             sarifResult.SetProperty("callIdentitiesMapped", result.CallIdentitiesMapped.Select(static m => new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["legacy"] = m.Legacy,
-                ["modern"] = m.Modern,
+                [LegacyKey] = m.Legacy,
+                [ModernKey] = m.Modern,
             }).ToList());
         }
     }
@@ -596,8 +602,8 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("replay", replay.Status == ReplayStatus.NotApplicable ? "not-applicable" : "not-reproduced");
                 sarifResult.SetProperty("replayOutcomes", new Dictionary<string, object>(StringComparer.Ordinal)
                 {
-                    ["legacy"] = Describe(legacy),
-                    ["modern"] = Describe(modern),
+                    [LegacyKey] = Describe(legacy),
+                    [ModernKey] = Describe(modern),
                 });
                 break;
             default:
@@ -649,7 +655,7 @@ public static class SarifReportWriter
             ["source"] = r.Source,
         })];
 
-    internal static string Name(Codebase side) => side == Codebase.Legacy ? "legacy" : "modern";
+    internal static string Name(Codebase side) => side == Codebase.Legacy ? LegacyKey : ModernKey;
 
     /// <summary>
     /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
