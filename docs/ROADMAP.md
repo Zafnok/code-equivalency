@@ -1316,7 +1316,7 @@ They come before any other open ticket, in this order:
    P2-200 cleared 2 of its 8 (and 3 more results outside the samples) and left P2-207 (M, 6, a
    reassigned local, a private method's caller or a cached field holds the path), after P2-201.
    P2-201 cleared 1 of its 4 (and 2 more results outside the samples) and left P2-208 (M, 3, a field
-   written through a local function, a trailing separator or a private setter), after P2-202.
+   written through a local function, a trailing separator or a private setter), after P2-207.
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
    migrations. P2-184 cleared 7 of the 8 on Git Extensions and OpenRA (the eighth is P2-181's) and
    left two tickets for sample Divergents that ADR 0056's taint now reaches: P2-202 (S, a rewritten

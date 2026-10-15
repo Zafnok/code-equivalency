@@ -35,7 +35,7 @@ Precondition unit tests for the route followed, and one where the path really co
 A call graph over the solution, or reading a member's writers outside its own type: stop and route it through `equiv-adr`.
 
 ## Out of scope
-Device-path prefixes (P2-130's undetermined four). The six of P2-202 (the path ticket P2-200 filed).
+Device-path prefixes (P2-130's undetermined four). P2-207's six.
 
 ## Notes
 - Filed 2026-10-15 by P2-201 (criterion 2).

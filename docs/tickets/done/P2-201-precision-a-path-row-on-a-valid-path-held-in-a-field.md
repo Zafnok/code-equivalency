@@ -142,4 +142,4 @@ reaches it without more.
   Run times at `main` and this branch: Git Extensions 362 s and 321 s, Duplicati 803 s and 574 s, OpenRA 329 s and
   253 s; one run each, so the difference is not attributed.
 - Decision: no `Release:` footer. A precision fix that changes no surface is a patch (`equiv-release`).
-- Two open tickets share the id P2-202 (P2-200's and P2-184's); left as they are, not this ticket's to renumber.
+- P2-200's P2-202 is P2-207 since P2-192 renumbered it (P2-184 had filed another P2-202 first).
