@@ -165,8 +165,6 @@ public sealed class ValidPathsTests
     [InlineData("static object M() { var d = Dir(); return new StreamReader(d); }\nstatic string Dir() => AppContext.BaseDirectory;", false)]
     [InlineData("static string Same(string p) => p;\nstatic object M(string p) => new StreamReader(Same(p));", true)]
     [InlineData("static string Pick(bool b) { if (b) { return AppContext.BaseDirectory; } return Environment.MachineName; }\nstatic object M(bool b) => new StreamReader(Pick(b));", true)]
-    [InlineData("static string Inner() => AppContext.BaseDirectory;\nstatic string Outer() => Inner();\nstatic object M() => new StreamReader(Outer());", true)]
-    [InlineData("static string Inner => AppContext.BaseDirectory;\nstatic string Outer => Inner;\nstatic object M() => new StreamReader(Outer);", true)]
     [InlineData("static string Root { get; } = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(Root);", true)]
     [InlineData("static string Dir() { throw new InvalidOperationException(); }\nstatic object M() => new StreamReader(Dir());", true)]
     [InlineData("protected virtual string Dir() => AppContext.BaseDirectory;\nobject M() => new StreamReader(Dir());", true)]
@@ -174,12 +172,64 @@ public sealed class ValidPathsTests
     [InlineData("static object M(Func<string> dir) => new StreamReader(dir());", true)]
     public void ASolutionMemberThatReturnsOnlyValidPathsYieldsOne(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
 
+    /// <summary>
+    /// Ticket P2-200: a returned call to another of the solution's members is followed into its body too, up to four calls
+    /// deep. A path that really comes from the caller still fires the row however deep it is passed, and so does a value
+    /// past the fourth call or a recursion that never reaches a valid path within four.
+    /// </summary>
+    [Theory]
+    [InlineData("static string Inner() => AppContext.BaseDirectory;\nstatic string Outer() => Inner();\nstatic object M() => new StreamReader(Outer());", false)]
+    [InlineData("static string Inner => AppContext.BaseDirectory;\nstatic string Outer => Inner;\nstatic object M() => new StreamReader(Outer);", false)]
+    [InlineData("static string D1() => D2();\nstatic string D2() => D3();\nstatic string D3() => D4();\nstatic string D4() => AppContext.BaseDirectory;\nstatic object M() => new StreamReader(D1());", false)]
+    [InlineData("static string D1() => D2();\nstatic string D2() => D3();\nstatic string D3() => D4();\nstatic string D4() => D5();\nstatic string D5() => AppContext.BaseDirectory;\nstatic object M() => new StreamReader(D1());", true)]
+    [InlineData("static string Normalize(string p) { var f = Path.GetFullPath(p); return f.Length > 1 ? f.Substring(0, f.Length - 1) : f; }\nstatic string Snapshot(string p) => Normalize(\"/mnt\" + p);\nstatic object M(string p) => File.GetLastWriteTimeUtc(Snapshot(p));", false)]
+    [InlineData("static string Inner(string p) => p;\nstatic string Outer(string p) => Inner(p);\nstatic object M(string p) => new StreamReader(Outer(p));", true)]
+    [InlineData("static string Snapshot(string p) => Same(\"/mnt\" + p);\nstatic string Same(string p) => p;\nstatic object M(string p) => File.GetLastWriteTimeUtc(Snapshot(p));", true)]
+    [InlineData("static string Dir(int n) => n > 0 ? Dir(n - 1) : AppContext.BaseDirectory;\nstatic object M() => new StreamReader(Dir(2));", true)]
+    public void AReturnedCallIsFollowedUpToFourCallsDeep(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
     /// <summary>Ticket P2-188: a member an override can replace is not read, as an abstract or an overriding one shows.</summary>
     [Theory]
     [InlineData("interface I { string Dir(); }\nclass C\n{\nstatic object M(I i) => new StreamReader(i.Dir());\n}\n")]
     [InlineData("abstract class B { public abstract string Dir(); }\nclass C : B\n{\npublic override string Dir() => AppContext.BaseDirectory;\nobject M() => new StreamReader(Dir());\n}\n")]
+    [InlineData("interface I { static abstract string Dir(); }\nclass C\n{\nstatic object M<T>() where T : I => new StreamReader(T.Dir());\n}\n")]
     public void AMemberAnOverrideCanReplaceIsNotRead(string types) =>
         Assert.Contains(Calls(Source("using System;\nusing System.IO;\n" + types)), static call => call.Callee.RuntimeChanged);
+
+    /// <summary>
+    /// Ticket P2-200: on a receiver whose type is sealed, a virtual call runs the override that type declares, so that
+    /// override's body is read, through more than one level of overrides; a sealed type that inherits its override, or
+    /// declares only an overload, is not read; and an override that returns what is not a valid path fires the row
+    /// whatever the member it overrides returns.
+    /// </summary>
+    [Theory]
+    [InlineData("abstract class B { public abstract string Dir(); }\nsealed class C : B\n{\npublic override string Dir() => AppContext.BaseDirectory;\nobject M() => new StreamReader(Dir());\n}\n", false)]
+    [InlineData("abstract class B { public abstract string Root { get; } }\nsealed class C : B\n{\npublic override string Root => AppContext.BaseDirectory;\nobject M() => new StreamReader(Root);\n}\n", false)]
+    [InlineData("abstract class A { public abstract string Dir(); }\nclass B : A { public override string Dir() => Environment.MachineName; }\nsealed class C : B\n{\npublic override string Dir() => AppContext.BaseDirectory;\nstatic object M(C c) => new StreamReader(c.Dir());\n}\n", false)]
+    [InlineData("class B { public virtual string Dir() => AppContext.BaseDirectory; }\nsealed class C : B\n{\npublic override string Dir() => Environment.MachineName;\nobject M() => new StreamReader(Dir());\n}\n", true)]
+    [InlineData("class B { public virtual string Dir() => AppContext.BaseDirectory; }\nsealed class C : B\n{\npublic string Dir(int n) => AppContext.BaseDirectory;\nobject M() => new StreamReader(Dir());\n}\n", true)]
+    public void AVirtualCallOnASealedTypeReadsItsOverride(string types, bool flagged) =>
+        Assert.Equal(flagged, Calls(Source("using System;\nusing System.IO;\n" + types)).Any(static call => call.Callee.RuntimeChanged));
+
+    /// <summary>
+    /// Ticket P2-200, Duplicati's <c>LinuxSnapshot</c> shape: a sealed snapshot type's override hands the path to a nested
+    /// type's method, which returns it through a helper ending in <c>Path.GetFullPath</c>, three calls from the caller.
+    /// The same chain whose helper returns its argument unchecked still fires the row.
+    /// </summary>
+    [Theory]
+    [InlineData("Paths.Normalize", false)]
+    [InlineData("Paths.Same", true)]
+    public void ASnapshotPathThreeCallsDeepIsFollowed(string helper, bool flagged) => Assert.Equal(flagged, Calls(Source(
+        "using System;\nusing System.IO;\n"
+        + "abstract class SnapshotBase { public abstract string ToSnapshotPath(string localPath); }\n"
+        + "sealed class C : SnapshotBase\n{\n"
+        + "public override string ToSnapshotPath(string localPath) => Find(localPath).ToSnapshotPath(localPath);\n"
+        + "private static Snapshot Find(string localPath) => new Snapshot();\n"
+        + "object M(string localPath) => File.GetLastWriteTimeUtc(ToSnapshotPath(localPath));\n"
+        + "private sealed class Snapshot { public string ToSnapshotPath(string localPath) => " + helper + "(\"/mnt\" + localPath); }\n}\n"
+        + "static class Paths\n{\n"
+        + "public static string Normalize(string p) { var f = Path.GetFullPath(p); return f.Length > 1 ? f.Substring(0, f.Length - 1) : f; }\n"
+        + "public static string Same(string p) => p;\n}\n")).Any(static call => call.Callee.RuntimeChanged));
 
     /// <summary>Ticket P2-188: a solution member in a project the caller's references as source is read with that project's compilation.</summary>
     [Fact]
@@ -187,6 +237,23 @@ public sealed class ValidPathsTests
     {
         Compilation library = RoslynTestCompilations.Compile(
             "public static class Translator { public static string Dir() => System.IO.Path.Combine(System.AppContext.BaseDirectory, \"Translation\"); }", "Library");
+        Compilation app = RoslynTestCompilations.Compile("class C { static object M() => new System.IO.StreamReader(Translator.Dir()); }", [library.ToMetadataReference()], "App");
+        IMethodSymbol method = app.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+
+        Assert.DoesNotContain(Calls(IrLowerer.Lower(method, app, RenameMap.Empty, [], Runtimes.Migration)), static call => call.Callee.RuntimeChanged);
+    }
+
+    /// <summary>
+    /// Ticket P2-200: a callee's own returned call is read with the compilation that holds the callee, which can reference
+    /// a project the caller's does not.
+    /// </summary>
+    [Fact]
+    public void ACalleesCalleeInAProjectOnlyTheCalleeReferencesIsRead()
+    {
+        Compilation paths = RoslynTestCompilations.Compile(
+            "public static class Paths { public static string Root() => System.AppContext.BaseDirectory; }", "Paths");
+        Compilation library = RoslynTestCompilations.Compile(
+            "public static class Translator { public static string Dir() => Paths.Root(); }", [paths.ToMetadataReference()], "Library");
         Compilation app = RoslynTestCompilations.Compile("class C { static object M() => new System.IO.StreamReader(Translator.Dir()); }", [library.ToMetadataReference()], "App");
         IMethodSymbol method = app.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
 

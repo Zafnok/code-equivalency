@@ -16,12 +16,20 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// the result of a valid-path source or validator, of a transform of valid paths or of a valid path's start; a
 /// conditional expression both of whose branches are one; a local variable that only ever holds such results; or a
 /// parameter or local variable that nothing assigns, used where a validating guard has passed on it. A call to one of
-/// the solution's own methods or properties that no override can replace yields one when every value its body returns is
-/// one by these rules, read in that body without following its own calls further (ticket P2-188). A path from a caller
-/// or a field is not followed.
+/// the solution's own methods or properties yields one when the body that runs is known, because no override can replace
+/// it or the receiver's type is sealed (ticket P2-200), and every value that body returns is one by these rules, read in
+/// that body and in the bodies its own returned calls run, at most <see cref="CalleeDepth"/> calls deep (tickets P2-188
+/// and P2-200). A path from a caller or a field is not followed.
 /// </summary>
 internal static class ValidPaths
 {
+    /// <summary>
+    /// How many calls deep a returned value is followed into the solution's own bodies (ticket P2-200). The deepest chain
+    /// in the corpus is three, from a sealed snapshot class's override through a nested type's method to a helper ending
+    /// in <c>Path.GetFullPath</c>; the bound keeps the work per argument small, recursion included.
+    /// </summary>
+    private const int CalleeDepth = 4;
+
     /// <summary>
     /// The operands of the call <paramref name="site"/> makes to <paramref name="method"/>, as
     /// <see cref="CallArguments.Of(IOperation?, IMethodSymbol)"/> gives them, each marked when it is a valid path. The
@@ -29,24 +37,28 @@ internal static class ValidPaths
     /// operation of a control-flow graph does not.
     /// </summary>
     public static ImmutableArray<CallArgument> Of(IOperation site, IMethodSymbol method, Compilation compilation) =>
-        CallArguments.Of(compilation.GetSemanticModel(site.Syntax.SyntaxTree).GetOperation(site.Syntax), method, value => IsValid(value, [], compilation));
+        CallArguments.Of(compilation.GetSemanticModel(site.Syntax.SyntaxTree).GetOperation(site.Syntax), method, value => IsValid(value, [], compilation, depth: 0));
 
     /// <summary>
     /// Whether <paramref name="value"/> is a valid path; <paramref name="seen"/> are the locals whose assignments are being
-    /// followed, and <paramref name="compilation"/>, when it is not null, is the one a solution callee's body is read from.
+    /// followed, <paramref name="compilation"/> is the one that holds the value's syntax, and <paramref name="depth"/> is
+    /// how many solution callees deep the value is.
     /// </summary>
-    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, Compilation? compilation) => value switch
+    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, Compilation compilation, int depth) => value switch
     {
         // A property that overrides only the setter has no getter of its own to be a source (ticket P2-158).
         IPropertyReferenceOperation property => property.Property.GetMethod is { } getter
-            && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), []) || ReturnsOnlyValidPaths(getter, compilation)),
+            && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), [])
+                || ReturnsOnlyValidPaths(getter, property.Instance, compilation, depth)),
         IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
-                Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, seen, compilation)))
-            || ReturnsOnlyValidPaths(call.TargetMethod, compilation),
+                Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, seen, compilation, depth)))
+            || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, compilation, depth),
 
         // Only an expression is a value, and a conditional expression has both branches.
-        IConditionalOperation conditional => IsValid(conditional.WhenTrue, seen, compilation) && IsValid(conditional.WhenFalse!, seen, compilation),
-        ILocalReferenceOperation local => IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, compilation),
+        IConditionalOperation conditional =>
+            IsValid(conditional.WhenTrue, seen, compilation, depth) && IsValid(conditional.WhenFalse!, seen, compilation, depth),
+        ILocalReferenceOperation local =>
+            IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, compilation, depth),
         IParameterReferenceOperation parameter => IsGuarded(parameter.Parameter, value),
         _ => false,
     };
@@ -54,24 +66,39 @@ internal static class ValidPaths
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
 
     /// <summary>
-    /// Whether every value that the body of <paramref name="method"/> returns is a valid path, when the method is one of the
-    /// solution's own methods or property getters and no override can replace it (ticket P2-188). The values are read by
-    /// the rules in that body alone, so its own calls of the solution's methods are not followed: <paramref name="compilation"/>
-    /// is null there. False for a body that returns nothing, an auto-property's getter among them.
+    /// Whether every value returned by the body that a call to <paramref name="method"/> on <paramref name="receiver"/> runs
+    /// is a valid path, when that body is one of the solution's own methods or property getters (ticket P2-188). The values
+    /// are read by these rules, and a call among them to another of the solution's members is followed the same way while
+    /// <paramref name="depth"/> is under <see cref="CalleeDepth"/> (ticket P2-200). False for a body that returns nothing,
+    /// an auto-property's getter among them.
     /// </summary>
-    private static bool ReturnsOnlyValidPaths(IMethodSymbol method, Compilation? compilation) =>
-        compilation is not null
-        && method is
+    private static bool ReturnsOnlyValidPaths(IMethodSymbol method, IOperation? receiver, Compilation compilation, int depth) =>
+        depth < CalleeDepth
+        && Dispatched(method, receiver) is
         {
             MethodKind: MethodKind.Ordinary or MethodKind.PropertyGet,
-            IsVirtual: false,
-            IsAbstract: false,
-            IsOverride: false,
             DeclaringSyntaxReferences: [SyntaxReference declaration],
         }
         && Body(declaration, compilation) is { } body
         && Returned(body).ToImmutableArray() is [_, ..] returned
-        && returned.All(static value => IsValid(value, [], compilation: null));
+        && returned.All(value => IsValid(value, [], body.SemanticModel!.Compilation, depth + 1));
+
+    /// <summary>
+    /// The method whose body a call to <paramref name="method"/> on <paramref name="receiver"/> runs: the method itself when
+    /// no override can replace it (not virtual, abstract or an override), and otherwise, when the receiver's type is sealed,
+    /// the override that type itself declares (ticket P2-200). Null otherwise: an override the call cannot see may run, or
+    /// the sealed type inherits the one that runs, which is not looked for.
+    /// </summary>
+    private static IMethodSymbol? Dispatched(IMethodSymbol method, IOperation? receiver) =>
+        method is { IsVirtual: false, IsAbstract: false, IsOverride: false } ? method
+        : receiver?.Type is { IsSealed: true } sealedType
+            ? sealedType.GetMembers(method.Name).OfType<IMethodSymbol>().FirstOrDefault(candidate => Overrides(candidate, method))
+            : null;
+
+    /// <summary>Whether <paramref name="candidate"/> is <paramref name="method"/> or overrides it, directly or through others.</summary>
+    private static bool Overrides(IMethodSymbol candidate, IMethodSymbol method) =>
+        SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, method.OriginalDefinition)
+        || (candidate.OverriddenMethod is { } overridden && Overrides(overridden, method));
 
     /// <summary>
     /// The operation of the member <paramref name="declaration"/> declares, read with the compilation whose source holds it:
@@ -95,10 +122,10 @@ internal static class ValidPaths
     };
 
     /// <summary>Whether <paramref name="local"/> is declared with a valid path and every later assignment gives it one.</summary>
-    private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen, Compilation? compilation) =>
+    private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen, Compilation compilation, int depth) =>
         !seen.Contains(local)
         && LocalValues.Initializer(local, root) is { } initial
-        && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local), compilation));
+        && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local), compilation, depth));
 
     /// <summary>
     /// Whether a validating guard has returned true for <paramref name="symbol"/> wherever <paramref name="use"/> runs.
