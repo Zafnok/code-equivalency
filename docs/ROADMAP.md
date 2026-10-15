@@ -944,6 +944,9 @@ Found by P2-124's rerun of the two upgrade pairs (`docs/runs/2026-10-12-upgrade-
 - P2-164 (M) `StringBuilder.Append($"...")` binds to `AppendInterpolatedStringHandler` from .NET 6
   and is Divergent from the pre-.NET 6 binding: 5 false EQ002 on `gitextensions-9860`, in unedited
   files. Needs P2-086 and P2-139.
+- P2-211 (M) What P2-164 leaves of those appends, by reading the source: `PatchManager.ToPatch`'s EQ002 (the
+  builder is handed to a call first) and `GitBlameCommitTests.TestToString`'s thorough-only EQ006 (two `DateTime`
+  holes). The first step is the rerun. Needs P2-164.
 - P2-165 (M) An unedited `extern` method is Unknown (`no-body`) on every pair that crosses a runtime
   (ADR 0054 decision 4): 53 of `gitextensions-9860`'s 605 changed pairs (8.8%), its largest opaque
   reason. Changes an accepted ADR, so it goes through `equiv-adr`. Needs P2-145 and P2-146.

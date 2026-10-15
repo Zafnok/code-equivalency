@@ -42,7 +42,10 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// struct's sort, <see cref="CompiledRunOracle"/> answers the call as the compiled method does for the default mark, and
 /// what is compared is the final <c>G</c>. <c>o.Check(x)</c> throws when <c>x</c> is odd (ticket P2-140):
 /// <see cref="CompiledRunOracle"/> then leaves <see cref="Caught"/> in the <c>thrown.System.Exception</c> cell, the
-/// <c>catch</c>'s <c>get_Message</c> must be handed exactly that, and what is compared is whether the handler ran.
+/// <c>catch</c>'s <c>get_Message</c> must be handed exactly that, and what is compared is whether the handler ran. An
+/// interpolated string appended to a builder (ticket P2-164) binds <c>Append(string)</c> under C# 9 and the builder's handler
+/// under the default version: <see cref="CompiledRunOracle"/> answers the builder's <c>Append(string)</c>,
+/// <c>AppendLine(string)</c>, constructor and length, and what is compared is that a hole's <c>o.ToString()</c> ran once.
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -70,6 +73,8 @@ public sealed class LoweringOracleTests
 
     private const string StringNulls = "null.System.String";
 
+    private const string BuilderNulls = "null.System.Text.StringBuilder";
+
     private const string ThrownMap = "thrown.System.Exception";
 
     /// <summary>The key the <c>thrown.System.Exception</c> cell is read at: element 0 of the exception's sort.</summary>
@@ -85,6 +90,9 @@ public sealed class LoweringOracleTests
 
     /// <summary>The string every <c>ToString()</c> and <c>Concat</c> of an interpolated string returns (ticket P2-139): one that is not null.</summary>
     private static readonly IrSortValue Built = new("System.String", 2);
+
+    /// <summary>The one builder a run makes (ticket P2-164): every <c>new StringBuilder()</c>, and what each of its appends returns.</summary>
+    private static readonly IrSortValue Builder = new("System.Text.StringBuilder", 1);
 
     private static readonly IrSortValue ListReference = new("System.Collections.Generic.List`1", 1);
 
@@ -121,7 +129,7 @@ public sealed class LoweringOracleTests
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["catch (System.Exception t)", "while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", "(x, y, z) = t;", $"({LoweringOracleGen.Field}, x) = t;", LoweringOracleGen.Lambda, LoweringOracleGen.Interpolated, $"s += {LoweringOracleGen.Appended};", .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
+        foreach (string construct in (string[])["catch (System.Exception t)", "while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", "(x, y, z) = t;", $"({LoweringOracleGen.Field}, x) = t;", LoweringOracleGen.Lambda, LoweringOracleGen.Interpolated, $"s += {LoweringOracleGen.Appended};", LoweringOracleGen.AppendedToBuilder, LoweringOracleGen.BuilderBlock, .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -291,6 +299,9 @@ public sealed class LoweringOracleTests
         Assert.Contains(CompiledRunOracle.CellToString, callees);
         Assert.Contains(CompiledRunOracle.Check, callees);
         Assert.Contains(CompiledRunOracle.Message, callees);
+        // Ticket P2-164: under either binding the appends are the calls of the string members.
+        Assert.Contains(CompiledRunOracle.Append, callees);
+        Assert.Contains(CompiledRunOracle.AppendLine, callees);
         Assert.Superset(new HashSet<string>(["conv.i32.dec", "conv.dec.i32", "dec.mul", "dec.div", "dec.lt"], StringComparer.Ordinal), pures);
         // Ticket P2-170: a deconstruction of a tuple-typed local reads each of its elements.
         Assert.Superset(new HashSet<string>([IrTuple.New, IrTuple.Item(1), IrTuple.Item(2), IrTuple.Item(3)], StringComparer.Ordinal), pures);
@@ -329,7 +340,7 @@ public sealed class LoweringOracleTests
         "v" => V(input),
         "l" => ListReference,
         LoweringOracleGen.Cell => CellReference,
-        ListNulls or CellNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), []),
+        ListNulls or CellNulls or BuilderNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), []),
         NullableCast => new IrMapValue((IrMap)parameter.Type, Wrapped, []),
         CellMap => InitialCell(input),
         FieldMap => InitialField(input),
@@ -548,6 +559,11 @@ public sealed class LoweringOracleTests
         public static readonly Equiv.Core.CallIdentity Check = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.Check}(int)");
 
         public static readonly Equiv.Core.CallIdentity Message = new("System.Exception::get_Message()");
+        public static readonly Equiv.Core.CallIdentity Append = new("System.Text.StringBuilder::Append(string)");
+        public static readonly Equiv.Core.CallIdentity AppendLine = new("System.Text.StringBuilder::AppendLine(string)");
+        private static readonly Equiv.Core.CallIdentity NewBuilder = new("System.Text.StringBuilder::.ctor()");
+        private static readonly Equiv.Core.CallIdentity Length = new("System.Text.StringBuilder::get_Length()");
+        private static readonly ImmutableArray<Equiv.Core.CallIdentity> Builders = [NewBuilder, Append, AppendLine, Length];
 
         /// <summary>Boxed, so each call advances the one enumerator and not a copy of the struct.</summary>
         private readonly List<IEnumerator<int>> enumerators = [];
@@ -567,7 +583,7 @@ public sealed class LoweringOracleTests
                 return new IrCallResult(Value: null, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
             }
 
-            if (callee == CellToString || callee == IntToString || callee == Concat || callee == Check || callee == Message)
+            if (callee == CellToString || callee == IntToString || callee == Concat || callee == Check || callee == Message || Builders.Contains(callee))
             {
                 return callee == Check || callee == Message ? Guarded(callee, arguments, heap) : Text(callee, arguments, heap);
             }
@@ -621,19 +637,42 @@ public sealed class LoweringOracleTests
         }
 
         /// <summary>
-        /// A part of an interpolated string (ticket P2-139): <see cref="Built"/>. The <c>Cell</c> hole's own <c>ToString()</c>,
+        /// A part of an interpolated string (ticket P2-139): <see cref="Built"/>, or a call on the builder it is appended to
+        /// (ticket P2-164), which <see cref="Appended"/> answers. The <c>Cell</c> hole's own <c>ToString()</c>,
         /// which the compiled method runs once under either binding, adds 1 to <c>o</c>'s <c>G</c> as <c>o.Bump(1)</c> does.
         /// </summary>
         private IrCallResult Text(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, ImmutableArray<IrHeapSlice> heap)
         {
             if (callee != CellToString)
             {
-                return new IrCallResult(Built, Threw: false);
+                return Builders.Contains(callee) ? Appended(callee, arguments) : new IrCallResult(Built, Threw: false);
             }
 
             Assert.Equal([CellReference], arguments);
             Cells = Bumped((IrMapValue?)heap.FirstOrDefault(static h => h.Map is CellMap)?.Value ?? Cells, IrBitVecValue.FromSigned(32, 1));
             return new IrCallResult(Built, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
+        }
+
+        /// <summary>
+        /// A call on the builder (ticket P2-164): <c>new StringBuilder()</c> is <see cref="Builder"/>, each append is handed it
+        /// and the joined string, <see cref="Built"/>, and returns it, and its length is 0.
+        /// </summary>
+        private static IrCallResult Appended(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments)
+        {
+            if (callee == NewBuilder)
+            {
+                Assert.Empty(arguments);
+                return new IrCallResult(Builder, Threw: false);
+            }
+
+            if (callee == Length)
+            {
+                Assert.Equal([Builder], arguments);
+                return new IrCallResult(IrBitVecValue.FromSigned(32, 0), Threw: false);
+            }
+
+            Assert.Equal([Builder, Built], arguments);
+            return new IrCallResult(Builder, Threw: false);
         }
 
         /// <summary>

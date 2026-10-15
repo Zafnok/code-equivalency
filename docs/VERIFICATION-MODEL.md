@@ -345,6 +345,22 @@ another type, whose formatting goes through `IFormattable` or `ISpanFormattable`
 that only its run-time type decides, as for a class that is not sealed, or a call after the first integer hole) stays
 an `IrOpaque` with reason `InterpolatedString`, fingerprinted per binding.
 
+An interpolated string passed straight to `StringBuilder.Append` or `AppendLine` (P2-164) binds `Append(string)` or
+`AppendLine(string)` before .NET 6, the string built first as above, and from .NET 6 the overload that takes
+`ref StringBuilder.AppendInterpolatedStringHandler`: the compiler makes the handler with the builder and calls its
+`AppendLiteral` or `AppendFormatted` once per part, each writing into the builder. The text appended is the same, the
+current culture included, as for `DefaultInterpolatedStringHandler`. For the overloads with no `IFormatProvider`, the
+handler binding of a string the paragraph above covers, with no clause, lowers to the call of the `string` member on the
+receiver with the parts joined as above, so the two bindings make the same calls. What differs is when the builder is
+written: the handler writes each part before the next hole is evaluated, and a hole that throws leaves the parts before
+it written. So the lowering is used only where no hole can tell. Either every hole is a `string` or an integer that only
+reads a local, a parameter, a constant or a field of `this`, so nothing runs and nothing throws between the first write
+and the last. Or the builder is a local declared with `new StringBuilder(...)` or `new()` whose every use is the receiver
+of one of its own members (a result that is the builder again is dropped or is itself such a receiver), outside every
+lambda and local function, that no hole names, and the call is in no `try` statement: no code a hole runs can then reach
+the builder, the builder's members hand it to no other code, and once a hole throws out of the body nothing is left that
+can read what was written. Any other append, a hole that reads the builder included, keeps the handler's calls.
+
 Effect-free BCL members (ADR 0043; P2-071). One frontend catalogue lists, by name, the BCL members that
 run no observable code. A use of one is no `IrCall`: no trace event, no `threw` edge, no heap pair, no position.
 It has two kinds of entry. A getter of an immutable value, which is `System.String::get_Length()`: the

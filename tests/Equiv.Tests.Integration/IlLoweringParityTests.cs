@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
@@ -29,6 +29,11 @@ public sealed class IlLoweringParityTests
     /// <summary>The methods whose two lowerings differ in representation only, by identity, with why.</summary>
     private static readonly ImmutableDictionary<string, string> Known = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        [$"append-interpolated-string/legacy {AppendText}Header(System.Text.StringBuilder,string)"] = InterpolatedString,
+        [$"append-interpolated-string/legacy {AppendText}Count(System.Text.StringBuilder,int)"] = FormattedInteger,
+        [$"append-interpolated-string/modern {AppendText}Header(System.Text.StringBuilder,string)"] = BuilderHandler,
+        [$"append-interpolated-string/modern {AppendText}Count(System.Text.StringBuilder,int)"] = BuilderHandler,
+        [$"append-interpolated-string/modern {AppendText}Line(System.Text.StringBuilder,string)"] = BuilderHandler,
         [$"async-disposal/legacy {FlushAsync}"] = StateMachine,
         [$"async-disposal/legacy {CloseAsync}"] = StateMachine,
         [$"async-disposal/legacy {LastAsync}"] = StateMachine,
@@ -68,6 +73,8 @@ public sealed class IlLoweringParityTests
         [$"switch-expression-no-match/legacy {Weight}"] = NoMatchHelper,
         [$"switch-expression-no-match/modern {Weight}"] = NoMatchHelper,
     }.ToImmutableDictionary(StringComparer.Ordinal);
+
+    private const string AppendText = "Equiv.Samples.AppendInterpolatedString.Text::";
 
     private const string FlushAsync = "Equiv.Samples.AsyncDisposal.Journal::FlushAsync(System.IAsyncDisposable,int)";
 
@@ -147,6 +154,20 @@ public sealed class IlLoweringParityTests
     /// the IL lowering names as it is.
     /// </summary>
     private const string InterpolatedString = "IOperation lowers an interpolated string as a chain of Concat(string,string); the IL calls Concat(string,string,string)";
+
+    /// <summary>
+    /// The IOperation lowering joins an interpolated string with an integer hole as the <c>Concat</c> chain of its parts,
+    /// the integer through its closed <c>ToString()</c> (ticket P2-086); under C# 9 the compiler emits one call of
+    /// <c>String.Format</c> with the integer boxed, which the IL lowering names as it is.
+    /// </summary>
+    private const string FormattedInteger = "IOperation lowers an interpolated string with an int hole as Concat and Int32.ToString(); the C# 9 IL calls String.Format with the int boxed";
+
+    /// <summary>
+    /// The IOperation lowering makes a handler-bound <c>StringBuilder.Append</c> or <c>AppendLine</c> of an interpolated
+    /// string the call of <c>Append(string)</c> or <c>AppendLine(string)</c> with the joined parts (ticket P2-164); the
+    /// IL calls the handler's constructor, its <c>AppendLiteral</c> and <c>AppendFormatted</c>, and the <c>ref</c> overload.
+    /// </summary>
+    private const string BuilderHandler = "IOperation lowers a handler-bound StringBuilder append as Append(string) with the joined parts; the IL calls the handler and the ref overload";
 
     /// <summary>
     /// The IOperation lowering makes the empty array of a <c>params</c> call with no elements, <c>s.TrimStart()</c> or

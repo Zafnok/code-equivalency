@@ -79,6 +79,7 @@ internal sealed class IrLowerer
     private ArrayForEachLoops loops = null!;
     private ImmutableHashSet<int> unreached = [];
     private SpilledCollections spilled = null!;
+    private InterpolatedAppends appended = null!;
     private CSharpCompilation compilation = null!;
     private ControlFlowGraph cfg = null!;
     private SourceSpan bodySpan = null!;
@@ -439,6 +440,7 @@ internal sealed class IrLowerer
         chains = SwitchChains.Find(cfg);
         loops = ArrayForEachLoops.Find(cfg, CastArray);
         spilled = SpilledCollections.Find(cfg, collection => Built(collection) is { Add: not null });
+        appended = InterpolatedAppends.Find(cfg, compilation);
         unreached = SwitchExpressions.Unreached(cfg, compilation);
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, loops, bodySpan, Fill);
         foreach ((ControlFlowRegion clause, ICaughtExceptionOperation read) in CaughtExceptions.Named(cfg))
@@ -832,6 +834,12 @@ internal sealed class IrLowerer
 
     private void Statement(IOperation operation, LoweringContext context)
     {
+        if (appended.IsAbsorbed(operation))
+        {
+            // The handler of an interpolated string appended to a builder, or one of its parts: the call lowers them (ticket P2-164).
+            return;
+        }
+
         if (loops.Of(operation) is { } start)
         {
             ForEach(start, context);
@@ -1029,18 +1037,53 @@ internal sealed class IrLowerer
     /// <summary>
     /// An interpolated string that is the concatenation of its parts under both bindings (ticket P2-086;
     /// <see cref="InterpolatedStrings"/>), lowered as the <c>+</c> chain of those parts is, so the same text is the same body
-    /// on .NET Framework and on .NET 10: each part in order joined to the ones before it by <see cref="Concat"/>, a text
-    /// part its constant, a <c>string</c> hole its value, an integer hole its type's closed <c>ToString()</c> call, and a
-    /// hole of a sealed class its own <c>ToString()</c> unless it is null (ticket P2-139). A lone hole is joined to the
-    /// empty string, since <c>$"{s}"</c> is never null.
+    /// on .NET Framework and on .NET 10.
     /// </summary>
-    private IrVar Interpolate(IInterpolatedStringOperation interpolated, LoweringContext context)
+    private IrVar Interpolate(IInterpolatedStringOperation interpolated, LoweringContext context) =>
+        Joined(
+            [
+                .. interpolated.Parts.Select(static p => p is IInterpolationOperation hole
+                    ? new Piece(hole, hole.Expression, IsHole: true)
+                    : new Piece(p, ((IInterpolatedStringTextOperation)p).Text, IsHole: false)),
+            ],
+            interpolated,
+            context);
+
+    /// <summary>
+    /// A handler-bound <c>StringBuilder.Append</c> or <c>AppendLine</c> that <see cref="InterpolatedAppends"/> takes (ticket
+    /// P2-164), lowered as the call the same text binds before .NET 6: the receiver, whose flow capture the graph makes ahead
+    /// of the handler, then the parts the handler is handed, joined as <see cref="Interpolate"/> joins an interpolated
+    /// string's, then the call of <c>Append(string)</c> or <c>AppendLine(string)</c> with them, which null-checks the
+    /// receiver as any call does.
+    /// </summary>
+    private IrVar? Appended(IInvocationOperation invocation, InterpolatedAppends.Append append, LoweringContext context)
     {
-        ImmutableArray<IInterpolatedStringContentOperation> parts = interpolated.Parts;
-        IrVar text = parts.Length > 1 ? Part(parts[0], interpolated.Type!, context) : Constant(interpolated.Type!, string.Empty, context);
-        foreach (IInterpolatedStringContentOperation part in parts.Length > 1 ? parts[1..] : parts)
+        IrVar builder = Value(invocation.Instance!, context);
+        IrVar text = Joined(
+            [
+                .. append.Parts.Select(static p => new Piece(
+                    p,
+                    p.Arguments[0].Value,
+                    IsHole: !string.Equals(p.TargetMethod.Name, nameof(System.Text.StringBuilder.AppendInterpolatedStringHandler.AppendLiteral), StringComparison.Ordinal))),
+            ],
+            append.Handler,
+            context);
+        return Dispatch(invocation.Instance, Bound(append.Member, invocation), [builder, text], Map(invocation.Type!), [], context);
+    }
+
+    /// <summary>
+    /// The parts of one string joined in order by <see cref="Concat"/>, lowered for <paramref name="site"/>: a text part its
+    /// constant, a <c>string</c> hole its value, an integer hole its type's closed <c>ToString()</c> call, and a hole of a
+    /// sealed class its own <c>ToString()</c> unless it is null (ticket P2-139). A lone part is joined to the empty string,
+    /// since <c>$"{s}"</c> is never null.
+    /// </summary>
+    private IrVar Joined(ImmutableArray<Piece> parts, IOperation site, LoweringContext context)
+    {
+        ITypeSymbol type = compilation.GetSpecialType(SpecialType.System_String);
+        IrVar text = parts.Length > 1 ? Part(parts[0], type, context) : Constant(type, string.Empty, context);
+        foreach (Piece part in parts.Length > 1 ? parts[1..] : parts)
         {
-            text = Concat(text, Part(part, interpolated.Type!, context), interpolated, context);
+            text = Concat(text, Part(part, type, context), site, context);
         }
 
         return text;
@@ -1051,18 +1094,18 @@ internal sealed class IrLowerer
     /// hole's value, an integer's through the <c>ToString()</c> call a written <c>i.ToString()</c> lowers to, and a sealed
     /// class's as <see cref="Formatted"/> gives it.
     /// </summary>
-    private IrVar Part(IInterpolatedStringContentOperation part, ITypeSymbol type, LoweringContext context)
+    private IrVar Part(Piece part, ITypeSymbol type, LoweringContext context)
     {
-        if (part is IInterpolatedStringTextOperation text)
+        if (!part.IsHole)
         {
-            return Value(text.Text, context);
+            return Value(part.Value, context);
         }
 
-        IOperation hole = ((IInterpolationOperation)part).Expression;
+        IOperation hole = part.Value;
         IrVar value = Value(hole, context);
         if (InterpolatedStrings.Formatter(hole) is { } formatter)
         {
-            return Formatted(part, hole, value, formatter, type, context);
+            return Formatted(part.Site, hole, value, formatter, type, context);
         }
 
         if (!InterpolatedStrings.IsInteger(hole))
@@ -1071,7 +1114,7 @@ internal sealed class IrLowerer
         }
 
         IMethodSymbol toString = hole.Type!.GetMembers(nameof(ToString)).OfType<IMethodSymbol>().Single(static m => m.Parameters.IsEmpty);
-        return Call(Called(toString, part), [value], Map(type), [], context)!;
+        return Call(Called(toString, part.Site), [value], Map(type), [], context)!;
     }
 
     /// <summary>
@@ -2054,7 +2097,7 @@ internal sealed class IrLowerer
         Call(
             new Callee(new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value), Closed: true, site, nameof(string.Concat)),
             [left, right],
-            Map(site.Type!),
+            Map(compilation.GetSpecialType(SpecialType.System_String)),
             [],
             context)!;
 
@@ -2663,6 +2706,11 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context)
     {
+        if (appended.Of(invocation) is { } append)
+        {
+            return Appended(invocation, append, context);
+        }
+
         if (invocation.TargetMethod.MethodKind == MethodKind.LocalFunction)
         {
             return InvokeLocal(invocation, context);
@@ -3193,6 +3241,12 @@ internal sealed class IrLowerer
 
     /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
     private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);
+
+    /// <summary>
+    /// One part of a string <see cref="Joined"/> joins: the operation it is lowered for, which is the call site of a hole's
+    /// <c>ToString()</c>, its text or hole, and which of the two it is.
+    /// </summary>
+    private sealed record Piece(IOperation Site, IOperation Value, bool IsHole);
 
     /// <summary>A field or property initializer a constructor runs, with its model and its operation (null only when it does not bind).</summary>
     private sealed record Initializer(EqualsValueClauseSyntax Syntax, SemanticModel Model, IOperation? Operation);

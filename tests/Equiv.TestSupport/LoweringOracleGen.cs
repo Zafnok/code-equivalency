@@ -25,7 +25,8 @@ namespace Equiv.TestSupport;
 /// (ticket P2-025), and of a tuple-typed local that holds the same elements (ticket P2-170); and, only from <see cref="MethodWithLambda"/>, a lambda whose body a runtime rule applies to,
 /// converted to a delegate and tested against <c>null</c> (ticket P2-136), <see cref="Nullables"/> (ticket P2-095), and
 /// <c>o.Nudge(k)</c>, a call that leaves out an optional parameter of the struct type <see cref="MarkType"/> (ticket P2-138), and
-/// <see cref="Guard"/>, a <c>catch</c> that reads the message of the exception <c>o.Check(x)</c> threw (ticket P2-140); built as a small AST and
+/// <see cref="Guard"/>, a <c>catch</c> that reads the message of the exception <c>o.Check(x)</c> threw (ticket P2-140), and
+/// <see cref="AppendedToBuilder"/> and <see cref="BuilderBlock"/>, an interpolated string appended to a builder (ticket P2-164); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -146,6 +147,22 @@ public static class LoweringOracleGen
     /// </summary>
     public const string Appended = $"{Cell}.ToString()";
 
+    /// <summary>
+    /// The right-hand side of <c>z = ...;</c> (ticket P2-164): an interpolated string with a <c>string</c> hole and an
+    /// <c>int</c> hole that reads a local, appended to a new builder. It binds <c>Append(string)</c> under C# 9 and the
+    /// builder's interpolated string handler under the default version. <c>Append</c> returns the builder, so <c>z</c> is true.
+    /// </summary>
+    public const string AppendedToBuilder = $"(new System.Text.StringBuilder().Append($\"p{{s}}q{{x}}\") != null)";
+
+    /// <summary>
+    /// A block (ticket P2-164) that appends to a local builder nothing else reaches an interpolated string with a hole of
+    /// the sealed class <see cref="CellType"/>, whose <c>ToString()</c> adds 1 to <see cref="CellField"/>, then a lone
+    /// <c>int</c> hole through <c>AppendLine</c>, and sets <c>z</c> from the builder's length, which is never negative. What a
+    /// run shows of it is that <c>o.ToString()</c> ran once and that <c>z</c> is true.
+    /// </summary>
+    public const string BuilderBlock =
+        $"{{ var w = new System.Text.StringBuilder(); w.Append($\"p{{s}}q{{{Cell}}}r{{x}}\").AppendLine($\"{{x}}\"); z = w.Length >= 0; }}";
+
     /// <summary>The value every <see cref="Nullables"/> expression wraps, which is what <c>GetValueOrDefault()</c> then reads of it.</summary>
     public const int NullableValue = 7;
 
@@ -210,6 +227,7 @@ public static class LoweringOracleGen
                 (1, Gen.Const<IStmt>(new Guard())),
                 // Ticket P2-141: a compound assignment to the string parameter.
                 (1, Gen.Const<IStmt>(new Compound("s", "+", new Name(Appended), IsChecked: false))),
+                (1, Gen.OneOfConst<IStmt>(new Assign("z", new Name(AppendedToBuilder)), new Builder())), // Ticket P2-164.
             ]
             : [];
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
@@ -380,8 +398,8 @@ public static class LoweringOracleGen
                 case Parse parse:
                     text.Append(pad).Append($"z = {Cell}.{TryParse}(").Append(parse.Argument.Render()).Append(", out x);\n");
                     break;
-                case Guard:
-                    text.Append(pad).Append($"try {{ {Cell}.{Check}(x); }} catch (System.Exception t) {{ z = t.Message != null; }}\n");
+                case IFixedStmt fixedStatement:
+                    text.Append(pad).Append(fixedStatement.Text).Append('\n');
                     break;
                 case Deconstruction deconstruct:
                     text.Append(pad).Append(deconstruct.Render()).Append('\n');
@@ -468,6 +486,12 @@ public static class LoweringOracleGen
 
     internal interface IStmt;
 
+    /// <summary>A statement that is always the same text.</summary>
+    internal interface IFixedStmt : IStmt
+    {
+        string Text { get; }
+    }
+
     internal sealed record Assign(string Local, IExpr Value) : IStmt;
 
     internal sealed record Compound(string Local, string Op, IExpr Value, bool IsChecked) : IStmt;
@@ -500,7 +524,16 @@ public static class LoweringOracleGen
     /// local, so the call is the only thing in the <c>try</c> that throws, and a message is never null, so <c>z</c> is
     /// true when <c>x</c> is odd and is left as it was otherwise.
     /// </summary>
-    internal sealed record Guard : IStmt;
+    internal sealed record Guard : IFixedStmt
+    {
+        public string Text => $"try {{ {Cell}.{Check}(x); }} catch (System.Exception t) {{ z = t.Message != null; }}";
+    }
+
+    /// <summary><see cref="BuilderBlock"/> (ticket P2-164).</summary>
+    internal sealed record Builder : IFixedStmt
+    {
+        public string Text => BuilderBlock;
+    }
 
     internal sealed record While(IExpr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
 
