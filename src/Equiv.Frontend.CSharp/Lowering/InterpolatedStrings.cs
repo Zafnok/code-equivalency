@@ -32,10 +32,19 @@ internal static class InterpolatedStrings
     public static bool IsConcatenation(IInterpolatedStringOperation interpolated)
     {
         IInterpolationOperation[] holes = [.. interpolated.Parts.OfType<IInterpolationOperation>()];
-        return holes.All(static h => h.Alignment is null && h.FormatString is null && (IsInteger(h.Expression) || h.Expression.Type!.SpecialType == SpecialType.System_String || Formatter(h.Expression) is not null))
-            && holes.SkipWhile(static h => !IsInteger(h.Expression)).Skip(1).All(static h => IsRead(h.Expression))
-            && holes.SkipWhile(static h => Formatter(h.Expression) is null).Skip(1).All(static h => IsUnwritten(h.Expression));
+        return holes.All(static h => h.Alignment is null && h.FormatString is null) && AreJoined([.. holes.Select(static h => h.Expression)]);
     }
+
+    /// <summary>
+    /// Whether <paramref name="holes"/>, the holes of one string in order, none with a clause, are joined as the
+    /// concatenation of the parts under both bindings: each is a <c>string</c>, an integer or a sealed class
+    /// <see cref="Formatter"/> names, and the holes after the first integer hole and after the first such class hole are
+    /// ones no formatting can tell apart from when they were read.
+    /// </summary>
+    public static bool AreJoined(IOperation[] holes) =>
+        holes.All(static h => IsInteger(h) || h.Type!.SpecialType == SpecialType.System_String || Formatter(h) is not null)
+        && holes.SkipWhile(static h => !IsInteger(h)).Skip(1).All(IsRead)
+        && holes.SkipWhile(static h => Formatter(h) is null).Skip(1).All(IsUnwritten);
 
     /// <summary>Whether <paramref name="hole"/> is of an 8- to 64-bit integer type.</summary>
     public static bool IsInteger(IOperation hole) => hole.Type!.SpecialType
@@ -101,6 +110,6 @@ internal static class InterpolatedStrings
                 && n.DescendantTokens().Any(t => string.Equals(t.ValueText, variable.Name, StringComparison.Ordinal))));
 
     /// <summary>Whether evaluating <paramref name="hole"/> calls nothing and cannot throw.</summary>
-    private static bool IsRead(IOperation hole) =>
+    public static bool IsRead(IOperation hole) =>
         hole.ConstantValue.HasValue || hole is ILocalReferenceOperation or IParameterReferenceOperation or IFieldReferenceOperation { Instance: IInstanceReferenceOperation };
 }
