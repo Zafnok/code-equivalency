@@ -1,0 +1,6 @@
+{
+  "callIdentityRenames": {
+    "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)": "Equiv.Samples.CalleeReplacement.Slots::GetData(string)",
+    "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)": "Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)"
+  }
+}

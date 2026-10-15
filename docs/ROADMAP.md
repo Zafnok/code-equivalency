@@ -1313,7 +1313,7 @@ They come before any other open ticket, in this order:
    P2-189 (S, 11, rows with no precondition on a constant argument). P2-188 cleared 4 of its 16 and
    left two tickets: P2-201 (M, 4, a field or get-only property holds the path) and P2-200 (M, 8, a
    path more than one call away, from a private method's only caller, or past `Path.Combine` only).
-   P2-200 cleared 2 of its 8 (and 3 more results outside the samples) and left P2-202 (M, 6, a
+   P2-200 cleared 2 of its 8 (and 3 more results outside the samples) and left P2-207 (M, 6, a
    reassigned local, a private method's caller or a cached field holds the path), after P2-201.
    P2-201 cleared 1 of its 4 (and 2 more results outside the samples) and left P2-208 (M, 3, a field
    written through a local function, a trailing separator or a private setter), after P2-202.
@@ -1321,7 +1321,10 @@ They come before any other open ticket, in this order:
    migrations. P2-184 cleared 7 of the 8 on Git Extensions and OpenRA (the eighth is P2-181's) and
    left two tickets for sample Divergents that ADR 0056's taint now reaches: P2-202 (S, a rewritten
    extension call on a null source) and P2-203 (M, two different answers of a closed `TrimEnd`).
-4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same.
+4. P2-192 (L, 11) and P2-193 (S, 4): Duplicati's replaced callees that do the same. P2-192 made a call the
+   config's call-identity map declares an unproven assumption the result names (ADR 0059) and left P2-205
+   (M, 1, a synchronous call replaced by its `Async` twin and `GetAwaiter().GetResult()`) and P2-206 (M, 1, a
+   renamed static getter of the caller's own type is not read).
 5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs: P2-179 (`rebound-call`, 12.9%
    of `gitextensions-8522`'s), P2-182 (`DelegateCreation`, 9.7% of OpenRA's), P2-183
    (`ArrayElementReference`, 5.9% of OpenRA's), P2-180 (`CaughtException`, 5.2% of Duplicati's), P2-165

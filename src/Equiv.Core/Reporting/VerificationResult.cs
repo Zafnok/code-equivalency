@@ -25,6 +25,9 @@ namespace Equiv.Core.Reporting;
 /// <see cref="ReboundCalls"/> is the pair's
 /// <see cref="ProcedurePair.ReboundCalls"/> (ADR 0042; ticket P2-069), and is not part of the fingerprint either; nor is
 /// <see cref="ForwardersResolved"/>, the pair's <see cref="ProcedurePair.ForwardersResolved"/> (ADR 0047; ticket P2-068).
+/// <see cref="CallIdentitiesMapped"/> are the config's call-identity map entries whose legacy identity the legacy body calls,
+/// sorted by legacy identity; each legacy identity is also in <see cref="AssumedCallees"/> and <see cref="UnprovenAssumptions"/>
+/// (ADR 0059; ticket P2-192). It is not part of the fingerprint.
 /// <see cref="DecidedBy"/> names the later pass of thorough mode that produced the result, <see cref="BudgetPass"/> or
 /// <see cref="IlPass"/> (ADR 0049 decision 6; ticket P1-032); null for a result of the first pass. It is not part of the
 /// fingerprint. <see cref="NotCongruent"/> is what kept the pair out of congruence (ADR 0024 decision 1; ticket P2-173):
@@ -56,6 +59,8 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 
     public ImmutableArray<ResolvedForwarder> ForwardersResolved { get; init; } = [];
+
+    public ImmutableArray<MappedCall> CallIdentitiesMapped { get; init; } = [];
 
     public string? DecidedBy { get; init; }
 

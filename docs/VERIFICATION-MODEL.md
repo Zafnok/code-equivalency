@@ -17,6 +17,13 @@ SARIF result names them (`assumedCallees`) and flags the ones not proved in the 
 (`unprovenAssumptions`). This holds for cycles too: if every pair on a cycle of matched
 procedures is Equivalent, every pair is partially equivalent (the mutual-summary rule).
 
+A callee the config's call-identity map (`callIdentityRenames`) maps is assumed too (ADR 0059;
+ticket P2-192). An entry `L → M` declares that every legacy call to `L` is the same function as a
+modern call to `M`, whatever kind of members `L` and `M` are, a solution's own shim of a member the
+new runtime lacks included. Nothing in the run proves the declaration, so every result of a pair
+whose legacy body calls `L` lists `L` in `assumedCallees` and in `unprovenAssumptions`, and the pair
+`{ legacy: L, modern: M }` in `callIdentitiesMapped`. The contracts pass below never takes `L`.
+
 A changed callee that the caller cannot observe does not stay an assumption (ADR 0036 decision 2;
 ticket P1-010). Take an Equivalent caller whose unproven assumptions include a lowered callee pair
 (f, f'). The run builds a relational contract K from what the caller observes of that call (section
@@ -521,7 +528,10 @@ Migration-specific normalisations (applied to both sides before matching):
   ticket M3-009), not by a separate normaliser, and like every catalogue entry it is applied
   to the legacy side only. `HttpResponseMessage` has no entry: an action returning it stays
   Divergent unless the user maps it.
-- Namespace and type rename maps come from `equiv.config.json`.
+- Namespace and type rename maps come from `equiv.config.json`, and so does the call-identity map
+  (`callIdentityRenames`), which makes a legacy callee identity the same function as a modern one.
+  The encoders apply it to legacy calls only. Each entry a pair's legacy body calls is an unproven
+  assumption of that pair's result (section 1; ADR 0059).
 - BCL API changes are NOT auto-equated (`WebClient` vs `HttpClient` calls are different
   identities and therefore Divergent unless the user maps them, or Unknown when the call site's
   text is the same on both sides, as the rebound call sites below). False alarms are
@@ -1030,7 +1040,9 @@ catalogue entry fired (ADR 0020), and `properties.reboundCalls` when a call site
 0042): one `{ legacy, modern }` per rebound pair of callee identities, sorted by legacy and then
 modern identity. It is not part of the fingerprint. `properties.forwardersResolved` lists the forwarders a body's calls were
 resolved through (ADR 0047): one `{ forwarder, target }` per forwarder, sorted by forwarder and then target; it is not part
-of the fingerprint either.
+of the fingerprint either. `properties.callIdentitiesMapped` lists the call-identity map entries the legacy body calls (ADR
+0059): one `{ legacy, modern }` per entry, sorted by legacy identity, each legacy identity also in `assumedCallees` and
+`unprovenAssumptions`; it is not part of the fingerprint.
 
 A result of a matched pair with bodies that is not Equivalent by congruence carries `properties.notCongruent` (ADR 0024
 decision 1; ticket P2-173): `{ component, identity }`, the first component of the bound fingerprint on which the two
