@@ -1,5 +1,5 @@
 # P2-213 Duplicati's replaced callees are declared in the pair's committed config, so a default corpus run uses P2-192
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none

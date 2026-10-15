@@ -1,0 +1,7 @@
+{
+  "callIdentityRenames": {
+    "System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)": "Duplicati.Logging.Duplicati.Library.Logging.CallContext::GetData(string)",
+    "System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)": "Duplicati.Logging.Duplicati.Library.Logging.CallContext::SetData(string,object)",
+    "Duplicati.Library.Utility.HashAlgorithmHelper::Create(string)": "System.Security.Cryptography.HashAlgorithm::Create(string)"
+  }
+}

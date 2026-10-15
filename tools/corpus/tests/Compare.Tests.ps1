@@ -75,6 +75,24 @@ Describe 'corpus.ps1 -Compare and the compare mode' {
         if (Get-PairConfig 'no-such-pair') { throw 'a pair with no config file got one' }
     }
 
+    It 'PairConfig_DuplicatiDeclaresTheCalleesItsPullRequestReplaces' {
+        # P2-213 (ADR 0059): the pull request replaces each call to these members, one for one, by its counterpart.
+        $path = Get-PairConfig 'duplicati-3124'
+        if (-not $path) { throw 'duplicati-3124 has no pair config' }
+        $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        $expected = [ordered]@{
+            'System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)'        = 'Duplicati.Logging.Duplicati.Library.Logging.CallContext::GetData(string)'
+            'System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)' = 'Duplicati.Logging.Duplicati.Library.Logging.CallContext::SetData(string,object)'
+            'Duplicati.Library.Utility.HashAlgorithmHelper::Create(string)'                = 'System.Security.Cryptography.HashAlgorithm::Create(string)'
+        }
+        $actual = @($config.callIdentityRenames.PSObject.Properties)
+        if ($actual.Count -ne $expected.Count) { throw "expected $($expected.Count) entries, got $($actual.Count)" }
+        foreach ($legacy in $expected.Keys) {
+            if ($config.callIdentityRenames.$legacy -ne $expected[$legacy]) { throw "$legacy maps to '$($config.callIdentityRenames.$legacy)', not $($expected[$legacy])" }
+        }
+        if (@($config.PSObject.Properties.Name) -ne 'callIdentityRenames') { throw "the config states more than its declarations: $(@($config.PSObject.Properties.Name) -join ', ')" }
+    }
+
     It 'Compare_AVerifyingRunMustNameItsMode' {
         Assert-Throws { Get-CompareArguments -Legacy 'a.sln' -ModernSolution 'b.sln' -RunDir 'run' -CompareMode '' -Census $false -Extra @() } '*names its compare mode*'
     }

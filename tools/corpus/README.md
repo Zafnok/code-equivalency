@@ -113,13 +113,19 @@ P2-172; 17 with the first three only).
 ### Pair configs (ticket P2-197)
 
 `configs/<slug>.json` is a pair's own `equiv.json`; `-Compare` passes it as `--config` unless
-`-CompareArgs` names another. It states only what equiv cannot read from the solution. Today that is a
-side's runtime for `netstandard` projects no project references (ADR 0040 decision 1's `runtimes`), each
-with the source below.
+`-CompareArgs` names another. It states only what equiv cannot read from the solution, each with the
+source below. Today that is a side's runtime for `netstandard` projects no project references (ADR 0040
+decision 1's `runtimes`), and a callee the pair's pull request replaces, one call for one call, by another
+member (`callIdentityRenames`, ADR 0059 and its 2026-10-15 clarification). A declared callee is an
+assumption no run proves: every result that rests on it lists it in `unprovenAssumptions` and
+`callIdentitiesMapped`.
 
 | Slug | States | Source |
 |---|---|---|
 | `openra-17989` | `runtimes.modern`: `net5.0` | `OpenRA.Mods.Cnc`, `OpenRA.Mods.Common`, `OpenRA.Mods.D2k` and `OpenRA.Platforms.Default` target `netstandard2.1` and no project references them: the game loads them by path at run time, through the pair's new `AssemblyLoader` (an `AssemblyLoadContext`, `OpenRA.Game/Support/AssemblyLoader.cs`) outside a Mono build: `OpenRA.Game/ObjectCreator.cs` for the mods, `OpenRA.Game/Game.cs` for the renderer. The executables that run `OpenRA.Game` (`OpenRA.Launcher`, `OpenRA.Server`, `OpenRA.Utility`) target `net5.0` outside a Mono build, and `OpenRA.WindowsLauncher` targets `net5.0`, so the mods run on .NET 5. The legacy side's projects all name `net472` and state nothing. |
+| `duplicati-3124` | `callIdentityRenames`: `System.Runtime.Remoting.Messaging.CallContext::LogicalGetData(string)` → `Duplicati.Logging.Duplicati.Library.Logging.CallContext::GetData(string)` | net5.0 has no remoting `CallContext`. The pull request adds `Duplicati/Library/Logging/CallContext.cs`, a static `CallContext` (in namespace `Duplicati.Logging.Duplicati.Library.Logging`) whose `GetData` reads a name's slot from a `ConcurrentDictionary<string, AsyncLocal<object>>`. Each of the legacy side's 4 `LogicalGetData` calls becomes a `CallContext.GetData` call with the same argument, in the same four files: `Duplicati/Library/Localization/LocalizationContext.cs`, `.../LocalizationService.cs`, `Duplicati/Library/Logging/Log.cs` and `Duplicati/Library/Utility/CallContextSettings.cs`. |
+| `duplicati-3124` | `callIdentityRenames`: `System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)` → `Duplicati.Logging.Duplicati.Library.Logging.CallContext::SetData(string,object)` | The same shim's `SetData` sets the name's slot. Each `LogicalSetData` call becomes a `CallContext.SetData` call with the same two arguments, in the same four files: 6 on each side, file for file. |
+| `duplicati-3124` | `callIdentityRenames`: `Duplicati.Library.Utility.HashAlgorithmHelper::Create(string)` → `System.Security.Cryptography.HashAlgorithm::Create(string)` | The legacy `Duplicati/Library/Utility/HashAlgorithmHelper.cs` forwards `Create(name)` to the third-party `FasterHashing.FasterHash.Create(name)`, which picks a faster implementation of the same named algorithm. The pull request deletes the helper and calls `HashAlgorithm.Create` with the same name at each of its 24 call sites, in the same 16 files. FasterHashing ships as a binary, so that the two factories agree for every name is the declared assumption. |
 
 ### Version-upgrade pairs (ticket P2-066)
 
