@@ -18,15 +18,18 @@ the callee pairs were counted over `gitextensions-8522` and `jellyfin-13023`):
   Unknown, with the two callees in `properties.reboundCalls`.
 
 `TrimTailOther` trims white space on the legacy side and `'.'` on the modern side: the entry still
-applies to the legacy call, and `TrimEnd()` and `TrimEnd(char)` are two different calls, so the pair
-stays Divergent.
+applies to the legacy call, and `TrimEnd()` and `TrimEnd(char)` are two different calls. A rewritten
+call is closed exactly when a direct call of its modern member is (ADR 0041, ticket P2-184), so both
+calls are closed and the replay taints what the solver chose for them (ADR 0056). The sides differ
+only in those answers, so the pair is Unknown (`abstraction`), naming both members (ticket P2-203
+owns giving it back its Divergent).
 
 ## Expected verdicts
 
 | Procedure | Verdict | `equivalencesApplied` |
 |---|---|---|
 | `Calls.TrimTail(string)` | Equivalent | `bcl.string-trim-end-no-chars` |
-| `Calls.TrimTailOther(string)` | Divergent | `bcl.string-trim-end-no-chars` |
+| `Calls.TrimTailOther(string)` | Unknown (`abstraction`; equivalent when `s == null`) | `bcl.string-trim-end-no-chars` |
 | `Calls.Hours(int)` | Unknown (`opaque`, a rebound call) | none |
 
-Exit code: 1 (a new Divergent result).
+Exit code: 0 (Unknown does not fail the run without `--fail-on unknown`).
