@@ -58,7 +58,8 @@ whose legacy body calls `L`:
   same Equivalent listed nothing. No verdict, rule id or exit code changes.
 - A user can declare, for example, the remoting `CallContext` members as the solution's shim, or a third-party hashing
   factory as `HashAlgorithm::Create(string)`, in `equiv.config.json`. Corpus runs carry no config, so the scoreboard
-  does not move. Ticket P2-192's Notes give `duplicati-3124`'s results with the two `CallContext` entries declared.
+  does not move. Ticket P2-192's Notes give `duplicati-3124`'s results with the two `CallContext` entries and the hashing helper's
+  entry declared: 8 of its 11 false EQ002 become EQ001, each naming its declared callee.
 - A replacement that is not one call for one call (`Foo()` for `FooAsync().GetAwaiter().GetResult()`) is another kind of
   equivalence and is not declarable this way. Ticket P2-202 owns it.
 - SARIF gains `properties.callIdentitiesMapped`, so the change that implements this carries `Release: minor`. VERIFICATION-MODEL sections 1 and 6 change in the
