@@ -66,3 +66,14 @@ whose legacy body calls `L`:
   PR that accepts this ADR. Ticket P2-192 implements it, with `samples/callee-replacement`.
 - Proposed as ADR 0058 and renumbered on merge, since `main` took that number first (ADR 0058 is the cross-runtime
   `[DllImport]` decision).
+
+## Clarifications
+- 2026-10-15 (P2-213). **A corpus pair's committed config.** "Corpus runs carry no config, so the scoreboard does not
+  move" (Consequences) held before P2-197 gave a pair its own `tools/corpus/configs/<slug>.json`, which `corpus.ps1
+  -Compare` passes as `--config`. That file may hold `callIdentityRenames` entries, under this Decision unchanged: each
+  entry is an assumption no run proves, and every result that rests on it says so in `unprovenAssumptions` and
+  `callIdentitiesMapped`. The scoreboard counts such an Equivalent as it counts any Equivalent with a non-empty
+  `unprovenAssumptions` (ADR 0019). An entry is committed only where the pair's pull request itself replaces every
+  call to `L` by a call to `M` with the same arguments, and `tools/corpus/README.md` "Pair configs" cites the files
+  that show it. An entry is never added to clear a result no adjudication traced. `duplicati-3124` holds the first
+  three.
