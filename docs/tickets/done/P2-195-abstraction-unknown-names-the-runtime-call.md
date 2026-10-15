@@ -1,5 +1,5 @@
 # P2-195 An `abstraction` Unknown on a body a runtime rule keeps out of congruence names the runtime-changed call its candidate starts from
-Status: in-progress
+Status: done (PR #504)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
