@@ -179,28 +179,28 @@ internal static class ValidPaths
     /// </summary>
     private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
         (orEmpty && IsEmpty(value)) || IsValidConstant(value) || value switch
-    {
-        IPropertyReferenceOperation property => IsValidProperty(property, seen, orEmpty, compilation, depth),
-        IFieldReferenceOperation field => StoresOnlyValidPaths(field, orEmpty, compilation, depth) || IsGuardedRead(field),
+        {
+            IPropertyReferenceOperation property => IsValidProperty(property, seen, orEmpty, compilation, depth),
+            IFieldReferenceOperation field => StoresOnlyValidPaths(field, orEmpty, compilation, depth) || IsGuardedRead(field),
 
-        // A transform's or a prefix's operands are read as valid paths, without what seen takes to be the empty string.
-        IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
-                Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, orEmpty ? [] : seen, orEmpty: false, compilation, depth)))
-            || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, call.Arguments, seen, orEmpty, compilation, depth),
+            // A transform's or a prefix's operands are read as valid paths, without what seen takes to be the empty string.
+            IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
+                    Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, orEmpty ? [] : seen, orEmpty: false, compilation, depth)))
+                || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, call.Arguments, seen, orEmpty, compilation, depth),
 
-        // Only an expression is a value, and a conditional expression has both branches.
-        IConditionalOperation conditional =>
-            IsValid(conditional.WhenTrue, seen, orEmpty, compilation, depth) && IsValid(conditional.WhenFalse!, seen, orEmpty, compilation, depth),
-        // A built-in + with a string operand joins strings.
-        IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join => IsValidJoin(join, seen, orEmpty, compilation, depth),
+            // Only an expression is a value, and a conditional expression has both branches.
+            IConditionalOperation conditional =>
+                IsValid(conditional.WhenTrue, seen, orEmpty, compilation, depth) && IsValid(conditional.WhenFalse!, seen, orEmpty, compilation, depth),
+            // A built-in + with a string operand joins strings.
+            IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join => IsValidJoin(join, seen, orEmpty, compilation, depth),
 
-        // A variable read as a path holds a string, and += on a string is the built-in join (ticket P2-232).
-        ICompoundAssignmentOperation append =>
-            IsPathPart(append.Value, orEmpty, compilation, depth) && IsValid(append.Target, seen, orEmpty, compilation, depth),
-        ILocalReferenceOperation local => IsValidLocal(local, seen, orEmpty, compilation, depth),
-        IParameterReferenceOperation parameter => IsValidParameter(parameter, seen, orEmpty, compilation, depth),
-        _ => false,
-    };
+            // A variable read as a path holds a string, and += on a string is the built-in join (ticket P2-232).
+            ICompoundAssignmentOperation append =>
+                IsPathPart(append.Value, orEmpty, compilation, depth) && IsValid(append.Target, seen, orEmpty, compilation, depth),
+            ILocalReferenceOperation local => IsValidLocal(local, seen, orEmpty, compilation, depth),
+            IParameterReferenceOperation parameter => IsValidParameter(parameter, seen, orEmpty, compilation, depth),
+            _ => false,
+        };
 
     /// <summary>
     /// A string constant that does not meet <c>invalidPath</c> (ticket P2-218): .NET Framework's validation accepts it, and a
