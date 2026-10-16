@@ -92,3 +92,38 @@ The routes P2-207, P2-208 and P2-232 own.
   `switch` read a null as no valid path, but P2-232's empty-string check and this ticket's constant check read the value
   first. Fixed on P2-232's branch (PR #530, where the empty-string check could reach it too) and taken here by rebase: a
   return with no value adds nothing. The run that hit it is void and was run again.
+- Decision: the before runs are P2-232's branch (`a10220de`; Git Extensions at 17:21 is P2-232's own criterion 2 run,
+  Duplicati at 17:30); this branch ran at `9df6f763`. Both used the `precision-audit-large-pairs` worktree's `.corpus` by
+  junction, `corpus.ps1 -Env` set, compare mode quick, `--jobs 4`, one run at a time; every run exited 1 (a Divergent
+  result) with no project skipped. Another session ran a Duplicati run of its own (P2-220) at 17:08 on the same
+  checkouts, overlapping this ticket's first Git Extensions run of P2-232, not its load phase.
+- Criterion 3, the five procedures, P2-212's verdict, then P2-232, then this branch:
+
+  | Pair | # | Procedure | P2-212 | P2-232 | P2-218 |
+  |---|---|---|---|---|---|
+  | Git Extensions | 26 | `GitCommands.Settings.GitExtSettingsCache::ReadSettings(string)` | EQ006 | EQ006 | EQ006 |
+  | Git Extensions | 32 | `GitUITests.Theming.ThemeLoaderTests::Should_throw_When_cyclic_css_imports()` | EQ006 | EQ006 | EQ006 |
+  | Git Extensions | 36 | `GitCommands.GitModule::InTheMiddleOfMerge()` | EQ006 | EQ006 | EQ006 |
+  | Duplicati | 27 | `Duplicati.UnitTest.CommandLineOperationsTests::get_zipAlternativeFilepath()` | EQ006 | EQ006 | **Equivalent** |
+  | Duplicati | 41 | `Duplicati.Library.Utility.TempFile::.ctor()` | EQ006 | EQ006 | EQ006 |
+
+  Four stay EQ006, as criterion 1's table says they must. Path-row EQ006 (counted as P2-188 did) and all EQ006:
+
+  | Pair | Path-row EQ006: P2-208, P2-232, P2-218 | All EQ006: P2-208, P2-232, P2-218 | Run time: P2-232, P2-218 |
+  |---|---|---|---|
+  | `gitextensions-8522` | 52, 48, 47 | 128, 124, 123 | 395 s, 341 s |
+  | `duplicati-3124` | 94, 94, 91 | 114, 114, 111 | 497 s, 458 s |
+
+  The results that changed between P2-232 and this branch, each read against the source:
+  - EQ006 to Equivalent: #27; `CommandLineOperationsTests::get_zipFilepath()` and `GeneralBlackBoxTesting::get_zipFilepath()`
+    (the same `Path.Combine(BASEFOLDER, <readonly constant field>)`); Git Extensions'
+    `CommitMessageManagerTests::.ctor()`, whose three `Path.Combine(_workingDirGitDir, ...)` read a `readonly` field set
+    to the constant `c:\dev\repo\.git`.
+  - Unknown to Equivalent: five `CommitMessageManagerTests::MergeOrCommitMessage_*` tests (`opaque:DelegateCreation`
+    before; with the field's path calls no longer flagged the pair is congruent), and two former timeouts,
+    `CommitTemplateManagerTests::LoadGitCommitTemplate_should_load_file_content()` and Duplicati's
+    `SQLiteLoader::get_SQLiteConnectionType()` (which joins the constant local `"System.Data.SQLite.dll"` to paths).
+  - Unknown to Unknown: `GitDirectoryResolverTests::Setup()`, `timeout` to `opaque:rebound-call`.
+
+  No result became Divergent, and none left Equivalent. The run times differ by 40 to 55 s against runs made while the
+  other session's run and this machine's builds shared it; one run each, not attributed.
