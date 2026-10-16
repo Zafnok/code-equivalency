@@ -108,7 +108,7 @@ internal static partial class RuntimeChangeReach
     /// Whether .NET Framework's validation could reject <paramref name="path"/>: it is blank or long, or it has a
     /// control character, one of <see cref="InvalidPathCharacters"/>, or a colon anywhere but after a drive letter.
     /// </summary>
-    private static bool IsSuspectPath(string path) =>
+    public static bool IsSuspectPath(string path) =>
         string.IsNullOrWhiteSpace(path)
         || path.Length >= LongPath
         || path.Where(static (c, i) => IsRejected(c) || (c == ':' && i != 1)).Any();

@@ -476,7 +476,8 @@ public sealed class ValidPathsTests
     [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() { string ixfile; ixfile = Path.GetFullPath(\"index.txt\"); return M(ixfile); }", false)]
     [InlineData("static object M(string file) => new StreamWriter(file);\npublic static object Run(string p) => M(p);", true)]
     [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run(string p) => M(AppContext.BaseDirectory) ?? M(p);", true)]
-    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(\"index.txt\");", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(\"index.txt\");", false)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(\"index|txt\");", true)]
     [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() { Func<string, object> f = M; return M(AppContext.BaseDirectory); }", true)]
     [InlineData("static object M(string file) => new StreamWriter(file);\nstatic string Name => nameof(M);\nstatic object Run() => M(AppContext.BaseDirectory);", true)]
     [InlineData("internal static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(AppContext.BaseDirectory);", true)]
@@ -706,6 +707,55 @@ public sealed class ValidPathsTests
     public void AnIteratorsYieldBreakReturnsNoValue() => Assert.Equal(
         ["System.IO.File::WriteAllLines(string,System.Collections.Generic.IEnumerable<string>)"],
         Flagged("static System.Collections.Generic.IEnumerable<string> Lines() { yield break; }\nstatic void M() => File.WriteAllLines(AppContext.BaseDirectory + \"x\", Lines());"));
+
+    /// <summary>
+    /// Ticket P2-218: a string constant that does not meet <c>invalidPath</c> is a valid path wherever the rules read a value:
+    /// a field that only ever holds one, a branch of a conditional, a callee's return. One that meets it still fires.
+    /// </summary>
+    [Theory]
+    [InlineData("readonly string name = \"data.zip\";\nobject M() => new StreamReader(Path.Combine(AppContext.BaseDirectory, name));", false)]
+    [InlineData("static object M(bool b) => new StreamReader(b ? \"a.txt\" : AppContext.BaseDirectory);", false)]
+    [InlineData("static string Name() => \"a.txt\";\nstatic object M() => new StreamReader(Name());", false)]
+    [InlineData("readonly string name = \"a|b\";\nobject M() => new StreamReader(Path.Combine(AppContext.BaseDirectory, name));", true)]
+    [InlineData("readonly string name = \"\";\nobject M() => new StreamReader(name);", true)]
+    [InlineData("static object M(bool b) => new StreamReader(b ? \"ab:c\" : AppContext.BaseDirectory);", true)]
+    [InlineData("string name = \"data.zip\";\nobject M() => new StreamReader(Path.Combine(AppContext.BaseDirectory, name));", true)]
+    public void AConstantThatDoesNotMeetInvalidPathIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-218, Duplicati #27's <c>CommandLineOperationsTests.zipAlternativeFilepath</c>: in an instance member of a
+    /// class, a <c>static readonly</c> field that an instance field initializer of the class or a base class has already
+    /// passed, unconditionally, to the same member as the same parameter is accepted by that member's validation, so the
+    /// member's row does not fire on it. A field that can change, another member or parameter, a conditional or static
+    /// initializer, a static member, and a site in a field initializer or a constructor initializer still fire.
+    /// </summary>
+    [Theory]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "object M() => Path.Combine(Base, zip);", false)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.GetFileName(Path.Combine(Base, \"data\"));", "object M() { return Join(); string Join() => Path.Combine(Base, \"x\"); }", false)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected string Data { get; } = Path.Combine(Base, \"data\");", "object M() => Path.Combine(Base, zip);", false)]
+    [InlineData("", "protected static string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "object M() => Path.Combine(Base, zip);", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.GetDirectoryName(Base);", "object M() => Path.Combine(Base, zip);", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(\"data\", Base);", "object M() => Path.Combine(Base, zip);", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Base == null ? null : Path.Combine(Base, \"data\");", "object M() => Path.Combine(Base, zip);", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected static readonly string Data = Path.Combine(Base, \"data\");", "object M() => Path.Combine(Base, zip);", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "static object M() => Path.Combine(Base, \"x\");", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "object M() => Path.Combine(Other, zip);\nstatic readonly string Other = Environment.GetEnvironmentVariable(\"Y\");", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "object M() => Path.Combine(Environment.GetEnvironmentVariable(\"Y\"), zip);", true)]
+    [InlineData("", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "object M() => Path.GetDirectoryName(Base);", true)]
+    [InlineData(".ctor", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "readonly string Early = Path.Combine(Base, \"early\");\nC() { }", true)]
+    [InlineData(".ctor", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");\nprotected Helper(string s) { }", "protected readonly string Data = Path.Combine(Base, \"data\");", "C() : base(Path.Combine(Base, \"x\")) { }", true)]
+    [InlineData(".ctor", "protected static readonly string Base = Environment.GetEnvironmentVariable(\"X\");", "protected readonly string Data = Path.Combine(Base, \"data\");", "C() { GC.KeepAlive(Path.Combine(Base, \"x\")); }", false)]
+    public void AStaticFieldTheObjectsInitializersPassedToTheSameMemberIsAccepted(string name, string field, string initializer, string member, bool flagged) => Assert.Equal(flagged, Calls(Source(
+        "using System;\nusing System.IO;\n"
+        + "abstract class Helper\n{\n" + field + "\n" + initializer + "\n}\n"
+        + "sealed class C : Helper\n{\nreadonly string zip = \"a.zip\";\n" + member + "\n}\n", name: name is "" ? "M" : name)).Any(static call => call.Callee.RuntimeChanged));
+
+    /// <summary>Ticket P2-218: a struct's field initializers do not run for its default value, so a struct's member is not read so.</summary>
+    [Fact]
+    public void AStructsInitializersAreNotRead() => Assert.True(Calls(Source(
+        "using System;\nusing System.IO;\n"
+        + "struct C\n{\nstatic readonly string Base = Environment.GetEnvironmentVariable(\"X\");\nreadonly string data = Path.Combine(Base, \"data\");\n"
+        + "public C() { }\nobject M() => Path.Combine(Base, \"x\");\n}\n")).Any(static call => call.Callee.RuntimeChanged));
 
     private static bool Flags(string member) => Flagged(member).Length > 0;
 
