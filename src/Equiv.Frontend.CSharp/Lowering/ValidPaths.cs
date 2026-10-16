@@ -326,8 +326,12 @@ internal static class ValidPaths
         }
         && Body(declaration, compilation) is { } body
         && ReadsNothingAround(body)
-            ? [.. (body is ILocalFunctionOperation ? body.ChildOperations.SelectMany(Returned) : Returned(body))]
+            ? [.. ReturnedBy(body)]
             : [];
+
+    /// <summary>The values <paramref name="body"/> returns: a local function's own <c>return</c> statements, or a member's.</summary>
+    private static IEnumerable<IOperation> ReturnedBy(IOperation body) =>
+        body is ILocalFunctionOperation ? body.ChildOperations.SelectMany(Returned) : Returned(body);
 
     /// <summary>
     /// Whether <paramref name="body"/> reads no local variable or parameter of a method around it (ticket P2-208): true for
