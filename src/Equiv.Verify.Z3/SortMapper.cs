@@ -58,6 +58,16 @@ internal sealed class SortMapper(Context context, IntModeTranslator? integers = 
         _ => MapLiteral((IrMapValue)value),
     };
 
+    /// <summary>
+    /// <paramref name="term"/> as an argument of an uninterpreted function: a floating-point term with every NaN made the
+    /// one NaN, any other term itself (ticket P2-221). IEEE 754 has one NaN value, and so do <see cref="IrFloat"/> and a
+    /// model, but a refined query is solved after <c>fpa2bv</c>, which applies an uninterpreted function to a number's bits:
+    /// without this, a NaN input and the NaN an operation gives are two arguments, the function may answer them differently,
+    /// and the replay, which has one NaN, cannot.
+    /// </summary>
+    public Expr OneNaN(Expr term) =>
+        term is FPExpr number ? context.MkITE(context.MkFPIsNaN(number), context.MkFPNaN((FPSort)number.Sort), number) : term;
+
     /// <summary>Z3's binary32 or binary64 sort when this mapper interprets floating point and <paramref name="type"/> is one, else null.</summary>
     public FPSort? FloatSort(IrType type) => (floats ? IrFloat.Width(type) : null) switch
     {

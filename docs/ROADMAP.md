@@ -949,6 +949,9 @@ Found by P2-124's rerun of the two upgrade pairs (`docs/runs/2026-10-12-upgrade-
   holes). The first step is the rerun. Needs P2-164.
 - P2-226 (M) The `StringBuilder` append rows fire in thorough's IL pass, which applies no `requires` fact, on an
   append no hole can reach: P2-211's `TestToString` EQ006. Needs P2-211.
+- P2-227 (S) A refined query can read a `float` or `double` heap map holding a NaN input on one side and a NaN an
+  operation made on the other as two call arguments, where the replay has one: P2-221's encoder bug, on a map. Needs
+  P2-221.
 - P2-165 (M) An unedited `extern` method is Unknown (`no-body`) on every pair that crosses a runtime
   (ADR 0054 decision 4): 53 of `gitextensions-9860`'s 605 changed pairs (8.8%), its largest opaque
   reason. Changes an accepted ADR, so it goes through `equiv-adr`. Needs P2-145 and P2-146.
@@ -1377,8 +1380,9 @@ false positives and Unknowns that verdict counts against each, they come before 
 6. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates fresh samples as P2-212 did, and names
    the milestone after this one, once items 1 to 4 are done.
 
-Ahead of the list: P2-221 (M), an encoder bug in the refinement of a float-to-int conversion of NaN. A property
-test's random seed hits it on `main`, so any CI run that draws such a seed goes red. Filed 2026-10-15 from GH-407's PR.
+Ahead of the list was P2-221, an encoder bug in the refinement of a float-to-int conversion of NaN that a property
+test's random seed hit; it is done. Its one case left, P2-227 (S), a floating-point heap map holding two NaN bit
+patterns, has not been drawn by any pair or test.
 
 Not on it: P2-191's one false positive is congruent since P2-197's config, so it has nothing counted against it. 620 of
 the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture

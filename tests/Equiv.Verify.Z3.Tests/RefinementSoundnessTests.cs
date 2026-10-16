@@ -111,6 +111,139 @@ public sealed class RefinementSoundnessTests
         Assert.True(decided >= 5, $"only {decided.ToString(CultureInfo.InvariantCulture)} of 60 pairs were decided after refinement");
     }
 
+    /// <summary>
+    /// The pair seed <c>9MGZCy1Yn9U3</c> drew (ticket P2-221). The solver once took the NaN it chose for <c>%v0</c> and the
+    /// NaN <c>%v0 - %v1</c> gives as two arguments of the shared conversion, answered differently, where the replay has one
+    /// NaN, and the model did not replay to a difference. Now whatever model it gives replays to one: an untainted one is
+    /// .NET's own, and a tainted one depends on a conversion outside its meaning.
+    /// </summary>
+    [Fact]
+    public void TheSeededPairReplaysToADifference()
+    {
+        IrProcedure old = IrText.Parse(Seeded(first: null));
+        IrProcedure @new = IrText.Parse(Seeded(first: null, subtracted: true));
+
+        Counterexample model = new Z3Backend().Verify(old, @new, Options) switch
+        {
+            Divergent divergent => divergent.Counterexample,
+            Unknown { Reason: UnknownReason.Abstraction, Candidate: { } candidate } unknown when unknown.Abstractions.Any(static a => a.Identity.Value.StartsWith("conv.f64.i32", StringComparison.Ordinal)) => candidate,
+            var other => throw new Xunit.Sdk.XunitException($"expected Divergent or Unknown(abstraction) on conv.f64.i32, got {other}"),
+        };
+
+        Assert.NotEqual(model.Old.Outcome, model.New.Outcome);
+        if (model is { Old.Taint.Sources.IsEmpty: true, New.Taint.Sources.IsEmpty: true })
+        {
+            Assert.Equal(model.Old.Outcome, Run(old, model.Inputs));
+            Assert.Equal(model.New.Outcome, Run(@new, model.Inputs));
+        }
+    }
+
+    /// <summary>
+    /// The seed's pair with <c>%v0</c> a NaN: both sides convert the one NaN, whatever bits the operation that made it
+    /// gives, so they are Equivalent (ticket P2-221).
+    /// </summary>
+    [Fact]
+    public void TheSeededPairOnANaNIsEquivalent() =>
+        Assert.IsType<Equivalent>(new Z3Backend().Verify(IrText.Parse(Seeded(double.NaN)), IrText.Parse(Seeded(double.NaN, subtracted: true)), Options));
+
+    /// <summary>
+    /// The seed's pair with <c>%v0</c> an out-of-range finite double instead. <c>%v0 - %v1</c> is then another argument
+    /// outside the conversion's meaning wherever it is not <c>%v0</c> itself, so the shared function decides the pair and
+    /// it stays Unknown(abstraction), with a model that replays to a tainted difference (ticket P2-221).
+    /// </summary>
+    [Theory]
+    [InlineData(1e300)]
+    [InlineData(-2147483649.0)]
+    public void TheSeededPairOnAnOutOfRangeDoubleDependsOnTheConversion(double first)
+    {
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(IrText.Parse(Seeded(first)), IrText.Parse(Seeded(first, subtracted: true)), Options));
+
+        Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
+        Assert.NotEqual(unknown.Candidate!.Old.Outcome, unknown.Candidate.New.Outcome);
+    }
+
+    /// <summary>
+    /// <c>%a - 0.0</c> is <c>%a</c> on every double, a NaN's bits aside, so truncating either is never Divergent (ticket
+    /// P2-221). The solver once asked the shared conversion about the NaN input and the NaN the subtraction gives as two
+    /// arguments, and its model did not replay to a difference. Proving the two equal through bit-blasted subtraction is
+    /// beyond the refined query's resource limit, so the pair may stay Unknown.
+    /// </summary>
+    [Fact]
+    public void TruncatingANumberMinusZeroIsNeverDivergent()
+    {
+        string direct = $"proc \"T::M(double)\" (%a: {Double}) -> bv32 entry B0\nB0:\n  %i: bv32 = pure \"conv.f64.i32\"(%a)\n  ret %i";
+        string subtracted = $"proc \"T::M(double)\" (%a: {Double}) -> bv32 entry B0\nB0:\n  %z: {Double} = const {Literal(0.0)}\n"
+            + $"  %s: {Double} = pure \"f64.sub\"(%a, %z)\n  %i: bv32 = pure \"conv.f64.i32\"(%s)\n  ret %i";
+
+        Assert.IsNotType<Divergent>(new Z3Backend().Verify(IrText.Parse(direct), IrText.Parse(subtracted), Options));
+    }
+
+    /// <summary>
+    /// A call is given a NaN on both sides, one side's narrowed to <c>float</c> and widened back: the one NaN, so the pair
+    /// is Equivalent (ticket P2-221). The solver once asked the call's functions about the two NaNs' bits apart.
+    /// </summary>
+    [Fact]
+    public void ACallGivenANaNIsGivenOneNaN()
+    {
+        string direct =
+            $"""
+            proc "T::M(double)" (%a: {Double}) -> bv32 entry B0
+            B0:
+              %n: bool = pure "f64.ne"(%a, %a)
+              br %n, B1, B2
+            B1:
+              %i: bv32 = call "Sink::F(double)"(%a)
+              ret %i
+            B2:
+              %k: bv32 = const bv32 0
+              ret %k
+            """;
+        string converted =
+            $"""
+            proc "T::M(double)" (%a: {Double}) -> bv32 entry B0
+            B0:
+              %n: bool = pure "f64.ne"(%a, %a)
+              br %n, B1, B2
+            B1:
+              %f: sort "System.Single" = pure "conv.f64.f32"(%a)
+              %s: {Double} = pure "conv.f32.f64"(%f)
+              %i: bv32 = call "Sink::F(double)"(%s)
+              ret %i
+            B2:
+              %k: bv32 = const bv32 0
+              ret %k
+            """;
+
+        Assert.IsType<Equivalent>(new Z3Backend().Verify(IrText.Parse(direct), IrText.Parse(converted), Options));
+    }
+
+    /// <summary>
+    /// The seed's pair: the old side truncates <c>%v0</c> twice, the new side <c>%v0 - %v1</c> once. With
+    /// <paramref name="first"/>, <c>%v0</c> is that constant and <c>%v1</c> the one parameter.
+    /// </summary>
+    private static string Seeded(double? first, bool subtracted = false)
+    {
+        string header = first is { } value
+            ? $"proc \"T::M(double)\" (%v1: {Double}) -> bool entry B0\nB0:\n  %v0: {Double} = const {Literal(value)}\n"
+            : $"proc \"T::M(double,double)\" (%v0: {Double}, %v1: {Double}) -> bool entry B0\nB0:\n";
+        string second = subtracted
+            ? $"  %v2: {Double} = pure \"f64.sub\"(%v0, %v1)\n"
+            : $"  %v2n: bv32 = pure \"conv.f64.i32\"(%v0)\n  %v2: {Double} = pure \"conv.i32.f64\"(%v2n)\n";
+        return header + second
+            + $"""
+                 %v3n: bv32 = pure "conv.f64.i32"(%v2)
+                 %v3: {Double} = pure "conv.i32.f64"(%v3n)
+                 %v4n: bv32 = pure "conv.f64.i32"(%v2)
+                 %v4: {Double} = pure "conv.i32.f64"(%v4n)
+                 %v5n: sort "System.Single" = pure "conv.f64.f32"(%v4)
+                 %v5: {Double} = pure "conv.f32.f64"(%v5n)
+                 %c: bool = pure "f64.le"(%v3, %v1)
+                 ret %c
+               """;
+    }
+
+    private static string Literal(double value) => $"{Double} {IrFloat.Of(value).Id.ToString(CultureInfo.InvariantCulture)}";
+
     private static IrInputs Inputs(double[] drawn) => new([IrFloat.Of(drawn[0]), IrFloat.Of(drawn[1])]);
 
     /// <summary>
