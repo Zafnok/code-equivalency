@@ -282,11 +282,15 @@ internal static class ValidPaths
         return false;
     }
 
-    /// <summary>Whether <paramref name="receiver"/> is one object wherever the method reads it: <c>this</c>, a parameter nothing assigns under <paramref name="root"/>, or none.</summary>
+    /// <summary>
+    /// Whether <paramref name="receiver"/> is one object wherever the method reads it: a class's <c>this</c>, a parameter
+    /// passed by value that nothing assigns under <paramref name="root"/>, or none. A struct's <c>this</c> and a <c>ref</c>
+    /// or <c>in</c> parameter are not: each can alias a field or array element whose plain assignment replaces it.
+    /// </summary>
     private static bool IsStable(IOperation? receiver, IOperation root) => receiver switch
     {
-        null or IInstanceReferenceOperation => true,
-        IParameterReferenceOperation parameter => LocalValues.Writes(parameter.Parameter, root).IsEmpty,
+        null or IInstanceReferenceOperation { Type.IsReferenceType: true } => true,
+        IParameterReferenceOperation { Parameter.RefKind: RefKind.None } parameter => LocalValues.Writes(parameter.Parameter, root).IsEmpty,
         _ => false,
     };
 

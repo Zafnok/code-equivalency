@@ -80,8 +80,8 @@
 //     returned true for it: under the guard in an if or a conditional expression, to the right of it in && (or of its
 //     negation in ||), or after an if that returns or throws when the guard is false. A guard returns false, and does
 //     not throw, for a path that validation rejects;
-//   - a read of a field, or of an auto-property (a getter with no body) whose getter is the one that runs, of this, of a
-//     parameter nothing assigns, or static, where one of the "guards" has returned true for a read of the same member of
+//   - a read of a field, or of an auto-property (a getter with no body) whose getter is the one that runs, of a class's this,
+//     of a parameter passed by value that nothing assigns, or static, where one of the "guards" has returned true for a read of the same member of
 //     the same receiver, in those same places, when nothing between the guard and the read runs code or writes the
 //     member (P2-217): no call, property, await, yield, user-defined operator or static field read, and no assignment
 //     but to a local variable or parameter that is not a ref, another field, or an array element. A read in a lambda or

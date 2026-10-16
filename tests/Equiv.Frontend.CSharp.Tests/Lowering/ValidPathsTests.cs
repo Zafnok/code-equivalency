@@ -362,6 +362,7 @@ public sealed class ValidPathsTests
     [InlineData("string f;\nvoid M(C other) { if (File.Exists(f)) File.Delete(other.f); }", true)]
     [InlineData("string f;\nC next;\nvoid M() { if (File.Exists(next.f)) File.Delete(next.f); }", true)]
     [InlineData("string f;\nvoid M(C c) { if (File.Exists(c.f)) { c = this; File.Delete(c.f); } }", true)]
+    [InlineData("string f;\nC g;\nvoid M(ref C c) { if (File.Exists(c.f)) { g = null; File.Delete(c.f); } }", true)]
     [InlineData("string f;\nvoid M(string p) { if (File.Exists(p)) File.Delete(f); }", true)]
     [InlineData("string f;\nstring Root => f;\nvoid M() { if (File.Exists(Root)) File.Delete(Root); }", true)]
     [InlineData("protected virtual string Root { get; set; }\nvoid M() { if (File.Exists(Root)) File.Delete(Root); }", true)]
@@ -383,6 +384,14 @@ public sealed class ValidPathsTests
     [InlineData("static void M(Event e, Event other) { if (!File.Exists(other.FullPath)) return; File.Delete(e.FullPath); }", true)]
     public void AGuardedAutoPropertyOfAParameterIsAValidPath(string method, bool flagged) => Assert.Equal(flagged, Calls(Source(
         "using System.IO;\nsealed class Event { public string FullPath { get; } }\nclass C\n{\n" + method + "\n}\n")).Any(static call => call.Callee.RuntimeChanged));
+
+    /// <summary>
+    /// Ticket P2-217: a struct's <c>this</c> can be a field of another object, which a plain assignment replaces between the
+    /// guard and the use, so a guard on its field is not followed.
+    /// </summary>
+    [Fact]
+    public void AGuardedFieldOfAStructIsNotAValidPath() => Assert.Contains(Calls(Source(
+        "using System.IO;\nstruct C\n{\nstring f;\nvoid M() { if (File.Exists(f)) File.Delete(f); }\n}\n")), static call => call.Callee.RuntimeChanged);
 
     private const string GetFullPath = "System.IO.Path::GetFullPath(string)";
 
