@@ -117,8 +117,19 @@
 //     valid paths by these rules, each read in its own body, and of which there is at least one (P2-201). The language
 //     lets nothing else write such a member; a write of a value not known (a ref or out argument, a ref local or ref
 //     conditional that takes it, a compound assignment) makes it not valid. A struct's is not read: this = ... in any of
-//     its members writes every field. Each such step counts as a call toward the bound of four.
-// A path that a caller passed in is not followed.
+//     its members writes every field. Each such step counts as a call toward the bound of four;
+//   - a local variable or parameter passed by value, read after the last statement before it, in a block that encloses
+//     the read, that writes it, when that statement is a plain assignment to it or its declaration with a value that is
+//     a valid path by these rules, and nothing from there up to the read writes it again (P2-207). Every write of it in
+//     the method must be a plain assignment or an out argument of a method that returns no ref and has no ref struct in
+//     its signature, in no lambda or local function, and the method must have no goto; a read in a lambda or local
+//     function is not followed, nor a primary constructor's parameter, which other members write;
+//   - a parameter passed by value that nothing assigns, of a private ordinary method that its type's source only ever
+//     calls, never names otherwise, where every such call passes a valid path by these rules (P2-207). Each call counts
+//     as a step toward the bound of four. A method the compiler calls by a name the source does not write (Add,
+//     AppendLiteral, AppendFormatted) is not read; reflection and UnsafeAccessor, which call a private method from
+//     elsewhere, are not seen.
+// Any other path that a caller passed in is not followed.
 //
 // "ordinalUnaffected" (P2-075), when true, marks a row for a culture-sensitive comparison: a call that passes
 // StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant argument is not flagged by it.

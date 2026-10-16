@@ -65,3 +65,16 @@ equivalent. The CLI makes that condition visible without changing any verdict or
   type declares, and the frontend reads that body; its pair's equivalence is the assumption every virtual call already
   rests on, since both sides share the call's function. This reads only the returned values that a row's argument
   depends on, demand-driven from one call site; it builds no call graph and inlines nothing (Rejected, first bullet).
+- 2026-10-16 (P2-207). **A precondition read through a private method's callers.** Ticket P2-207 lets a path row not
+  fire on a by-value parameter that nothing assigns, of a private ordinary method, when every call of it in its type's
+  source passes a valid path and no name there refers to it otherwise. This is the decision above read from the other
+  end of a call. Every caller pair calls the method as a function both sides share, and the method's parameter only
+  ever holds a value one of those calls passes: the language lets nothing outside its type's declarations name a
+  private method, reflection and `UnsafeAccessor` aside (gaps of the same kind as P2-201's). Each side is read with its
+  own callers. Where a caller's argument is valid only because a validator rejects what another runtime returns, the
+  validator's row fires in the caller, where the divergence starts; where the two sides' callers pass different values,
+  the caller's pair is not Equivalent, and its own result says so. The private method's Equivalent therefore covers the
+  inputs the program can give it, as P2-201's reading of a `readonly` field covers the values its constructors can
+  store; an input no call passes is not one the program runs. The method's result does not list its callers, as a
+  verdict resting on P2-201 lists no constructor. No call graph is built: the read starts at one parameter, scans one
+  type's source for that method's name, and counts each call as a step toward P2-200's bound of four.
