@@ -10,7 +10,7 @@ using Xunit;
 namespace Equiv.Frontend.CSharp.Tests.Lowering;
 
 /// <summary>
-/// Tickets P2-190 and P2-216: rows that fire only in a method that makes a call to their member that can reach their
+/// Tickets P2-190, P2-216 and P2-220: rows that fire only in a method that makes a call to their member that can reach their
 /// documented change. Each call that cannot is next to one like it that can, which still fires. Each case is checked in the
 /// lowering and in the fingerprint, which must agree.
 /// </summary>
@@ -27,6 +27,7 @@ public sealed class RowCallPreconditionsTests
     private const string StartInfo = "System.Diagnostics.Process::get_StartInfo(";
     private const string ImageIndex = "System.Windows.Forms.TreeNode::set_ImageIndex(";
     private const string SelectedImageIndex = "System.Windows.Forms.TreeNode::set_SelectedImageIndex(";
+    private const string StaticSet = "GetType().GetField(\"x\", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, o);";
 
     [Theory]
     [InlineData("return Environment.OSVersion.Platform == PlatformID.Win32NT;")]
@@ -113,6 +114,52 @@ public sealed class RowCallPreconditionsTests
     [InlineData("typeof(C).GetRuntimeField(\"x\").SetValue(this, o); return null;")]
     public void ASetValueOnAFieldThatCanBeStaticFires(string body) =>
         Assert.True(Fires(body, SetValue), body);
+
+    /// <summary>
+    /// Ticket P2-220: a set of a field that can be static, in the branch a test for running on Mono guards, directly or through
+    /// solution getters up to four deep. <c>Type.GetType("Mono.Runtime")</c> is null on .NET Framework and on .NET, so the
+    /// branch never runs on either.
+    /// </summary>
+    [Theory]
+    [InlineData("if (Platform.IsMono) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.IsMonoReversed) { " + StaticSet + " } return null;")]
+    [InlineData("if (Type.GetType(\"Mono.Runtime\") != null) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.OnMono3) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.IsMono) { foreach (var f in fields) f.SetValue(null, o); } return null;")]
+    [InlineData("if (Platform.IsMono) { var f = typeof(Uri).GetField(\"x\", BindingFlags.Static | BindingFlags.NonPublic); f?.SetValue(null, true); } return null;")]
+    public void ASetValueOnlyMonoRunsDoesNotFire(string body) =>
+        Assert.False(Fires(body, SetValue), body);
+
+    /// <summary>
+    /// Ticket P2-220's soundness test: a guard that is not a test for running on Mono, a test the call does not sit under, a
+    /// getter chain past the bound, and a solution that defines <c>Mono.Runtime</c> itself all leave the set flagged.
+    /// </summary>
+    [Theory]
+    [InlineData("if (Platform.IsWindows) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.IsMono) { } else " + StaticSet + " return null;")]
+    [InlineData("if (!Platform.IsMono) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.IsMono) " + StaticSet + " " + StaticSet + " return null;")]
+    [InlineData("if (Platform.OnMono4) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.IsOther) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.IsMonoQuietly) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.Either) " + StaticSet + " return null;")]
+    [InlineData("if (Platform.Stored) " + StaticSet + " return null;")]
+    [InlineData("if (Type.GetType(\"Mono.Runtime\") != typeof(object)) " + StaticSet + " return null;")]
+    [InlineData("if ((object)Type.GetType(\"Mono.Runtime\") != \"x\") " + StaticSet + " return null;")]
+    [InlineData("if (o != null) " + StaticSet + " return null;")]
+    public void ASetValueAGuardLetsThroughFires(string body) =>
+        Assert.True(Fires(body, SetValue), body);
+
+    [Fact]
+    public void ASetValueUnderAMonoTestFiresWhereTheSolutionDefinesMonoRuntime() =>
+        Assert.True(Fires("if (Platform.IsMono) " + StaticSet + " return null;", SetValue, declarations: "namespace Mono { class Runtime { } }"));
+
+    /// <summary>Ticket P2-220: a method group a conditional expression takes only on Mono is never invoked; on another test it is.</summary>
+    [Theory]
+    [InlineData("Action<object, object> set = Platform.IsMono ? field.SetValue : null; return set;", false)]
+    [InlineData("Action<object, object> set = Platform.IsWindows ? field.SetValue : null; return set;", true)]
+    public void AMethodGroupOnlyMonoTakesIsNotFingerprinted(string body, bool fires) =>
+        Assert.Equal(fires, Fingerprinted(Compile(body), SetValue));
 
     [Theory]
     [InlineData("return Encoding.ASCII.GetString(b);", GetString)]
@@ -307,13 +354,32 @@ public sealed class RowCallPreconditionsTests
     public void ACallInADelegateFires(string body, string member) =>
         Assert.True(Fingerprinted(Compile(body), member), body);
 
-    private static string Source(string body) => $$"""
+    /// <summary>The guards of ticket P2-220's cases: tests for running on Mono, getters that return one, and tests that are not.</summary>
+    private const string Platform = """
+        class Platform
+        {
+            public static bool IsMono => Type.GetType("Mono.Runtime") != null;
+            public static bool IsMonoReversed { get { return null != Type.GetType("Mono.Runtime"); } }
+            public static bool OnMono1 => IsMono;
+            public static bool OnMono2 => OnMono1;
+            public static bool OnMono3 => OnMono2;
+            public static bool OnMono4 => OnMono3;
+            public static bool IsOther => Type.GetType("Mono.Other") != null;
+            public static bool IsMonoQuietly => Type.GetType("Mono.Runtime", false) != null;
+            public static bool Either { get { if (DateTime.Now.Year > 2000) return IsMono; return true; } }
+            public static bool Stored { get; } = Type.GetType("Mono.Runtime") != null;
+            public static bool IsWindows => Environment.OSVersion.Platform == PlatformID.Win32NT;
+        }
+        """;
+
+    private static string Source(string body, string declarations) => $$"""
         using System;
         using System.Collections.Generic;
         using System.Diagnostics;
         using System.Reflection;
         using System.Text;
         using System.Windows.Forms;
+        {{declarations}}
         namespace System.Windows.Forms
         {
             public class TreeNode
@@ -351,6 +417,7 @@ public sealed class RowCallPreconditionsTests
         {
             public int Count => -5;
         }
+        {{Platform}}
         class C
         {
             int x;
@@ -369,9 +436,9 @@ public sealed class RowCallPreconditionsTests
     /// Whether the .NET Framework 4.8 to .NET 10 pair flags <paramref name="member"/> in <paramref name="name"/> of
     /// <paramref name="type"/>, <c>C.M</c> unless named, in the lowering and in the fingerprint.
     /// </summary>
-    private static bool Fires(string body, string member, string type = "C", string name = "M")
+    private static bool Fires(string body, string member, string type = "C", string name = "M", string declarations = "")
     {
-        (IMethodSymbol method, Compilation compilation) = Compile(body, type, name);
+        (IMethodSymbol method, Compilation compilation) = Compile(body, type, name, declarations);
         IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
         bool lowered = procedure.Blocks.SelectMany(static b => b.Instructions).Any(i => i switch
         {
@@ -389,9 +456,9 @@ public sealed class RowCallPreconditionsTests
         BodyFingerprinter.Bound(compiled.Method, compiled.Compilation, EquivConfig.Default, legacy: false, Runtimes.Migration).Rules
             .Any(rule => rule.StartsWith(member, StringComparison.Ordinal));
 
-    private static (IMethodSymbol Method, Compilation Compilation) Compile(string body, string type = "C", string name = "M")
+    private static (IMethodSymbol Method, Compilation Compilation) Compile(string body, string type = "C", string name = "M", string declarations = "")
     {
-        Compilation compilation = RoslynTestCompilations.Compile(Source(body));
+        Compilation compilation = RoslynTestCompilations.Compile(Source(body, declarations));
         Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
         return (compilation.GetTypeByMetadataName(type)!.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation);
     }

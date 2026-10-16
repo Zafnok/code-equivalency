@@ -78,3 +78,15 @@ equivalent. The CLI makes that condition visible without changing any verdict or
   store; an input no call passes is not one the program runs. The method's result does not list its callers, as a
   verdict resting on P2-201 lists no constructor. No call graph is built: the read starts at one parameter, scans one
   type's source for that method's name, and counts each call as a step toward P2-200's bound of four.
+- 2026-10-16 (P2-220). **A row's guard read through a solution getter.** Ticket P2-220 lets the `FieldInfo.SetValue`
+  row (`staticFieldSet`) not fire on a call in the branch an `if` or a conditional takes when its condition is
+  `Type.GetType("Mono.Runtime") != null`, or a read of a solution property whose getter returns only such tests, read as
+  P2-200 reads a returned call: the body that runs, each getter one step toward the bound of four, each read with the
+  compilation that holds it. This is the decision above applied to a condition instead of an argument. The caller pair
+  calls the getter as a function both sides share and assumes it equivalent, naming it in `unprovenAssumptions` when no
+  proof covers it, so on both sides the getter returns what its legacy body returns; that body's lookup searches its own
+  assembly and the core library, and returns null on .NET Framework and on .NET when no assembly its compilation
+  references defines `Mono.Runtime` and none is loaded for it at run time (an `AppDomain.TypeResolve` handler aside, a
+  gap of the same kind as reflection above). Only Mono's core library defines the type, and Mono is neither runtime a
+  pair names (ADR 0040), so the branch runs on neither and its calls cannot reach a runtime's change. A getter whose pair
+  differs is reported where it differs, by its own result.

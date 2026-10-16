@@ -26,7 +26,8 @@ public enum RowPrecondition
     /// <summary>
     /// The method calls the member on a field the method does not show is an instance field: the result of
     /// <c>Type.GetField(string, BindingFlags)</c>, or an element of <c>Type.GetFields(BindingFlags)</c>, with constant
-    /// flags that include <c>Instance</c> and not <c>Static</c>; JSON <c>staticFieldSet</c>.
+    /// flags that include <c>Instance</c> and not <c>Static</c>, in a branch no test for running on Mono guards (ticket P2-220);
+    /// JSON <c>staticFieldSet</c>.
     /// </summary>
     StaticFieldSet,
 
