@@ -692,7 +692,11 @@ Migration-specific normalisations (applied to both sides before matching):
   it left it, when that statement is a plain assignment or a declaration with a value and nothing writes the variable
   through a `ref`, from a lambda or local function, or past a `goto`; and a by-value parameter that nothing assigns, of
   a private method its type's source only ever calls, when every one of those calls passes a valid path (ADR 0019 and
-  its P2-207 clarification). Any other path that came from a caller is not followed, and the row flags it.
+  its P2-207 clarification). Ticket P2-208 reads a call to a local function that reads no local variable or parameter
+  of the method around it as a solution callee, adds `Path.GetRandomFileName` to the sources, reads a valid path
+  followed by a string constant with no character validation rejects and no colon as one, and such a constant before
+  a valid path where a `StartsWith` on a separator and an ASCII letter or digit has shown the path to have no drive.
+  Any other path that came from a caller is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
   where the reference assemblies have the type (.NET Core 3.0 and later) and

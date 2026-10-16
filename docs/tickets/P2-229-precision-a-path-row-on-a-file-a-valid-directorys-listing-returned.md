@@ -11,7 +11,7 @@ such a listing is not followed. Two false EQ006 need it (P2-207's Notes and `doc
 have the traces):
 - Git Extensions #43, `GitModuleTestHelper::Dispose()`: `File.GetAttributes(file)` and `File.Delete(file)` in a
   `foreach` over `Directory.GetFiles(TemporaryPath, "*", SearchOption.AllDirectories)`; `TemporaryPath` itself is
-  P2-208's #51, so this clears only after it;
+  P2-208's #51 shape, which P2-208 reads as a valid path, so only the listing is left;
 - OpenRA #10, `GameSaveBrowserLogic::Select(string)`: a private method whose callers pass `null` (its use is under
   `savePath == null ? ... :`) or a widget's `ItemKey`, set from a `foreach` over `Directory.GetFiles(baseSavePath, ...)`.
 
