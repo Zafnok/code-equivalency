@@ -1,5 +1,5 @@
 # P2-218 Precision: a path row on a valid path that reaches the call by five routes no done ticket follows
-Status: in-progress
+Status: done (PR #532)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-207, P2-208, P2-232
