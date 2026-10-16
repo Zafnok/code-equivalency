@@ -249,9 +249,11 @@ internal static class ValidPaths
 
     /// <summary>The call <paramref name="name"/> names the method of, alone or after <c>.</c> or <c>?.</c>; null when it is not called.</summary>
     private static IInvocationOperation? Invoked(SimpleNameSyntax name, SemanticModel model) =>
-        (name.Parent is MemberAccessExpressionSyntax or MemberBindingExpressionSyntax ? name.Parent : name).Parent is InvocationExpressionSyntax invocation
-            ? model.GetOperation(invocation) as IInvocationOperation
-            : null;
+        Callee(name).Parent is InvocationExpressionSyntax invocation ? model.GetOperation(invocation) as IInvocationOperation : null;
+
+    /// <summary>The expression <paramref name="name"/> ends: the member access or member binding it is the name of, or itself.</summary>
+    private static SyntaxNode Callee(SimpleNameSyntax name) =>
+        name.Parent is MemberAccessExpressionSyntax or MemberBindingExpressionSyntax ? name.Parent : name;
 
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
 
