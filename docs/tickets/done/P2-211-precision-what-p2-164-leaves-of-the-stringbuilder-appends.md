@@ -1,5 +1,5 @@
 # P2-211 Precision: the two `StringBuilder` append results P2-164 leaves on `gitextensions-9860`
-Status: in-progress
+Status: done (PR #521)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-164
