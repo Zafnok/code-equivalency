@@ -1360,7 +1360,7 @@ false positives and Unknowns that verdict counts against each, they come before 
 1. P2-213 (S) Duplicati's replaced callees declared in the pair's committed config: 9 of the 45 false positives (all 11
    of P2-192's results), which a default run cannot show without it.
 2. Valid paths, 16 false EQ006: P2-218 (M, 5, five routes no done ticket follows), P2-207 (M, 4), P2-217 (M, 4, a
-   `File.Exists` guard on a member read again), P2-208 (M, 3).
+   `File.Exists` guard on a member read again; its two left are P2-222 and P2-223), P2-208 (M, 3).
 3. Rows that cannot reach their change, 8 false EQ006: P2-216 (M, 5, five rows), P2-220 (M, 2, and P2-190's kept
    `OAuthHttpClient::.cctor()`: an exclusion from another method's data flow), P2-219 (S, 1, the RSA XML rows that
    .NET Core 3.0 implements).

@@ -513,6 +513,32 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-217 criterion 1: a path row does not fire on a field read again where a <c>File.Exists</c> guard on the same
+    /// field passed, with nothing between that runs code or writes it: a <c>readonly</c> field (Duplicati's
+    /// <c>BorderTests.TearDown</c>) or a mutable one written only after the call (Duplicati's <c>TempFile.Dispose</c>).
+    /// </summary>
+    [Theory]
+    [InlineData("Scratch::TearDown(")]
+    [InlineData("Scratch::Dispose(")]
+    public void RuntimeRowGuardedMember_AGuardedFieldDoesNotFireThePathRow(string method)
+    {
+        Result result = Single("runtime-row-guarded-member", method);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>Ticket P2-217: a call between the guard and the use that writes the field leaves the row firing, the only EQ006 in the sample.</summary>
+    [Fact]
+    public void RuntimeRowGuardedMember_ACallBetweenThatWritesTheFieldStaysDivergent()
+    {
+        Result result = Assert.Single(RunSample("runtime-row-guarded-member").Log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ006", StringComparison.Ordinal));
+
+        Assert.Contains("Scratch::Move(string)", result.Message.Text, StringComparison.Ordinal);
+        Assert.Contains("invalid path characters", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket P2-181 criterion 3: a body nobody edited whose runtime-sensitive calls cannot reach their rows' change by
     /// their arguments (a path literal, a search for a character, split options .NET Framework accepts) is Equivalent by
     /// congruence from .NET Framework 4.8 to .NET 10, and its runtime-rule identity is gone with it.

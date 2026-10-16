@@ -1,0 +1,369 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::.ctor(string,string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Scratch.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 16,
+                  "endLine": 9,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::.ctor(string,string)",
+            "resultFingerprint/v1": "1eb746c351126d759a1e23979b94912ff314a8bca3d37c56435e215d6c2e59e6"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::TearDown() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Scratch.cs"
+                },
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 21,
+                  "endLine": 15,
+                  "endColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::TearDown()",
+            "resultFingerprint/v1": "b7a4d3369a7d50d992c663c3eac6109fa8961e582ad7f2bee29ca2a86a0bdef7"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Dispose() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Scratch.cs"
+                },
+                "region": {
+                  "startLine": 23,
+                  "startColumn": 21,
+                  "endLine": 23,
+                  "endColumn": 28
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Dispose()",
+            "resultFingerprint/v1": "105c8a81aafa6684f54787ed5fb74821497ca47553589531e9728be2f889091c"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Move(string) diverges via a runtime-changed API between net48 and net10.0 (Delete no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException. https://learn.microsoft.com/en-us/dotnet/api/system.io.file.delete): inputs(sort \"System.String\" 0, map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 2, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 3, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 2 -> sort \"System.String\" 4, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 5] default sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3) old(threw \"System.Exception\" outs(map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 6 -> sort \"System.String\" 17, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 8 -> sort \"System.String\" 16, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 9 -> sort \"System.String\" 18] default sort \"System.String\" 15) trace(\"System.IO.File::Exists(string)\"(sort \"System.String\" 5) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 2, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 3, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 2 -> sort \"System.String\" 4, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 5] default sort \"System.String\" 1), \"Equiv.Samples.RuntimeRowGuardedMember.Scratch::Retarget(string)\"(sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3, sort \"System.String\" 0) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 8, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 7, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 5 -> sort \"System.String\" 9] default sort \"System.String\" 6), \"System.IO.File::Delete(string)\"(sort \"System.String\" 12) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 12, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 11, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 6 -> sort \"System.String\" 13, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 7 -> sort \"System.String\" 14] default sort \"System.String\" 10))) new(threw \"System.Exception\" outs(map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 20, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 7 -> sort \"System.String\" 21, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 9 -> sort \"System.String\" 22] default sort \"System.String\" 19) trace(\"System.IO.File::Exists(string)\"(sort \"System.String\" 5) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 2, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 3, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 2 -> sort \"System.String\" 4, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 5] default sort \"System.String\" 1), \"Equiv.Samples.RuntimeRowGuardedMember.Scratch::Retarget(string)\"(sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3, sort \"System.String\" 0) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 8, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 7, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 5 -> sort \"System.String\" 9] default sort \"System.String\" 6), \"System.IO.File::Delete(string)\"(sort \"System.String\" 12) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 12, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 11, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 6 -> sort \"System.String\" 13, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 7 -> sort \"System.String\" 14] default sort \"System.String\" 10)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Scratch.cs"
+                },
+                "region": {
+                  "startLine": 30,
+                  "startColumn": 21,
+                  "endLine": 30,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Move(string)",
+            "resultFingerprint/v1": "345cc57ea6506be24aa8498c0660a2f81483a5c7c969b4a57ae7c1ed67567ab7"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 0, map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 2, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 3, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 2 -> sort \"System.String\" 4, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 5] default sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3) old(threw \"System.Exception\" outs(map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 6 -> sort \"System.String\" 17, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 8 -> sort \"System.String\" 16, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 9 -> sort \"System.String\" 18] default sort \"System.String\" 15) trace(\"System.IO.File::Exists(string)\"(sort \"System.String\" 5) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 2, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 3, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 2 -> sort \"System.String\" 4, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 5] default sort \"System.String\" 1), \"Equiv.Samples.RuntimeRowGuardedMember.Scratch::Retarget(string)\"(sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3, sort \"System.String\" 0) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 8, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 7, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 5 -> sort \"System.String\" 9] default sort \"System.String\" 6), \"System.IO.File::Delete(string)\"(sort \"System.String\" 12) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 12, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 11, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 6 -> sort \"System.String\" 13, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 7 -> sort \"System.String\" 14] default sort \"System.String\" 10))) new(threw \"System.Exception\" outs(map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 20, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 7 -> sort \"System.String\" 21, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 9 -> sort \"System.String\" 22] default sort \"System.String\" 19) trace(\"System.IO.File::Exists(string)\"(sort \"System.String\" 5) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 0 -> sort \"System.String\" 2, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 3, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 2 -> sort \"System.String\" 4, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 5] default sort \"System.String\" 1), \"Equiv.Samples.RuntimeRowGuardedMember.Scratch::Retarget(string)\"(sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3, sort \"System.String\" 0) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 1 -> sort \"System.String\" 8, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 7, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 5 -> sort \"System.String\" 9] default sort \"System.String\" 6), \"System.IO.File::Delete(string)\"(sort \"System.String\" 12) heap(\"field.Equiv.Samples.RuntimeRowGuardedMember.Scratch.path\" map<sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\", sort \"System.String\"> [sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 3 -> sort \"System.String\" 12, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 4 -> sort \"System.String\" 11, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 6 -> sort \"System.String\" 13, sort \"Equiv.Samples.RuntimeRowGuardedMember.Scratch\" 7 -> sort \"System.String\" 14] default sort \"System.String\" 10)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.delete",
+            "assumedCallees": [
+              "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Retarget(string)"
+            ],
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.IO.File::Delete(string)"
+            },
+            "reviewGroup": "runtime-change:System.IO.File::Delete(string)"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Retarget(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Scratch.cs"
+                },
+                "region": {
+                  "startLine": 39,
+                  "startColumn": 21,
+                  "endLine": 39,
+                  "endColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Retarget(string)",
+            "resultFingerprint/v1": "10fc81d49ebf616840d4cad79220c8fd383e333570112a34b05514d9b7e47d7d"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 5,
+            "modern": 5
+          },
+          "matchedPairs": 5,
+          "pairsWithoutOpaque": 5,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 4,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 1,
+          "changedPairsWithoutOpaque": 1,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 3,
+              "modern": 3
+            },
+            "distinctMembers": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "pairsWithAny": {
+              "legacy": 3,
+              "modern": 3
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.IO.File::Delete(string)",
+                "callSites": 3
+              },
+              {
+                "member": "System.IO.File::Exists(string)",
+                "callSites": 3
+              },
+              {
+                "member": "System.Object::.ctor()",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.IO.File::Delete(string)",
+                "callSites": 3
+              },
+              {
+                "member": "System.IO.File::Exists(string)",
+                "callSites": 3
+              },
+              {
+                "member": "System.Object::.ctor()",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 57,
+          "modern": 52
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.RuntimeRowGuardedMember",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.RuntimeRowGuardedMember",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "runtime-change:System.IO.File::Delete(string)",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowGuardedMember.Scratch::Move(string)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
