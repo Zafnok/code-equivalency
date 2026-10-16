@@ -1,5 +1,5 @@
 # P2-230 Soundness bug: a guard on a primary constructor's parameter is trusted across a call that rewrites it
-Status: in-progress
+Status: done (PR #527)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
