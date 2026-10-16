@@ -507,7 +507,6 @@ public static class IrUnroller
     /// <summary>The block and variable names of every copy of one loop, and how each copy is wired.</summary>
     private sealed class IrLoopCopies
     {
-        private readonly IrEditor editor;
         private readonly IrLoop loop;
         private readonly int copies;
         private readonly IrLastCopy last;
@@ -519,7 +518,6 @@ public static class IrUnroller
 
         public IrLoopCopies(IrEditor editor, IrLoop loop, int copies, IrLastCopy last)
         {
-            this.editor = editor;
             this.loop = loop;
             this.copies = copies;
             this.last = last;

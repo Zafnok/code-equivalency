@@ -43,6 +43,9 @@ public static class SarifReportWriter
     /// </summary>
     internal const string AbstractedSuffix = "+abstracted";
 
+    /// <summary>The result property naming how a verdict was decided.</summary>
+    private const string ProofMethodKey = "proofMethod";
+
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
     internal const string ObservedProofMethod = "observed";
 
@@ -324,7 +327,7 @@ public static class SarifReportWriter
         switch (verdict)
         {
             case Divergent { Observed: { } observed }:
-                sarifResult.SetProperty("proofMethod", ObservedProofMethod);
+                sarifResult.SetProperty(ProofMethodKey, ObservedProofMethod);
                 sarifResult.SetProperty("model", ObservationText.Model(observed));
                 break;
             case Divergent divergent:
@@ -333,7 +336,7 @@ public static class SarifReportWriter
                 break;
             case Equivalent equivalent:
                 // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
-                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + Suffixes(verdict) + Abstracted(verdict));
+                sarifResult.SetProperty(ProofMethodKey, Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + Suffixes(verdict) + Abstracted(verdict));
                 if (!equivalent.ContractsUsed.IsEmpty)
                 {
                     sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(ContractProperty).ToList());
@@ -372,7 +375,7 @@ public static class SarifReportWriter
         if (verdict is Unknown or Divergent { Observed: null }
             && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null || !s.Refined.IsEmpty || s.DecidedAbstracted) is { } answered)
         {
-            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + Suffixes(verdict) + Abstracted(verdict));
+            sarifResult.SetProperty(ProofMethodKey, Name(answered.Rung) + Suffixes(verdict) + Abstracted(verdict));
         }
 
         if (verdict.Ladder.LastOrDefault(static s => !s.Refined.IsEmpty) is { } refined)
@@ -447,7 +450,7 @@ public static class SarifReportWriter
                 ["smt"] = agreesWhen.Smt,
                 ["text"] = agreesWhen.Text,
                 ["proposedBy"] = AgreesWhen.ProposedBy,
-                ["proofMethod"] = Name(AgreesWhen.Method),
+                [ProofMethodKey] = Name(AgreesWhen.Method),
             });
         }
     }

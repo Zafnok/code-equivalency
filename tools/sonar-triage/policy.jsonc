@@ -47,6 +47,12 @@
       "reason": "GH-180: UnsupportedConstructException is internal by design (M3-029, ADR 0029), for the same reason as SolutionLoadException: the bare MSBuild evaluator throws it and catches it inside the frontend assembly (BareProjectLoader and MsBuildEvaluator are its only catch sites), turning it into a skipped-project diagnostic. It never crosses the assembly boundary, so there is no external catch site to name it. Same rationale already recorded in .editorconfig's M3-029 entry for this file."
     },
     {
+      "rule": "csharpsquid:S107",
+      "verdict": "accept",
+      "paths": ["src/Equiv.Cli/EquivTools.cs"],
+      "reason": "GH-407: EquivTools.Compare's parameters are the MCP compare tool's input schema (ADR 0033; tickets M5-001, P1-016, P2-057): the SDK publishes each parameter, with its [Description], as one top-level tool argument mirroring an equiv compare flag. Bundling them into a parameter object, as S107 asks, nests every argument under one object and changes the schema agents call - an observable change to the tool surface, not a cleanup."
+    },
+    {
       "rule": "external_roslyn:MA0185",
       "verdict": "accept",
       "paths": ["src/Equiv.Frontend.CSharp/Lowering/TypeMapper.cs"],
