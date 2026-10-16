@@ -331,6 +331,59 @@ public sealed class ValidPathsTests
         Assert.DoesNotContain(Calls(IrLowerer.Lower(method, app, RenameMap.Empty, [], Runtimes.Migration)), static call => call.Callee.RuntimeChanged);
     }
 
+    /// <summary>
+    /// Ticket P2-217: a listed guard on a field or auto-property read guards a later read of the same member on the same
+    /// receiver (<c>this</c>, a parameter nothing assigns, or none for a static member) when nothing between them runs code
+    /// or writes the member, as Duplicati's <c>TearDown</c> and <c>TempFile.Dispose</c> do.
+    /// </summary>
+    [Theory]
+    [InlineData("readonly string f = Environment.MachineName;\nvoid M() { if (File.Exists(this.f)) { File.Delete(this.f); } }", false)]
+    [InlineData("string f;\nbool keep;\nvoid M() { try { if (!keep && f != null && File.Exists(f)) File.Delete(f); f = null; } catch { } }", false)]
+    [InlineData("static string F;\nstatic void M() { if (File.Exists(F)) File.Delete(F); }", false)]
+    [InlineData("string f;\nvoid M() { if (!File.Exists(f)) return; File.Delete(f); }", false)]
+    [InlineData("string f;\nbool M() => File.Exists(f) && new StreamReader(f).EndOfStream;", false)]
+    [InlineData("string f;\nobject M() => File.Exists(f) ? new StreamReader(f) : null;", false)]
+    [InlineData("string f;\nstring g;\nvoid M(int n, string[] a) { if (!File.Exists(f)) return; n = -n + 1; var b = new int[n]; a[0] = (string)(object)g; g = null; _ = n > 0 ? b : null; File.Delete(f); }", false)]
+    [InlineData("string f;\nvoid M(bool b) { if (File.Exists(f) && b) { File.Delete(f); } }", false)]
+    [InlineData("string Root { get; set; }\nvoid M() { if (File.Exists(Root)) File.Delete(Root); }", false)]
+    [InlineData("string f;\nvoid M(C c) { if (File.Exists(c.f)) File.Delete(c.f); }", false)]
+    [InlineData("string f;\nvoid Reset() { f = \"a|b\"; }\nvoid M() { if (File.Exists(f)) { Reset(); File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M() { if (File.Exists(f)) { GC.KeepAlive(this); File.Delete(f); } }", true)]
+    [InlineData("string f;\nbool Check() { f = \"a|b\"; return true; }\nvoid M() { if (File.Exists(f) && Check()) File.Delete(f); }", true)]
+    [InlineData("string f;\nvoid M(string p) { if (File.Exists(f)) { f = p; File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M(C c) { if (File.Exists(f)) { c.f = \"a|b\"; File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M(System.Threading.Tasks.Task t) { if (File.Exists(f)) { t.Wait(); File.Delete(f); } }", true)]
+    [InlineData("string f;\nasync System.Threading.Tasks.Task M(System.Threading.Tasks.Task t) { if (File.Exists(f)) { await t; File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M(int n) { if (File.Exists(f)) { for (var i = 0; i < n; i++) { File.Delete(f); } } }", true)]
+    [InlineData("string f;\nvoid M() { ref string r = ref f; if (File.Exists(f)) { r = \"a|b\"; File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M(ref string r) { if (File.Exists(f)) { r = \"a|b\"; File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M(int n) { L: if (File.Exists(f)) { File.Delete(f); n--; if (n > 0) goto L; } }", true)]
+    [InlineData("string f;\nstatic string S;\nvoid M() { if (File.Exists(f)) { var s = S; File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M(C other) { if (File.Exists(f)) File.Delete(other.f); }", true)]
+    [InlineData("string f;\nC next;\nvoid M() { if (File.Exists(next.f)) File.Delete(next.f); }", true)]
+    [InlineData("string f;\nvoid M(C c) { if (File.Exists(c.f)) { c = this; File.Delete(c.f); } }", true)]
+    [InlineData("string f;\nvoid M(string p) { if (File.Exists(p)) File.Delete(f); }", true)]
+    [InlineData("string f;\nstring Root => f;\nvoid M() { if (File.Exists(Root)) File.Delete(Root); }", true)]
+    [InlineData("protected virtual string Root { get; set; }\nvoid M() { if (File.Exists(Root)) File.Delete(Root); }", true)]
+    [InlineData("static void M(Uri u) { if (!File.Exists(u.LocalPath)) return; File.Delete(u.LocalPath); }", true)]
+    [InlineData("string f;\nstring Reset() { f = \"a|b\"; return AppContext.BaseDirectory; }\nobject M() => File.Exists(f) ? Path.Combine(path2: Reset(), path1: f) : null;", true)]
+    [InlineData("string f;\npublic static C operator !(C c) => c;\nvoid M(C c) { if (File.Exists(f)) { c = !c; File.Delete(f); } }", true)]
+    [InlineData("string f;\nvoid M(bool b) { if (b && f != null) File.Delete(f); }", true)]
+    [InlineData("string f;\nstring Root { get; set; }\nvoid M() { if (File.Exists(f)) { Root = \"a|b\"; File.Delete(f); } }", true)]
+    [InlineData("string f;\npublic static C operator +(C a, C b) => a;\nvoid M(C c) { if (File.Exists(f)) { c = c + c; File.Delete(f); } }", true)]
+    [InlineData("string f;\npublic static implicit operator int(C c) => 0;\nvoid M(int n) { if (File.Exists(f)) { n = this; File.Delete(f); } }", true)]
+    public void AGuardedReadOfAMemberThatNothingRewritesIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-217, Duplicati's <c>SingleInstance</c> shape: an auto-property of a parameter is guarded by an early exit
+    /// on the same parameter's property.
+    /// </summary>
+    [Theory]
+    [InlineData("static void M(Event e) { if (!File.Exists(e.FullPath)) return; File.Delete(e.FullPath); }", false)]
+    [InlineData("static void M(Event e, Event other) { if (!File.Exists(other.FullPath)) return; File.Delete(e.FullPath); }", true)]
+    public void AGuardedAutoPropertyOfAParameterIsAValidPath(string method, bool flagged) => Assert.Equal(flagged, Calls(Source(
+        "using System.IO;\nsealed class Event { public string FullPath { get; } }\nclass C\n{\n" + method + "\n}\n")).Any(static call => call.Callee.RuntimeChanged));
+
     private const string GetFullPath = "System.IO.Path::GetFullPath(string)";
 
     private const string CreateDirectory = "System.IO.Directory::CreateDirectory(string)";
