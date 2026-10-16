@@ -18,13 +18,12 @@ internal static partial class SmtOutput
     public static SmtAnswer Parse(string output)
     {
         string text = output.TrimStart();
-        int end = text.IndexOfAny(['\r', '\n']);
-        string first = (end < 0 ? text : text[..end]).TrimEnd();
+        string first = text.Split(['\r', '\n'], 2)[0].TrimEnd();
         return first switch
         {
             "unsat" => new SmtUnsat(),
             "sat" => new SmtSat(Values(text[first.Length..])),
-            _ => new SmtUnknown(first.Length > ReasonLength ? first[..ReasonLength] : first),
+            _ => new SmtUnknown(first[..Math.Min(first.Length, ReasonLength)]),
         };
     }
 
