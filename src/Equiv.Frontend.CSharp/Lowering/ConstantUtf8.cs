@@ -136,7 +136,8 @@ internal static class ConstantUtf8
     private static ImmutableArray<(IBlockOperation Block, int At)> Blocks(IOperation call, IOperation declaration)
     {
         List<(IBlockOperation Block, int At)> blocks = [];
-        for (IOperation inner = call; ; inner = inner.Parent!)
+        bool declared = false;
+        for (IOperation inner = call; !declared; inner = inner.Parent!)
         {
             IOperation outer = inner.Parent!;
             if (outer is ILoopOperation or IAnonymousFunctionOperation or ILocalFunctionOperation
@@ -148,12 +149,11 @@ internal static class ConstantUtf8
             if (outer is IBlockOperation block)
             {
                 blocks.Insert(0, (block, block.Operations.IndexOf(inner)));
-                if (block.Operations.Contains(declaration))
-                {
-                    return [.. blocks];
-                }
+                declared = block.Operations.Contains(declaration);
             }
         }
+
+        return [.. blocks];
     }
 
     /// <summary>
