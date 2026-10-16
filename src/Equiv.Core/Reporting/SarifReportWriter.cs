@@ -772,7 +772,7 @@ public static class SarifReportWriter
     /// its verdict's text, and one without is unchanged. A tested Unknown's sentence (ticket P1-008) still comes last.
     /// </summary>
     private static string WithAgreesWhenSentence(string text, AgreesWhen? agreesWhen) =>
-        agreesWhen is null ? text : $"{text}{(text.EndsWith('.') ? string.Empty : ".")} Equivalent when {agreesWhen.Text}.";
+        agreesWhen is null ? text : $"{Terminated(text)} Equivalent when {agreesWhen.Text}.";
 
     /// <summary>
     /// Ticket P1-008 criterion 3: a tested Unknown's message ends with one sentence stating the input count and the
@@ -781,7 +781,10 @@ public static class SarifReportWriter
     private static string WithTestedSentence(string text, DifferentialTesting testing) =>
         string.Create(
             CultureInfo.InvariantCulture,
-            $"{text}{(text.EndsWith('.') ? string.Empty : ".")} Tested on {testing.Inputs} inputs; estimated chance the next input shows new behaviour: {testing.DiscoveryProbability:0.######} (equiv generators, not a proof).");
+            $"{Terminated(text)} Tested on {testing.Inputs} inputs; estimated chance the next input shows new behaviour: {testing.DiscoveryProbability:0.######} (equiv generators, not a proof).");
+
+    /// <summary><paramref name="text"/> ending in a full stop, so a sentence can follow it.</summary>
+    private static string Terminated(string text) => text.EndsWith('.') ? text : $"{text}.";
 
     private static string VerdictText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes) => result.Verdict switch
     {

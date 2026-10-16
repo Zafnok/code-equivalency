@@ -2591,11 +2591,12 @@ internal sealed class IrLowerer
     /// the effect-free catalogue (ADR 0043), the next new object of its sort, as <see cref="Create"/> makes a <c>new</c>.
     /// </summary>
     private IrVar Make(CollectionPlan plan, IOperation site, int length, LoweringContext context) =>
-        plan.Factory is not { } factory
-            ? heap.Allocate((IrSort)Map(plan.Type), Map(((IArrayTypeSymbol)plan.Type).ElementType), Const(new IrBitVecValue(32, (ulong)length), context), plan.Initial!, context)
-            : EffectFreeMembers.Allocates(factory)
-                ? heap.Fresh((IrSort)Map(plan.Type), context)
-                : Call(Called(factory, site), [], Map(plan.Type), [], context)!;
+        plan.Factory switch
+        {
+            null => heap.Allocate((IrSort)Map(plan.Type), Map(((IArrayTypeSymbol)plan.Type).ElementType), Const(new IrBitVecValue(32, (ulong)length), context), plan.Initial!, context),
+            { } factory when EffectFreeMembers.Allocates(factory) => heap.Fresh((IrSort)Map(plan.Type), context),
+            { } factory => Call(Called(factory, site), [], Map(plan.Type), [], context)!,
+        };
 
     /// <summary>
     /// Evaluates <paramref name="elements"/> from <paramref name="from"/> up to <paramref name="to"/>, each passed to the
