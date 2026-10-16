@@ -1,5 +1,5 @@
 # P2-230 Soundness bug: a guard on a primary constructor's parameter is trusted across a call that rewrites it
-Status: todo
+Status: done (PR #527)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -42,3 +42,9 @@ Other rules' handling of captured variables.
 
 ## Notes
 - Filed 2026-10-16 by P2-207 (found in passing).
+- Decision: the guard rule reads a symbol only when its declaration lies inside the member that reads it
+  (`ValidPaths.IsGuarded`), rather than reading a primary constructor's parameter by P2-217's quiet-between rule for
+  fields. Every write of such a symbol is then under the root `LocalValues.Writes` scans; a primary constructor's
+  parameter is declared on the type, so it is never read, while a lambda's parameter, declared inside the member,
+  still is (the stricter `IsWrittenInPlace` check would have dropped it). The exclusion also covers a primary
+  constructor's parameter read in a field initializer; no corpus pair has a primary constructor, so no result moves.
