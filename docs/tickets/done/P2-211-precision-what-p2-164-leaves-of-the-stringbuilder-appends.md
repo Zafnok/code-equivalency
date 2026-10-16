@@ -72,7 +72,7 @@ Format and alignment clauses. Holes of other types than the one the rerun points
 - **Criterion 2, `PatchManager.ToPatch`.** After the change, quick, same pair, 299 s: EQ001 13862, EQ002 5, EQ003 226,
   EQ004 2, EQ005 2. `PatchManager::ToPatch(...)` is EQ001 (`lockstep-induction`); compared result by result with the
   quick run before the change, it is the only one that moved.
-- Decision: `GitBlameCommitTests.TestToString()`'s EQ006 -> stays, recorded here and filed as P2-221. Equivalent would
+- Decision: `GitBlameCommitTests.TestToString()`'s EQ006 -> stays, recorded here and filed as P2-226. Equivalent would
   need its two `DateTime` holes joined: that the text `string.Format` makes of a boxed `DateTime` on net5.0 is the text
   `AppendFormatted<DateTime>` makes on net6.0, with the current culture and no format. That is a claim about two
   runtimes' date formatting and culture data, which no catalogue entry or reading of the body gives, so it is a new
@@ -81,5 +81,5 @@ Format and alignment clauses. Holes of other types than the one the rerun points
   `try`, so by P2-164's rule no hole reaches it; but the row fires in the IL pass, which applies no row suppression and
   no `requires` fact (`IlLowerer` passes none; P2-114's Notes), so the fix is a `requires` fact for the two rows read
   in the IL pass too. That would leave the pair Unknown, not Equivalent, and is outside this ticket's criteria, so it
-  is P2-221. Alternatives: do it here (beyond "nothing beyond them"); add a `DateTime` formatter to the join (the
+  is P2-226. Alternatives: do it here (beyond "nothing beyond them"); add a `DateTime` formatter to the join (the
   assumption above). Rule: 4.

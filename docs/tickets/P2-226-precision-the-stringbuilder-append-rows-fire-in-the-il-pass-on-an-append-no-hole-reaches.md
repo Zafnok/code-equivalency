@@ -1,4 +1,4 @@
-# P2-221 Precision: the `StringBuilder` append rows fire in thorough's IL pass on an append no hole can reach
+# P2-226 Precision: the `StringBuilder` append rows fire in thorough's IL pass on an append no hole can reach
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
