@@ -549,6 +549,43 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-216 criterion 2: a body nobody edited whose call cannot reach its row's change (<c>StartInfo</c> of a new
+    /// process, constant well-formed UTF-8, an image index of <c>Count - 1</c>, <c>Version.Major &gt;= 6</c>) is Equivalent by
+    /// congruence from .NET Framework 4.8 to .NET 10. Each was EQ006 before the ticket.
+    /// </summary>
+    [Theory]
+    [InlineData("Calls::NewProcessFile(")]
+    [InlineData("Calls::Katakana(")]
+    [InlineData("Calls::ShowLastImage(")]
+    [InlineData("Calls::IsVistaOrNewer(")]
+    public void RuntimeRowCallCannotReach_ACallThatCannotReachItsRowsChangeIsCongruent(string method)
+    {
+        Result result = Single("runtime-row-call-cannot-reach", method);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>
+    /// Ticket P2-216's soundness test: the same four calls where the change is reachable (a process passed in, bytes that end
+    /// mid-sequence, an index passed in, a comparison with 10) stay EQ006, and <c>notCongruent</c> names the row's callee.
+    /// </summary>
+    [Theory]
+    [InlineData("Calls::ProcessFile(", "System.Diagnostics.Process::get_StartInfo()")]
+    [InlineData("Calls::Truncated(", "System.Text.Encoding::GetString(byte[])")]
+    [InlineData("Calls::ShowImage(", "System.Windows.Forms.TreeNode::set_ImageIndex(int)")]
+    [InlineData("Calls::IsWindows10OrNewer(", "System.Environment::get_OSVersion()")]
+    public void RuntimeRowCallCannotReach_ACallThatCanReachItsRowsChangeIsNotEquivalent(string method, string rule)
+    {
+        Result result = Single("runtime-row-call-cannot-reach", method);
+
+        Assert.Equal("EQ006", result.RuleId);
+        Assert.Contains("between net48 and net10.0", result.Message.Text, StringComparison.Ordinal);
+        FingerprintDifference notCongruent = result.GetProperty<FingerprintDifference>("notCongruent");
+        Assert.Equal(new FingerprintDifference(FingerprintDifference.RuntimeRule, rule), notCongruent);
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is
