@@ -1,5 +1,5 @@
 # P2-221 Encoder bug: a NaN through `conv.f64.i32` gives a model whose replay does not diverge
-Status: in-progress
+Status: done (PR #523)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
