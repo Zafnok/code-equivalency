@@ -82,9 +82,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 10,
+                  "startLine": 11,
                   "startColumn": 30,
-                  "endLine": 10,
+                  "endLine": 11,
                   "endColumn": 44
                 }
               }
@@ -112,9 +112,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 16,
+                  "startLine": 17,
                   "startColumn": 30,
-                  "endLine": 16,
+                  "endLine": 17,
                   "endColumn": 41
                 }
               }
@@ -157,9 +157,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 18,
+                  "startLine": 19,
                   "startColumn": 30,
-                  "endLine": 18,
+                  "endLine": 19,
                   "endColumn": 38
                 }
               }
@@ -187,9 +187,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 27,
+                  "startLine": 28,
                   "startColumn": 30,
-                  "endLine": 27,
+                  "endLine": 28,
                   "endColumn": 39
                 }
               }
@@ -232,9 +232,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 35,
+                  "startLine": 36,
                   "startColumn": 28,
-                  "endLine": 35,
+                  "endLine": 36,
                   "endColumn": 41
                 }
               }
@@ -262,9 +262,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 38,
+                  "startLine": 39,
                   "startColumn": 28,
-                  "endLine": 38,
+                  "endLine": 39,
                   "endColumn": 37
                 }
               }
@@ -307,9 +307,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 40,
+                  "startLine": 41,
                   "startColumn": 28,
-                  "endLine": 40,
+                  "endLine": 41,
                   "endColumn": 42
                 }
               }
@@ -337,9 +337,9 @@
                   "uri": "file:///legacy/Calls.cs"
                 },
                 "region": {
-                  "startLine": 42,
+                  "startLine": 43,
                   "startColumn": 28,
-                  "endLine": 42,
+                  "endLine": 43,
                   "endColumn": 46
                 }
               }
@@ -367,42 +367,201 @@
             },
             "reviewGroup": "runtime-change:System.Environment::get_OSVersion("
           }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono() diverges via a runtime-changed API between net48 and net10.0 (A type name with an invalid element type throws TypeLoadException on .NET where some forms returned null; an asterisk in an assembly name is also rejected. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/type-gettype): inputs(map<sort \"System.Type\", bool> [] default bool false) old(returned bool true outs() trace(\"System.Type::GetType(string)\"(sort \"System.String\" 423738625))) new(threw \"System.Exception\" outs() trace(\"System.Type::GetType(string)\"(sort \"System.String\" 423738625)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 45,
+                  "startColumn": 38,
+                  "endLine": 45,
+                  "endColumn": 74
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()",
+            "resultFingerprint/v1": "a26c8e13a6875b90a33d92425202f35579cbbf620a82a1760aa03abf934f9bd0"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(map<sort \"System.Type\", bool> [] default bool false) old(returned bool true outs() trace(\"System.Type::GetType(string)\"(sort \"System.String\" 423738625))) new(threw \"System.Exception\" outs() trace(\"System.Type::GetType(string)\"(sort \"System.String\" 423738625)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/type-gettype",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.Type::GetType(string)"
+            },
+            "reviewGroup": "runtime-change:System.Type::GetType("
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_Is64Bit() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 47,
+                  "startColumn": 39,
+                  "endLine": 47,
+                  "endColumn": 55
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_Is64Bit()",
+            "resultFingerprint/v1": "2be9676adc3b8ac92cd9b7cb21adb0bbbe9acffb7c3a6e262d97f59a2bb29f45"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::RelativeUrisOnMono() is equivalent. Assumes callees equivalent; not proved for: Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 49,
+                  "startColumn": 28,
+                  "endLine": 49,
+                  "endColumn": 46
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::RelativeUrisOnMono()",
+            "resultFingerprint/v1": "914b6ab92d71a08631a9856a284531d4d4809b6e66f2fa951845948b3adfb38e"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()"
+            ],
+            "unprovenAssumptions": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::RelativeUrisOn64Bit() diverges via a runtime-changed API between net48 and net10.0 (Setting a static readonly field through reflection throws on .NET after the type is initialized, where .NET Framework allowed it. https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#fieldinfosetvalue-throws-exception-for-static-init-only-fields): inputs(map<bool, sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.Reflection.FieldInfo\", bool> [] default bool false, sort \"System.Type\" 0) old(threw \"System.Exception\" outs() trace(\"Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_Is64Bit()\"(), \"System.Type::GetField(string,System.Reflection.BindingFlags)\"(sort \"System.Type\" 0, sort \"System.String\" 968707671, sort \"System.Reflection.BindingFlags\" 165906601), \"System.Reflection.FieldInfo::SetValue(object,object)\"(sort \"System.Reflection.FieldInfo\" 0, sort \"System.Object\" 0, sort \"System.Object\" 1))) new(returned outs() trace(\"Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_Is64Bit()\"(), \"System.Type::GetField(string,System.Reflection.BindingFlags)\"(sort \"System.Type\" 0, sort \"System.String\" 968707671, sort \"System.Reflection.BindingFlags\" 165906601), \"System.Reflection.FieldInfo::SetValue(object,object)\"(sort \"System.Reflection.FieldInfo\" 0, sort \"System.Object\" 0, sort \"System.Object\" 1)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 58,
+                  "startColumn": 28,
+                  "endLine": 58,
+                  "endColumn": 47
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::RelativeUrisOn64Bit()",
+            "resultFingerprint/v1": "ee0390dfd8d3b35f63010c60b06564f70eaa2778542aad1f230314c818c9121d"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(map<bool, sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.Reflection.FieldInfo\", bool> [] default bool false, sort \"System.Type\" 0) old(threw \"System.Exception\" outs() trace(\"Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_Is64Bit()\"(), \"System.Type::GetField(string,System.Reflection.BindingFlags)\"(sort \"System.Type\" 0, sort \"System.String\" 968707671, sort \"System.Reflection.BindingFlags\" 165906601), \"System.Reflection.FieldInfo::SetValue(object,object)\"(sort \"System.Reflection.FieldInfo\" 0, sort \"System.Object\" 0, sort \"System.Object\" 1))) new(returned outs() trace(\"Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_Is64Bit()\"(), \"System.Type::GetField(string,System.Reflection.BindingFlags)\"(sort \"System.Type\" 0, sort \"System.String\" 968707671, sort \"System.Reflection.BindingFlags\" 165906601), \"System.Reflection.FieldInfo::SetValue(object,object)\"(sort \"System.Reflection.FieldInfo\" 0, sort \"System.Object\" 0, sort \"System.Object\" 1)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#fieldinfosetvalue-throws-exception-for-static-init-only-fields",
+            "assumedCallees": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_Is64Bit()"
+            ],
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.Reflection.FieldInfo::SetValue(object,object)"
+            },
+            "reviewGroup": "runtime-change:System.Reflection.FieldInfo::SetValue("
+          }
         }
       ],
       "columnKind": "utf16CodeUnits",
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 8,
-            "modern": 8
+            "legacy": 12,
+            "modern": 12
           },
-          "matchedPairs": 8,
-          "pairsWithoutOpaque": 8,
+          "matchedPairs": 12,
+          "pairsWithoutOpaque": 12,
           "pairsWholeBodyOpaque": 0,
-          "pairsCongruent": 4,
+          "pairsCongruent": 6,
           "projectsSkipped": {
             "legacy": 0,
             "modern": 0
           },
           "opaqueByReason": {},
-          "changedPairs": 4,
-          "changedPairsWithoutOpaque": 4,
+          "changedPairs": 6,
+          "changedPairsWithoutOpaque": 6,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 4
+            "": 6
           },
           "runtimeChangeCalls": {
             "callSites": {
-              "legacy": 10,
-              "modern": 10
+              "legacy": 13,
+              "modern": 13
             },
             "distinctMembers": {
-              "legacy": 5,
-              "modern": 5
+              "legacy": 7,
+              "modern": 7
             },
             "pairsWithAny": {
-              "legacy": 8,
-              "modern": 8
+              "legacy": 11,
+              "modern": 11
             }
           },
           "externalCallees": {
@@ -424,11 +583,19 @@
                 "callSites": 2
               },
               {
+                "member": "System.Reflection.FieldInfo::SetValue(object,object)",
+                "callSites": 2
+              },
+              {
                 "member": "System.Text.Encoding::GetString(byte[])",
                 "callSites": 2
               },
               {
                 "member": "System.Text.Encoding::get_UTF8()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Type::GetField(string,System.Reflection.BindingFlags)",
                 "callSites": 2
               },
               {
@@ -445,6 +612,14 @@
               },
               {
                 "member": "System.Diagnostics.ProcessStartInfo::set_FileName(string)",
+                "callSites": 1
+              },
+              {
+                "member": "System.IntPtr::get_Size()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Type::GetType(string)",
                 "callSites": 1
               },
               {
@@ -478,11 +653,19 @@
                 "callSites": 2
               },
               {
+                "member": "System.Reflection.FieldInfo::SetValue(object,object)",
+                "callSites": 2
+              },
+              {
                 "member": "System.Text.Encoding::GetString(byte[])",
                 "callSites": 2
               },
               {
                 "member": "System.Text.Encoding::get_UTF8()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Type::GetField(string,System.Reflection.BindingFlags)",
                 "callSites": 2
               },
               {
@@ -499,6 +682,14 @@
               },
               {
                 "member": "System.Diagnostics.ProcessStartInfo::set_FileName(string)",
+                "callSites": 1
+              },
+              {
+                "member": "System.IntPtr::get_Size()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Type::GetType(string)",
                 "callSites": 1
               },
               {
@@ -520,13 +711,13 @@
             "method": 0
           },
           "divergentRefinement": {
-            "pairs": 4,
+            "pairs": 6,
             "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 53,
-          "modern": 50
+          "legacy": 72,
+          "modern": 69
         },
         "projectsNotBuilt": {
           "legacy": [],
@@ -581,12 +772,30 @@
             ]
           },
           {
+            "group": "runtime-change:System.Reflection.FieldInfo::SetValue(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::RelativeUrisOn64Bit()"
+            ]
+          },
+          {
             "group": "runtime-change:System.Text.Encoding::GetString(",
             "ruleId": "EQ006",
             "rank": 40.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.RuntimeRowCallCannotReach.Calls::Truncated()"
+            ]
+          },
+          {
+            "group": "runtime-change:System.Type::GetType(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()"
             ]
           },
           {

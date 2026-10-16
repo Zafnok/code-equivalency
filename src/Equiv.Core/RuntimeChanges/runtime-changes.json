@@ -28,7 +28,11 @@
 //   "signedZeroResult": a call whose result is not converted to an integer type at once; -0 and +0 both convert to 0.
 //   "staticFieldSet": a call on a FieldInfo the method does not show to be an instance field: the result of
 //     Type.GetField(string, BindingFlags), or the variable of a foreach over Type.GetFields(BindingFlags), with
-//     constant flags that include Instance and not Static. Only a static readonly field reaches the change.
+//     constant flags that include Instance and not Static. Only a static readonly field reaches the change. A call in the
+//     branch an if or a conditional takes when its condition is Type.GetType("Mono.Runtime") != null, or a solution
+//     property whose getter returns only that, read up to four getters deep, is not one either (P2-220): no assembly the
+//     lookup's compilation references defines Mono.Runtime, and neither .NET Framework's core library nor .NET's does, so
+//     the lookup is null and the branch never runs on either (measured on .NET Framework 4.8 and .NET 10).
 //   "utf8Decoding": a call on an Encoding the method does not show to be Encoding.ASCII, whose decoding did not change,
 //     with bytes the method does not show to be well-formed UTF-8, which decodes the same on every runtime (P2-216). The
 //     bytes are shown when the call takes a byte[] alone, or with a constant index and count, and the array is a new one

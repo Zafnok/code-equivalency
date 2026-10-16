@@ -70,6 +70,8 @@ public sealed class IlLoweringParityTests
         [$"params-span-overloads/modern {Texts}Append(System.Text.StringBuilder,System.IFormatProvider,string,object,object,object,object)"] = ParamsSpan,
         [$"params-span-overloads/modern {Texts}Locate(string,string,string,string,string)"] = ParamsSpan,
         [$"params-span-overloads/modern {Texts}RowSwapped(char,string,string)"] = ParamsSpan,
+        [$"runtime-row-call-cannot-reach/legacy {IsMono}"] = NullComparison,
+        [$"runtime-row-call-cannot-reach/modern {IsMono}"] = NullComparison,
         [$"switch-expression-no-match/legacy {Weight}"] = NoMatchHelper,
         [$"switch-expression-no-match/modern {Weight}"] = NoMatchHelper,
     }.ToImmutableDictionary(StringComparer.Ordinal);
@@ -115,6 +117,8 @@ public sealed class IlLoweringParityTests
     private const string Find = "Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)";
 
     private const string Texts = "Equiv.Samples.ParamsSpanOverloads.Texts::";
+
+    private const string IsMono = "Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()";
 
     private const string Weight = "Equiv.Samples.SwitchExpressionNoMatch.Codes::Weight(int)";
 
@@ -189,6 +193,13 @@ public sealed class IlLoweringParityTests
     /// check of a <c>ldstr</c>, which is never null (ticket P2-126).
     /// </summary>
     private const string LiteralReceiver = "IOperation null-checks a string literal receiver through null.System.String; the IL does not";
+
+    /// <summary>
+    /// The IOperation lowering reads <c>x != null</c> as the null shadow of <c>x</c> even where <c>!=</c> is a user-defined
+    /// operator, here <c>System.Type</c>'s; the IL lowering applies the operator's <c>op:</c> function, which the compiler
+    /// calls (ticket P2-234).
+    /// </summary>
+    private const string NullComparison = "IOperation reads a user-defined != null as the null shadow; the IL applies the operator's op: function";
 
     /// <summary>
     /// The IOperation lowering makes the span the compiler builds for a <c>params ReadOnlySpan&lt;T&gt;</c> parameter a new

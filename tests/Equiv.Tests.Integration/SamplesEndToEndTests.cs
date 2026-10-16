@@ -612,6 +612,24 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-220: a set of a static field through reflection under <c>IsMono</c>, a getter that tests
+    /// <c>Type.GetType("Mono.Runtime") != null</c>, runs on neither .NET Framework 4.8 nor .NET 10 and is Equivalent by
+    /// congruence; the same set under <c>Is64Bit</c> can run on both and stays EQ006, its <c>notCongruent</c> naming the row.
+    /// </summary>
+    [Fact]
+    public void RuntimeRowCallCannotReach_ASetOnlyMonoRunsIsCongruentAndOneA64BitProcessRunsIsNot()
+    {
+        Result mono = Single("runtime-row-call-cannot-reach", "Calls::RelativeUrisOnMono(");
+        Result wide = Single("runtime-row-call-cannot-reach", "Calls::RelativeUrisOn64Bit(");
+
+        Assert.Equal("EQ001", mono.RuleId);
+        Assert.Equal("congruence", mono.GetProperty<string>("proofMethod"));
+        Assert.Equal("EQ006", wide.RuleId);
+        FingerprintDifference notCongruent = wide.GetProperty<FingerprintDifference>("notCongruent");
+        Assert.Equal(new FingerprintDifference(FingerprintDifference.RuntimeRule, "System.Reflection.FieldInfo::SetValue(object,object)"), notCongruent);
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is
