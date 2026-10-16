@@ -117,9 +117,7 @@ internal static class ValidPaths
         IConditionalOperation conditional =>
             IsValid(conditional.WhenTrue, seen, compilation, depth) && IsValid(conditional.WhenFalse!, seen, compilation, depth),
         // A built-in + with a string operand joins strings.
-        IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join =>
-            (IsPathPart(join.RightOperand) && IsValid(join.LeftOperand, seen, compilation, depth))
-            || (IsPathPart(join.LeftOperand) && IsValid(join.RightOperand, seen, compilation, depth) && HasNoDrive(join.RightOperand)),
+        IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join => IsValidJoin(join, seen, compilation, depth),
         ILocalReferenceOperation local =>
             IsGuarded(local.Local, value)
             || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, compilation, depth)
@@ -262,6 +260,14 @@ internal static class ValidPaths
         name.Parent is MemberAccessExpressionSyntax or MemberBindingExpressionSyntax ? name.Parent : name;
 
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
+
+    /// <summary>
+    /// Whether the join <paramref name="join"/> is a valid path (ticket P2-208): a valid path followed by a constant
+    /// <see cref="IsPathPart"/>, or such a constant before a valid path that <see cref="HasNoDrive"/>.
+    /// </summary>
+    private static bool IsValidJoin(IBinaryOperation join, ImmutableHashSet<ISymbol> seen, Compilation compilation, int depth) =>
+        (IsPathPart(join.RightOperand) && IsValid(join.LeftOperand, seen, compilation, depth))
+        || (IsPathPart(join.LeftOperand) && IsValid(join.RightOperand, seen, compilation, depth) && HasNoDrive(join.RightOperand));
 
     /// <summary>
     /// Whether <paramref name="operand"/> is a string constant that can be joined to a valid path and leave one (ticket
