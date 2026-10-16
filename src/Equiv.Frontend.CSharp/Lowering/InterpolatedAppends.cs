@@ -103,22 +103,6 @@ internal sealed class InterpolatedAppends
             : null;
     }
 
-    /// <summary>The local <paramref name="receiver"/> reads, directly or through a chain of the builder's own calls that return it; else null.</summary>
-    private static ILocalSymbol? Builder(IOperation receiver) => receiver switch
-    {
-        ILocalReferenceOperation reference => reference.Local,
-        IInvocationOperation { Instance: { } inner } when SymbolEqualityComparer.Default.Equals(inner.Type, receiver.Type) => Builder(inner),
-        _ => null,
-    };
-
-    private static IEnumerable<IOperation> Ancestors(IOperation operation)
-    {
-        for (IOperation? parent = operation.Parent; parent is not null; parent = parent.Parent)
-        {
-            yield return parent;
-        }
-    }
-
     /// <summary>
     /// Which code reaches a builder, read in the body that declares it and in each method of the same compilation it is
     /// handed to (ticket P2-211).
@@ -206,6 +190,22 @@ internal sealed class InterpolatedAppends
                     .OfType<IParameterReferenceOperation>()
                     .Where(r => SymbolEqualityComparer.Default.Equals(r.Parameter, kept))
                     .All(IsBuilderUse);
+        }
+
+        /// <summary>The local <paramref name="receiver"/> reads, directly or through a chain of the builder's own calls that return it; else null.</summary>
+        private static ILocalSymbol? Builder(IOperation receiver) => receiver switch
+        {
+            ILocalReferenceOperation reference => reference.Local,
+            IInvocationOperation { Instance: { } inner } when SymbolEqualityComparer.Default.Equals(inner.Type, receiver.Type) => Builder(inner),
+            _ => null,
+        };
+
+        private static IEnumerable<IOperation> Ancestors(IOperation operation)
+        {
+            for (IOperation? parent = operation.Parent; parent is not null; parent = parent.Parent)
+            {
+                yield return parent;
+            }
         }
     }
 
