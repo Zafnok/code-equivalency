@@ -145,7 +145,7 @@ internal static class ValidPaths
             symbol = symbol.ContainingSymbol;
         }
 
-        return symbol is IMethodSymbol { IsStatic: false, ContainingType: { TypeKind: TypeKind.Class } type } ? type : null;
+        return symbol is IMethodSymbol { IsStatic: false } member && member.ContainingType.TypeKind == TypeKind.Class ? member.ContainingType : null;
     }
 
     /// <summary>The instance field and property initializers of <paramref name="type"/> and of each of its base classes.</summary>
