@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Equiv.Frontend.CSharp.Lowering;
 
 /// <summary>
-/// The facts about a method that a <see cref="RuntimeChange.Requires"/> row needs (tickets P2-114 and P2-190). A row whose fact
+/// The facts about a method that a <see cref="RuntimeChange.Requires"/> row needs (tickets P2-114, P2-190 and P2-216). A row whose fact
 /// does not hold of the method being lowered or fingerprinted is added to that method's list of suppressed rows, so none of its
 /// calls is flagged runtime-changed; the lowering and the fingerprint both begin from <see cref="Suppress"/>'s list, and so agree.
 /// Every fact but <see cref="RowPrecondition.AsyncStreamOperation"/> is about the method's calls to the row's own member: it holds
@@ -30,6 +30,8 @@ internal static class RowPreconditions
         RowPrecondition.StaticFieldSet,
         RowPrecondition.Utf8Decoding,
         RowPrecondition.DefaultShellExecute,
+        RowPrecondition.ForeignProcess,
+        RowPrecondition.BelowNoneIndex,
     ];
 
     /// <summary><c>BindingFlags.Instance</c>.</summary>
@@ -40,6 +42,14 @@ internal static class RowPreconditions
 
     /// <summary>The newest Windows version .NET Framework's compatibility shim reports, 6.2 (Windows 8), as major and minor.</summary>
     private static readonly (int Major, int Minor) Shimmed = (6, 2);
+
+    /// <summary><c>ImageList.Indexer.NoneIndex</c>: .NET's <c>TreeNode</c> image index setters throw below it, and only below it.</summary>
+    private const int NoneIndex = -2;
+
+    /// <summary>The collection interfaces whose <c>Count</c> is the number of elements, never negative.</summary>
+    private static readonly FrozenSet<string> Collections =
+        new[] { "System.Collections.ICollection", "System.Collections.Generic.ICollection<T>", "System.Collections.Generic.IReadOnlyCollection<T>" }
+            .ToFrozenSet(StringComparer.Ordinal);
 
     private const string GetField = "System.Type::GetField(string,System.Reflection.BindingFlags)";
     private const string GetFields = "System.Type::GetFields(System.Reflection.BindingFlags)";
@@ -95,9 +105,12 @@ internal static class RowPreconditions
         RowPrecondition.SignedZeroResult => !(site.Parent is IConversionOperation conversion && IsIntegral(conversion.Type!)),
         // The members of both are instance methods, which no forwarder calls: an invocation of one has a receiver.
         RowPrecondition.StaticFieldSet => !(site is IInvocationOperation field && LocalValues.HoldsOnly(field.Instance!, IsInstanceField)),
-        RowPrecondition.Utf8Decoding => !(site is IInvocationOperation decoding && LocalValues.HoldsOnly(decoding.Instance!, IsAscii)),
-        // RowPrecondition.DefaultShellExecute, the last of CallFacts.
-        _ => !(site is IInvocationOperation call && IsName(call.TargetMethod, StartWithInfo) && SetsShellExecute(call.Arguments[0].Value, call)),
+        RowPrecondition.Utf8Decoding => !(site is IInvocationOperation decoding && (LocalValues.HoldsOnly(decoding.Instance!, IsAscii) || ConstantUtf8.IsWellFormed(decoding))),
+        RowPrecondition.DefaultShellExecute => !(site is IInvocationOperation call && IsName(call.TargetMethod, StartWithInfo) && SetsShellExecute(call.Arguments[0].Value, call)),
+        // StartInfo is an instance property, which only a reference to it reads, and that reference has a receiver.
+        RowPrecondition.ForeignProcess => !IsNewProcess(((IPropertyReferenceOperation)site).Instance!),
+        // RowPrecondition.BelowNoneIndex, the last of CallFacts: only a reference to the property runs its setter.
+        _ => IsSetBelowNone((IPropertyReferenceOperation)site),
     };
 
     /// <summary>
@@ -108,7 +121,7 @@ internal static class RowPreconditions
     private static bool IsUnshimmedRead(IOperation site) =>
         site.Parent is IPropertyReferenceOperation outer
         && (string.Equals(outer.Property.Name, "Platform", StringComparison.Ordinal)
-            || (string.Equals(outer.Property.Name, "Version", StringComparison.Ordinal) && IsComparedBelowShim(outer)));
+            || (string.Equals(outer.Property.Name, "Version", StringComparison.Ordinal) && (IsComparedBelowShim(outer) || IsMajorComparedBelowShim(outer))));
 
     /// <summary>
     /// <paramref name="version"/> compared with an old version: <c>version.CompareTo(new Version(6, 1))</c>,
@@ -120,6 +133,39 @@ internal static class RowPreconditions
         IInvocationOperation compare => string.Equals(compare.TargetMethod.Name, "CompareTo", StringComparison.Ordinal) && IsOldVersion(compare.Arguments[0].Value),
         IBinaryOperation binary => IsOldVersion(binary.LeftOperand == version ? binary.RightOperand : binary.LeftOperand),
         _ => false,
+    };
+
+    /// <summary>
+    /// <paramref name="version"/>'s <c>Major</c> compared by an operator with a constant that gives the same answer for the shim's
+    /// 6 as for every greater major, the real one of every Windows the shim reports as 6.2 (ticket P2-216):
+    /// <c>version.Major &gt;= 6</c>. Whether a major compares true changes only at the constant and the one after it, so those,
+    /// where they are greater than 6, are the majors to try.
+    /// </summary>
+    private static bool IsMajorComparedBelowShim(IOperation version)
+    {
+        if (version.Parent is not IPropertyReferenceOperation { Property.Name: "Major", Parent: IBinaryOperation comparison } major
+            || (comparison.LeftOperand == major ? comparison.RightOperand : comparison.LeftOperand).ConstantValue.Value is not int threshold)
+        {
+            return false;
+        }
+
+        bool? Answer(long value) => comparison.LeftOperand == major
+            ? Compare(comparison.OperatorKind, value, threshold)
+            : Compare(comparison.OperatorKind, threshold, value);
+        bool? shimmed = Answer(Shimmed.Major);
+        return shimmed is not null && new[] { threshold, threshold + 1L }.Where(static m => m > Shimmed.Major).All(m => Answer(m) == shimmed);
+    }
+
+    /// <summary>What the comparison <paramref name="kind"/> answers for <paramref name="left"/> and <paramref name="right"/>; null for any other operator.</summary>
+    private static bool? Compare(BinaryOperatorKind kind, long left, long right) => kind switch
+    {
+        BinaryOperatorKind.Equals => left == right,
+        BinaryOperatorKind.NotEquals => left != right,
+        BinaryOperatorKind.LessThan => left < right,
+        BinaryOperatorKind.LessThanOrEqual => left <= right,
+        BinaryOperatorKind.GreaterThan => left > right,
+        BinaryOperatorKind.GreaterThanOrEqual => left >= right,
+        _ => null,
     };
 
     /// <summary><c>new Version(major, minor)</c> of constants no newer than <see cref="Shimmed"/>: a version with no build, which is older than 6.2.9200.</summary>
@@ -154,6 +200,65 @@ internal static class RowPreconditions
         && call.Arguments.Single(a => a.Parameter!.Ordinal == call.TargetMethod.Parameters.Length - 1).Value.ConstantValue.Value is int flags
         && (flags & Instance) != 0
         && (flags & Static) == 0;
+
+    /// <summary>
+    /// A <c>Process</c> the method creates with <c>new</c>: the object an initializer of a new one sets members of, or a new one,
+    /// or a local variable only ever assigned one (ticket P2-216). .NET's <c>StartInfo</c> throws only for a process that has
+    /// none yet and that the object is associated with, and a new one is associated only by <c>Start</c>, which reads
+    /// <c>StartInfo</c> first.
+    /// </summary>
+    private static bool IsNewProcess(IOperation process) => process is IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ImplicitReceiver }
+        ? IsProcessCreation(Initialized(process).Parent!)
+        : LocalValues.HoldsOnly(process, IsProcessCreation);
+
+    /// <summary>The initializer whose object an implicit receiver is: the nearest one around it, which there always is.</summary>
+    private static IObjectOrCollectionInitializerOperation Initialized(IOperation receiver) =>
+        receiver.Parent as IObjectOrCollectionInitializerOperation ?? Initialized(receiver.Parent!);
+
+    private static bool IsProcessCreation(IOperation value) =>
+        value is IObjectCreationOperation creation && string.Equals(creation.Type!.ToDisplayString(), "System.Diagnostics.Process", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether <paramref name="index"/>, a reference to a <c>TreeNode</c> image index, sets it to a value the method does not show
+    /// is at least <see cref="NoneIndex"/>: an assignment of such a value, a compound assignment, an increment or a deconstruction
+    /// (ticket P2-216). A read runs only the getter, which the rows do not name. A chained assignment's value is the value it assigns.
+    /// </summary>
+    private static bool IsSetBelowNone(IPropertyReferenceOperation index) => index.Parent switch
+    {
+        ISimpleAssignmentOperation set when set.Target == index => !LocalValues.HoldsOnly(Assigned(set.Value), IsAtLeastNone),
+        IAssignmentOperation set => set.Target == index,
+        IIncrementOrDecrementOperation or ITupleOperation => true,
+        _ => false,
+    };
+
+    private static IOperation Assigned(IOperation value) => value is ISimpleAssignmentOperation inner ? Assigned(inner.Value) : value;
+
+    /// <summary>A value of at least <see cref="NoneIndex"/>: a constant, a length that is never negative, or such a length less a constant up to 2.</summary>
+    private static bool IsAtLeastNone(IOperation value) => value switch
+    {
+        { ConstantValue.Value: int constant } => constant >= NoneIndex,
+        IBinaryOperation { OperatorKind: BinaryOperatorKind.Subtract, RightOperand.ConstantValue.Value: int less } difference =>
+            less is >= 0 and <= -NoneIndex && IsLength(difference.LeftOperand),
+        _ => IsLength(value),
+    };
+
+    /// <summary>
+    /// A length that is never negative: an array's or a string's <c>Length</c>, or the <c>Count</c> of a collection of the
+    /// framework (a type of a <c>System</c> namespace that implements one of <see cref="Collections"/>), whose body is the one
+    /// that runs: neither abstract nor virtual nor an override, which another body could replace.
+    /// </summary>
+    private static bool IsLength(IOperation value) =>
+        value is IPropertyReferenceOperation { Property: { IsAbstract: false, IsVirtual: false, IsOverride: false } property }
+        && property.Name switch
+        {
+            "Length" => property.ContainingType.SpecialType is SpecialType.System_String or SpecialType.System_Array,
+            "Count" => IsFrameworkCollection(property.ContainingType),
+            _ => false,
+        };
+
+    private static bool IsFrameworkCollection(INamedTypeSymbol type) =>
+        string.Equals(type.ContainingNamespace.ToDisplayString().Split('.')[0], "System", StringComparison.Ordinal)
+        && type.AllInterfaces.Any(static i => Collections.Contains(i.OriginalDefinition.ToDisplayString()));
 
     private static bool IsAscii(IOperation value) =>
         value is IPropertyReferenceOperation reference && string.Equals(reference.Property.ToDisplayString(), "System.Text.Encoding.ASCII", StringComparison.Ordinal);

@@ -1363,7 +1363,8 @@ false positives and Unknowns that verdict counts against each, they come before 
    `File.Exists` guard on a member read again; its two left are P2-222 and P2-223), P2-208 (M, 3).
 3. Rows that cannot reach their change, 8 false EQ006: P2-216 (M, 5, five rows), P2-220 (M, 2, and P2-190's kept
    `OAuthHttpClient::.cctor()`: an exclusion from another method's data flow), P2-219 (S, 1, the RSA XML rows that
-   .NET Core 3.0 implements).
+   .NET Core 3.0 implements). P2-216 took four of its five and filed the fifth, an ordinal comparison a solution getter
+   returns, as P2-224 (M, 1).
 4. The EQ002 causes, 13 false positives: P2-193 (S, 4), P2-185 (2), P2-186 (2), P2-211 (1, the upgrades' last),
    P2-187, P2-097, P2-205, P2-206 (1 each).
 5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs alone: P2-179 (`rebound-call`, 121 on

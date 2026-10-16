@@ -17,22 +17,42 @@
 // tools/runtime-diff between adjacent runtimes (P2-113). A member whose behaviour changed at more than one runtime
 // has one row per change point. An optional "requires" (P2-114) names a fact about the method that makes the call, without
 // which the row does not fire: "asyncStreamOperation" is a call to ReadAsync, WriteAsync, BeginRead, BeginWrite,
-// CopyToAsync or FlushAsync on a Stream in that same method. The others (P2-190) are each a call in that method to the
-// row's own member, or to a forwarder to it, that can reach the row's change; a local variable counts as holding a value
-// only when its initializer and every later assignment do:
-//   "shimmedVersionRead": a read of the OperatingSystem other than .Platform, or .Version compared (CompareTo or an
-//     operator) with new Version(major, minor) of constants no newer than 6.2. .NET Framework's shim reports 6.2.9200
-//     for every newer Windows and the real version up to it, so it never crosses such a threshold.
+// CopyToAsync or FlushAsync on a Stream in that same method. The others (P2-190, P2-216) are each a call in that method to
+// the row's own member, or to a forwarder to it, that can reach the row's change; a local variable counts as holding a
+// value only when its initializer and every later assignment do:
+//   "shimmedVersionRead": a read of the OperatingSystem other than .Platform, .Version compared (CompareTo or an
+//     operator) with new Version(major, minor) of constants no newer than 6.2, or .Version.Major compared (an operator)
+//     with a constant that gives the same answer for 6 as for every greater major (>= 6, > 5, == 5; P2-216). .NET
+//     Framework's shim reports 6.2.9200 for every newer Windows, whose real major is 6 or more, and the real version up
+//     to it, so it never crosses such a threshold.
 //   "signedZeroResult": a call whose result is not converted to an integer type at once; -0 and +0 both convert to 0.
 //   "staticFieldSet": a call on a FieldInfo the method does not show to be an instance field: the result of
 //     Type.GetField(string, BindingFlags), or the variable of a foreach over Type.GetFields(BindingFlags), with
 //     constant flags that include Instance and not Static. Only a static readonly field reaches the change.
-//   "utf8Decoding": a call on an Encoding the method does not show to be Encoding.ASCII, whose decoding did not change.
+//   "utf8Decoding": a call on an Encoding the method does not show to be Encoding.ASCII, whose decoding did not change,
+//     with bytes the method does not show to be well-formed UTF-8, which decodes the same on every runtime (P2-216). The
+//     bytes are shown when the call takes a byte[] alone, or with a constant index and count, and the array is a new one
+//     of a constant length up to 4096 whose elements are constants or zero, or a local variable declared with one in a
+//     block, never assigned again, whose elements only earlier statements of the blocks the call runs in set, each
+//     "a[i] = b;" with constants, and that nothing else uses before the call or in its statement. No loop, labelled
+//     block, lambda or local function lies between the declaration and the call, so each of those statements has run
+//     once, in order, and no later one has. The bytes read are checked with the Unicode rules (Utf8.IsValid). The
+//     UTF8Encoding rows require it too: their receiver is never ASCII, and their change is the same.
 //   "defaultShellExecute": a call that is not Process.Start(ProcessStartInfo) given a ProcessStartInfo the method shows
 //     sets UseShellExecute and never sets WindowStyle: a new one whose initializer sets UseShellExecute, or a local
 //     variable declared with a new one that nothing assigns again, used only for its properties and as Process.Start's
 //     argument, whose initializer sets UseShellExecute or which an earlier statement of the block that makes the call,
 //     a block with no label, sets it in.
+//   "foreignProcess": a read of StartInfo on a Process the method does not show it created with new (P2-216). .NET
+//     throws only for a process it is associated with and that has no StartInfo yet, one GetProcesses or GetProcessById
+//     returns; a new Process is associated only by Start, which reads StartInfo first.
+//   "belowNoneIndex": a set of the property (an assignment, a compound assignment, an increment or a deconstruction) to
+//     a value the method does not show is at least -2 (P2-216). Shown are a constant, a length that is never negative
+//     (an array's or a string's Length, or the Count of a type of a System namespace that implements ICollection,
+//     ICollection<T> or IReadOnlyCollection<T>, neither virtual nor abstract nor an override), such a length less a
+//     constant up to 2, and the value of a chained assignment of one. .NET throws below ImageList.Indexer.NoneIndex, -2,
+//     and only there; .NET Framework validated nothing (dotnet/winforms src/System.Windows.Forms TreeNode.cs, release/3.1
+//     against release/5.0). A read runs only the getter, which the rows do not name.
 //
 // "precondition" (optional; ticket P2-073) names what a call's arguments must be able to be for the row's change to
 // reach it. It reads some of the call's operands, each only when it is a compile-time constant: the row does not apply
@@ -372,6 +392,7 @@
       "member": "System.Text.UTF8Encoding::GetCharCount(",
       "source": "documented",
       "changedIn": "netcoreapp3.0",
+      "requires": "utf8Decoding",
       "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
     },
@@ -379,6 +400,7 @@
       "member": "System.Text.UTF8Encoding::GetChars(",
       "source": "documented",
       "changedIn": "netcoreapp3.0",
+      "requires": "utf8Decoding",
       "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
     },
@@ -386,6 +408,7 @@
       "member": "System.Text.UTF8Encoding::GetString(",
       "source": "documented",
       "changedIn": "netcoreapp3.0",
+      "requires": "utf8Decoding",
       "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
     },
@@ -770,6 +793,7 @@
       "member": "System.Windows.Forms.TreeNode::set_ImageIndex(",
       "source": "documented",
       "changedIn": "net5.0",
+      "requires": "belowNoneIndex",
       "reason": "Out-of-range values throw ArgumentOutOfRangeException on .NET where other exception types were thrown before.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentoutofrangeexception"
     },
@@ -777,6 +801,7 @@
       "member": "System.Windows.Forms.TreeNode::set_SelectedImageIndex(",
       "source": "documented",
       "changedIn": "net5.0",
+      "requires": "belowNoneIndex",
       "reason": "Out-of-range values throw ArgumentOutOfRangeException on .NET where other exception types were thrown before.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentoutofrangeexception"
     },
@@ -1953,6 +1978,7 @@
       "member": "System.Diagnostics.Process::get_StartInfo(",
       "source": "documented",
       "changedIn": "netcoreapp1.0",
+      "requires": "foreignProcess",
       "reason": "Reading StartInfo of a process this code did not start throws InvalidOperationException on .NET instead of returning a placeholder.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#processstartinfo-throws-invalidoperationexception-for-processes-you-didnt-start"
     },
