@@ -137,7 +137,8 @@ internal static class ConstantUtf8
     {
         List<(IBlockOperation Block, int At)> blocks = [];
         bool declared = false;
-        for (IOperation inner = call; !declared; inner = inner.Parent!)
+        IOperation inner = call;
+        while (!declared)
         {
             IOperation outer = inner.Parent!;
             if (outer is ILoopOperation or IAnonymousFunctionOperation or ILocalFunctionOperation
@@ -151,6 +152,8 @@ internal static class ConstantUtf8
                 blocks.Insert(0, (block, block.Operations.IndexOf(inner)));
                 declared = block.Operations.Contains(declaration);
             }
+
+            inner = outer;
         }
 
         return [.. blocks];
