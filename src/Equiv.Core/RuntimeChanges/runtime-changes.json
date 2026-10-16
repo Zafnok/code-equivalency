@@ -67,7 +67,11 @@
 //     searches ordinally on every runtime and never meets it, whatever its receiver (P2-181).
 //   "invalidPath": reads every string argument; met by a blank path, one of 248 characters or more, and one with a
 //     control character, one of " < > | ? *, or a colon anywhere but after a drive letter. An argument that "validPaths"
-//     shows to be a valid path does not meet it, constant or not.
+//     shows to be a valid path does not meet it, constant or not. A row marked "emptyPathUnchanged" (P2-232) is one whose
+//     change the empty string does not reach: an empty path takes the call to the same outcome on .NET Framework and .NET
+//     (SetCurrentDirectory throws ArgumentException on both; Combine joins nothing on both, as neither validates an empty
+//     part). An argument that "validPaths" shows to be a valid path or the empty string does not meet such a row's
+//     precondition.
 //   "trimEntries": reads the argument named options; met by any value but StringSplitOptions.None and
 //     RemoveEmptyEntries, the only two .NET Framework accepts (P2-181).
 //   "absentFolder": reads the argument named folder; met by any Environment.SpecialFolder but System and the nine folders
@@ -98,7 +102,11 @@
 //   - a local variable whose initializer and every later assignment is such a result, an assignment that reads the
 //     variable itself reading it as such a result (P2-208);
 //   - a valid path followed by a string constant with no control character, none of " < > | ? * and no colon (P2-208):
-//     a valid path's one colon follows its drive letter and stays there. Such a constant before a valid path is one only
+//     a valid path's one colon follows its drive letter and stays there. A char is such a constant too (P2-232) when it
+//     is a char constant, one of the "separators" (framework fields that hold \ or / on every runtime and operating
+//     system), or a readonly char field of the solution whose initializer and every write in its type's constructors
+//     is one, read as a stored path is. A compound += of such a constant onto a local variable or parameter is read as
+//     the join it is. Such a constant before a valid path is one only
 //     when that path is a local variable or a parameter passed by value where String.StartsWith has returned true for
 //     it on a constant that begins with / or \ and an ASCII letter or digit, in the places a guard counts, with nothing
 //     between that runs code or writes it: the path then has no drive, so no colon;
@@ -118,7 +126,10 @@
 //     own when no override can replace it (not virtual, abstract or an override), or, when the receiver's type is sealed,
 //     the override that type itself declares (P2-200). A returned call there to another of the solution's members is
 //     read the same way, up to four calls from the method that makes the call (P2-200). A verdict assumes each callee
-//     pair equivalent (ADR 0019 and its P2-200 clarification), and each callee's own rows are its own results;
+//     pair equivalent (ADR 0019 and its P2-200 clarification), and each callee's own rows are its own results. A
+//     by-value parameter of that body is a valid path there when the call passes it one by these rules and every write
+//     of it in the body gives one, the parameters so passed taken to hold valid paths (P2-232): the parameter starts as
+//     the argument, and only the body, its lambdas and local functions among it, can write it;
 //   - a read of a readonly field, or of a get-only auto-property (no setter, a getter with no body) whose getter is the
 //     one that runs, of a class, whose initializer and every write in a constructor or init accessor of its type are
 //     valid paths by these rules, each read in its own body, and of which there is at least one (P2-201). The language
@@ -137,6 +148,10 @@
 //     AppendLiteral, AppendFormatted) is not read; reflection and UnsafeAccessor, which call a private method from
 //     elsewhere, are not seen.
 // Any other path that a caller passed in is not followed.
+// The same rules show an argument to be a valid path or the empty string (P2-232) when every value they read is one of
+// these or the empty string itself ("" or String.Empty); a constant joined to such a value must also be empty or not white
+// space only, since joined to the empty string it is the whole path. A transform's or prefix's arguments are still read
+// as valid paths.
 //
 // "ordinalUnaffected" (P2-075), when true, marks a row for a culture-sensitive comparison: a call that passes
 // StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant argument is not flagged by it.
@@ -206,6 +221,10 @@
     "guards": [
       "System.IO.File::Exists(string)",
       "System.IO.Directory::Exists(string)"
+    ],
+    "separators": [
+      "System.IO.Path::DirectorySeparatorChar",
+      "System.IO.Path::AltDirectorySeparatorChar"
     ]
   },
   "fieldValues": {
@@ -2839,6 +2858,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "emptyPathUnchanged": true,
       "reason": "Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
       "witness": { "input": ["\u0000", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000\\i" }
@@ -2933,6 +2953,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "emptyPathUnchanged": true,
       "reason": "SetCurrentDirectory no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.setcurrentdirectory",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3081,6 +3102,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "emptyPathUnchanged": true,
       "reason": "Combine no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
       "witness": { "input": ["\u0000", "i", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000\\i\\i" }
@@ -3090,6 +3112,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "emptyPathUnchanged": true,
       "reason": "Combine no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
       "witness": { "input": ["\u0000", "i", "i", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000\\i\\i\\i" }

@@ -19,6 +19,12 @@ public sealed record CallArgument(string Parameter, bool IsString, bool IsConsta
     public bool ValidPath { get; init; }
 
     /// <summary>
+    /// True when the operand is a <see cref="ValidPath"/> or the empty string (ticket P2-232), which a row marked
+    /// <see cref="RuntimeChange.EmptyPathUnchanged"/> treats alike.
+    /// </summary>
+    public bool ValidPathOrEmpty { get; init; }
+
+    /// <summary>
     /// True when the operand is passed to a <c>char</c> or <c>int</c> parameter: a character to search for, or a position
     /// or a count (ticket P2-181).
     /// </summary>

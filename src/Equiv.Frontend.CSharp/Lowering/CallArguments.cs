@@ -22,12 +22,22 @@ internal static class CallArguments
     public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method) => Of(site, method, static _ => false);
 
     /// <summary>As the two-argument overload, with each operand <paramref name="isValidPath"/> holds of marked a <see cref="CallArgument.ValidPath"/> (ticket P2-074).</summary>
-    public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath) => site switch
+    public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath) =>
+        Of(site, method, new PathTests(isValidPath, static _ => false));
+
+    /// <summary>
+    /// As the three-argument overload, with each operand that is a valid path, or that <paramref name="isValidPathOrEmpty"/>
+    /// holds of, marked a <see cref="CallArgument.ValidPathOrEmpty"/> too (ticket P2-232).
+    /// </summary>
+    public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath, Func<IOperation, bool> isValidPathOrEmpty) =>
+        Of(site, method, new PathTests(isValidPath, isValidPathOrEmpty));
+
+    private static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, PathTests tests) => site switch
     {
         IInvocationOperation call when Calls(call.TargetMethod, method) =>
-            [.. Receiver(call.Instance, isValidPath), .. call.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, isValidPath))],
+            [.. Receiver(call.Instance, tests), .. call.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, tests))],
         IObjectCreationOperation creation when Calls(creation.Constructor, method) =>
-            [.. creation.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, isValidPath))],
+            [.. creation.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, tests))],
         _ => [],
     };
 
@@ -41,15 +51,19 @@ internal static class CallArguments
 
     private static bool Calls(IMethodSymbol? called, IMethodSymbol method) => SymbolEqualityComparer.Default.Equals(called, method);
 
-    private static IEnumerable<CallArgument> Receiver(IOperation? instance, Func<IOperation, bool> isValidPath) =>
-        instance is null ? [] : [Of(CallArgument.Receiver, instance.Type!, instance, isValidPath)];
+    private static IEnumerable<CallArgument> Receiver(IOperation? instance, PathTests tests) =>
+        instance is null ? [] : [Of(CallArgument.Receiver, instance.Type!, instance, tests)];
 
-    private static CallArgument Of(string parameter, ITypeSymbol type, IOperation value, Func<IOperation, bool> isValidPath) =>
-        Constant(new CallArgument(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value)
+    private static CallArgument Of(string parameter, ITypeSymbol type, IOperation value, PathTests tests)
+    {
+        bool valid = tests.IsValidPath(value);
+        return Constant(new CallArgument(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value)
         {
-            ValidPath = isValidPath(value),
+            ValidPath = valid,
+            ValidPathOrEmpty = valid || tests.IsValidPathOrEmpty(value),
             IsCharOrIndex = type.SpecialType is SpecialType.System_Char or SpecialType.System_Int32,
         }, value);
+    }
 
     /// <summary><paramref name="argument"/>, as a constant with its documented value when <paramref name="value"/> reads a field the table lists.</summary>
     private static CallArgument Constant(CallArgument argument, IOperation value) =>
@@ -57,4 +71,7 @@ internal static class CallArguments
             && RuntimeChangeTable.Load().TryGetFieldValue($"{field.ContainingType.ToDisplayString()}::{field.Name}", out string? documented)
             ? argument with { IsConstant = true, Value = documented }
             : argument;
+
+    /// <summary>What marks an operand a <see cref="CallArgument.ValidPath"/>, and what a <see cref="CallArgument.ValidPathOrEmpty"/>.</summary>
+    private sealed record PathTests(Func<IOperation, bool> IsValidPath, Func<IOperation, bool> IsValidPathOrEmpty);
 }

@@ -213,6 +213,70 @@ public sealed class ValidPathTests
         Assert.Equal(RuntimeChangePrecondition.InvalidPath, row.Precondition);
     }
 
+    /// <summary>
+    /// Ticket P2-232: an operand that is a valid path or the empty string does not reach a path row the empty string does
+    /// not reach, and reaches every other row as any operand does.
+    /// </summary>
+    [Fact]
+    public void AValidPathOrTheEmptyStringReachesOnlyTheRowsTheEmptyStringReaches()
+    {
+        CallArgument either = Variable("path") with { ValidPathOrEmpty = true };
+
+        Assert.False(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [either], emptyPathUnchanged: true));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [either], emptyPathUnchanged: false));
+        Assert.True(Reaches(RuntimeChangePrecondition.InvalidPath, either));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [Variable("path")], emptyPathUnchanged: true));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.CultureSensitiveText, [either], emptyPathUnchanged: true));
+    }
+
+    /// <summary>Ticket P2-232: a row's <c>emptyPathUnchanged</c> decides whether a valid path or the empty string matches it.</summary>
+    [Fact]
+    public void ARowMarkedEmptyPathUnchangedDoesNotMatchAValidPathOrTheEmptyString()
+    {
+        using MemoryStream stream = new(Encoding.UTF8.GetBytes("""
+            { "coveredFrom": "netcoreapp3.0", "rows": [
+              { "member": "D::Set(string)", "source": "measured", "changedIn": "netcoreapp1.0", "precondition": "invalidPath", "emptyPathUnchanged": true, "reason": "r", "url": "https://example.com/" },
+              { "member": "D::Get(string)", "source": "measured", "changedIn": "netcoreapp1.0", "precondition": "invalidPath", "reason": "r", "url": "https://example.com/" }
+            ] }
+            """));
+        RuntimeChangeTable table = RuntimeChangeTable.Parse(stream);
+        RuntimeInterval interval = new(TargetRuntime.Parse("net48")!, TargetRuntime.Parse("net10.0")!);
+        ImmutableArray<CallArgument> either = [Variable("path") with { ValidPathOrEmpty = true }];
+
+        Assert.True(table.Rows[0].EmptyPathUnchanged);
+        Assert.False(table.Rows[1].EmptyPathUnchanged);
+        Assert.False(table.TryMatch(new CallIdentity("D::Set(string)"), interval, [], either, out _));
+        Assert.True(table.TryMatch(new CallIdentity("D::Get(string)"), interval, [], either, out _));
+        Assert.True(table.TryMatch(new CallIdentity("D::Set(string)"), interval, [], [Variable("path")], out _));
+    }
+
+    /// <summary>
+    /// Ticket P2-232: the shipped table marks the path rows whose empty-string behaviour is the same on .NET Framework and
+    /// .NET (<c>SetCurrentDirectory</c> throws <c>ArgumentException</c> on both, <c>Combine</c> skips an empty part on both),
+    /// and no other; and it lists the two directory separator fields.
+    /// </summary>
+    [Fact]
+    public void TheShippedTableMarksTheRowsTheEmptyStringDoesNotReachAndListsTheSeparators()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        string[] marked = [.. table.Rows.Where(static row => row.EmptyPathUnchanged).Select(static row => row.Member).Order(StringComparer.Ordinal)];
+
+        Assert.Equal(
+            [
+                "System.IO.Directory::SetCurrentDirectory(string)",
+                "System.IO.Path::Combine(string,string)",
+                "System.IO.Path::Combine(string,string,string)",
+                "System.IO.Path::Combine(string,string,string,string)",
+            ],
+            marked);
+        Assert.All(table.Rows.Where(static row => row.EmptyPathUnchanged), static row => Assert.Equal(RuntimeChangePrecondition.InvalidPath, row.Precondition));
+        Assert.True(table.IsPathSeparator("System.IO.Path::DirectorySeparatorChar"));
+        Assert.True(table.IsPathSeparator("System.IO.Path::AltDirectorySeparatorChar"));
+        Assert.False(table.IsPathSeparator("System.IO.Path::VolumeSeparatorChar"));
+        Assert.False(Parse(Lists).IsPathSeparator("System.IO.Path::DirectorySeparatorChar"));
+        Assert.False(Parse(string.Empty).IsPathSeparator("System.IO.Path::DirectorySeparatorChar"));
+    }
+
     private static bool Reaches(RuntimeChangePrecondition precondition, params CallArgument[] arguments) =>
         RuntimeChangeReach.CanReach(precondition, [.. arguments]);
 
