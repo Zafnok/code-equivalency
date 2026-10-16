@@ -688,8 +688,11 @@ Migration-specific normalisations (applied to both sides before matching):
   P2-217 reads a field or an auto-property of a class's `this`, of a parameter passed by value that
   nothing assigns, or static, where a guard has returned true for the same member of the same receiver
   and nothing between the guard and the read runs code or writes the member, so both reads return one
-  value. A path that came from a
-  caller is not followed, and the row flags it.
+  value. Ticket P2-207 reads a local variable or by-value parameter as the last statement before the read that writes
+  it left it, when that statement is a plain assignment or a declaration with a value and nothing writes the variable
+  through a `ref`, from a lambda or local function, or past a `goto`; and a by-value parameter that nothing assigns, of
+  a private method its type's source only ever calls, when every one of those calls passes a valid path (ADR 0019 and
+  its P2-207 clarification). Any other path that came from a caller is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
   where the reference assemblies have the type (.NET Core 3.0 and later) and
