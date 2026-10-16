@@ -77,6 +77,17 @@ public sealed class ValidPathsTests
     [InlineData("static object M(string p, string q) { if (File.Exists(p)) { p = q; return new StreamReader(p); } return null; }", true)]
     public void AGuardedUseIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
 
+    /// <summary>
+    /// Ticket P2-230: a primary constructor's parameter is the type's state, which any member can write and a call between
+    /// the guard and the use can run, so a guard on it does not clear the use; one on the method's own parameter does.
+    /// </summary>
+    [Theory]
+    [InlineData("class C(string p)\n{\nvoid Reset() { p = \"a|b\"; }\nvoid M() { if (File.Exists(p)) { Reset(); File.Delete(p); } }\n}\n", true)]
+    [InlineData("class C(string p)\n{\nvoid Reset() { p = \"a|b\"; }\nvoid M() { if (!File.Exists(p)) return; File.Delete(p); }\n}\n", true)]
+    [InlineData("class C(string q)\n{\nvoid Reset() { q = \"a|b\"; }\nvoid M(string p) { if (File.Exists(p)) { Reset(); File.Delete(p); } }\n}\n", false)]
+    public void AGuardOnAPrimaryConstructorsParameterDoesNotClearItsUse(string type, bool flagged) =>
+        Assert.Equal(flagged, Calls(Source("using System.IO;\n" + type, "M")).Any(static call => call.Callee.RuntimeChanged));
+
     /// <summary>The right operand of <c>&amp;&amp;</c> runs when the left is true, and that of <c>||</c> when it is false.</summary>
     [Theory]
     [InlineData("static bool M(string p) => File.Exists(p) && new StreamReader(p).EndOfStream;", false)]
