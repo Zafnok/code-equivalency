@@ -42,8 +42,9 @@ The single-method shapes (P2-216).
 
 ## Notes
 - Filed 2026-10-15 by P2-212 (criterion 6).
-- Criterion 1, what each of the three needs, read from the legacy checkouts (`openra__openra@5e74e58b2204`,
-  `duplicati__duplicati@beaf03562fdc`, P2-212's):
+- Criterion 1, what each of the three needs, read from P2-212's checkouts (`openra__openra@fef7a018f2b2` and
+  `@5e74e58b2204`, whose `FieldLoader.cs` and `SpriteFont` are the same text; `duplicati__duplicati@beaf03562fdc` and
+  `@4f565a004f52`, the same `IsMono` and static constructor):
   - `FieldLoader::Load(object,MiniYaml)`: `fli.Field.SetValue(self, val)`, `fli` an element of `TypeLoadInfo[self.GetType()]`.
     `TypeLoadInfo` is a `static readonly ConcurrentCache<Type, FieldLoadInfo[]>` built with `BuildTypeLoadInfo`, whose
     only filler is `foreach (var ff in type.GetFields(Public | NonPublic | Instance))`, each `ff` passed to
@@ -72,7 +73,7 @@ The single-method shapes (P2-216).
   P2-207 clarification lets a private method's Equivalent cover the inputs its callers can give it, not the uses they
   make of its result; reading it that way is a new decision, and even then the read is four steps (a local through a
   loop, its return, the one caller, and `Math.Ceiling` before the conversion). The caller, `Measure`, is already
-  Equivalent-ready: its `Ceiling` result is converted to `int` at once. Alternatives: an output-side clarification of ADR
+  Equivalent (`bounded`): its `Ceiling` result is converted to `int` at once, and it assumes `MaxLineWidth`. Alternatives: an output-side clarification of ADR
   0019 (not this ticket's, and not a precision fix: it changes what a private method's verdict means). Rule: 4.
 - Decision: the cache filler (`FieldLoader::Load`) is not taken: the size guard, as above. Alternatives: reading
   `FieldLoadInfo`'s constructor's callers in its own file only (a public constructor of a public type can be called from
@@ -90,3 +91,33 @@ The single-method shapes (P2-216).
 - Decision: `ValidPaths` exposes the values a solution callee's body returns (`ReturnedValues`, the first half of
   `ReturnsOnlyValidPaths`) and `CalleeDepth`, rather than `RowPreconditions` getting a second copy of `Dispatched`, `Body`
   and `Returned`. Alternatives: a copy. Rule: 4.
+- Soundness of the shape taken (criterion 2), P2-200's argument at one link: the caller pair calls the getter as a
+  function both sides share and assumes it equivalent (ADR 0019), naming it when no proof covers it, so on both sides
+  the getter returns what its legacy body returns. That body is `Type.GetType("Mono.Runtime") != null`; the lookup
+  searches its own assembly and the core library, no assembly its compilation references defines the type, and the
+  core libraries of .NET Framework 4.8 and .NET 10 do not (measured above), so it is false on both runtimes and the
+  branch never runs. `Type.GetType`'s own row (.NET 8, type names with an invalid element type or an asterisk in an
+  assembly name) does not touch the name `Mono.Runtime`. An `AppDomain.TypeResolve` handler that loads an assembly
+  defining the type is a gap of the kind ADR 0019 already leaves for reflection. The bound is P2-200's: four getters,
+  each a step, and a fifth is not read (`RowCallPreconditionsTests.ASetValueAGuardLetsThroughFires`, `OnMono4`).
+  Recorded as a dated clarification on ADR 0019 (bar test, first row).
+- Found while regenerating the sample: the IOperation lowering reads `x != null` as the null shadow of `x` even where
+  `!=` is a user-defined operator, so a type whose `==` is not a null test is mis-lowered; a probe with an `operator ==`
+  that returns `true` lowered `d == null` to a null-map read. Filed as P2-234 (S, soundness); the sample's
+  `get_IsMono()` is a known difference in `IlLowererTests` and `IlLoweringParityTests` until then.
+- Criterion 3, the reruns: 2026-10-16, compare mode quick, `--jobs 4`, one run at a time, on P2-212's checkouts
+  (shared `.corpus`). Before at `main` (`8645e40e`, built in a second worktree), after at this branch's head. Another
+  session's `gitextensions-8522` run overlapped the first OpenRA pair, so the times are not compared. `openra-17989`
+  287 s and 271 s, `duplicati-3124` 509 s and 502 s, each exit 1. The three procedures, before then after:
+
+  | Pair | Procedure | Row | `main` | P2-220 |
+  |---|---|---|---|---|
+  | openra-17989 | `FieldLoader::Load(object,MiniYaml)` | `FieldInfo::SetValue(` | EQ006 | EQ006 (not taken: size guard) |
+  | openra-17989 | `SpriteFont::MaxLineWidth(string[],Func<string, float>)` | `Math::Max(float,float)` | EQ006 | EQ006 (not taken: its result differs) |
+  | duplicati-3124 | `OAuthHttpClient::.cctor()` | `FieldInfo::SetValue(` | EQ006 | Equivalent (`congruence`), assuming `Utility::get_IsMono()` |
+
+  `Utility::get_IsMono()` is Equivalent (`congruence`) on both runs: Duplicati's modern side targets net5.0, below the
+  `Type.GetType` row's net8.0. No other result on either pair moved: OpenRA's counts are the same (EQ001 9852, EQ003
+  231, EQ004 31, EQ005 62, EQ006 37), and Duplicati's differ by the one result (EQ001 5841 to 5842, EQ006 114 to 113;
+  EQ002 23, EQ003 322, EQ004 121, EQ005 65 unchanged).
+- Decision: no `Release:` footer. A precision fix that changes no surface is a patch (`equiv-release`).
