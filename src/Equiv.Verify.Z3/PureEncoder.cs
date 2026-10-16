@@ -36,11 +36,18 @@ internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applicat
     /// <summary>Whether <paramref name="function"/> is side-specific: some application of it in the pair is runtime-sensitive.</summary>
     public bool IsSideSpecific(string function) => sideSpecific.Contains(function);
 
-    /// <summary><paramref name="pure"/>'s result and one flag per entry of its <see cref="IrPure.Throws"/>, applied to <paramref name="args"/>.</summary>
-    public (Expr Result, ImmutableArray<BoolExpr> Threw) Apply(Side side, IrPure pure, Expr[] args) =>
-        Interpreted.Contains(pure.Function)
-            ? (InterpretedPure.Term(context, pure.Function, args, () => context.MkApp(ResultFunction(side, pure), args)), [.. pure.Throws.Select(_ => context.MkFalse())])
-            : (context.MkApp(ResultFunction(side, pure), args), [.. pure.Throws.Select(t => (BoolExpr)context.MkApp(ThrewFunction(side, pure, t.ExceptionType), args))]);
+    /// <summary>
+    /// <paramref name="pure"/>'s result and one flag per entry of its <see cref="IrPure.Throws"/>, applied to
+    /// <paramref name="args"/>. An uninterpreted function is applied to them with every NaN the one NaN
+    /// (<see cref="SortMapper.OneNaN"/>; ticket P2-221).
+    /// </summary>
+    public (Expr Result, ImmutableArray<BoolExpr> Threw) Apply(Side side, IrPure pure, Expr[] args)
+    {
+        Expr[] uninterpreted = [.. args.Select(sorts.OneNaN)];
+        return Interpreted.Contains(pure.Function)
+            ? (InterpretedPure.Term(context, pure.Function, args, () => context.MkApp(ResultFunction(side, pure), uninterpreted)), [.. pure.Throws.Select(_ => context.MkFalse())])
+            : (context.MkApp(ResultFunction(side, pure), uninterpreted), [.. pure.Throws.Select(t => (BoolExpr)context.MkApp(ThrewFunction(side, pure, t.ExceptionType), uninterpreted))]);
+    }
 
     /// <summary>The result function <c>pure:f(args...)</c> for <paramref name="pure"/>'s function and signature, created on first use.</summary>
     public FuncDecl ResultFunction(Side side, IrPure pure) =>

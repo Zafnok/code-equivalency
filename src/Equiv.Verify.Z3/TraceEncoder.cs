@@ -97,7 +97,8 @@ internal sealed class TraceEncoder
     /// The result, <c>threw</c> flag, trace event, new heap (one term per <see cref="Heap"/> map) and ref outputs (one term per
     /// <see cref="IrCall.RefOuts"/> entry, ticket M4-003) of <paramref name="call"/> on <paramref name="side"/> at
     /// <paramref name="position"/>, given the heap <paramref name="heap"/> at the call. A closed callee neither reads
-    /// <paramref name="heap"/> nor changes it, and its event has no heap.
+    /// <paramref name="heap"/> nor changes it, and its event has no heap. The call's functions are applied to its arguments
+    /// with every NaN the one NaN (<see cref="SortMapper.OneNaN"/>; ticket P2-221).
     /// </summary>
     public (Expr? Result, BoolExpr Threw, Expr Event, ImmutableArray<Expr> Heap, ImmutableArray<Expr> RefOuts) Call(
         Side side, IrCall call, ImmutableArray<(IrType Type, Expr Term)> args, BitVecExpr position, ImmutableArray<Expr> heap)
@@ -105,7 +106,7 @@ internal sealed class TraceEncoder
         ImmutableArray<IrType> types = [.. args.Select(static a => a.Type)];
         bool closedCall = IsClosed(side, call.Callee);
         ImmutableArray<Expr> reads = closedCall ? [] : heap;
-        Expr[] applied = [.. args.Select(static a => a.Term), position, .. reads];
+        Expr[] applied = [.. args.Select(a => sorts.OneNaN(a.Term)), position, .. reads];
         Expr? result = call.Target is null ? null : context.MkApp(ResultFunction(side, call.Callee, types, call.Target.Type), applied);
         BoolExpr threw = (BoolExpr)context.MkApp(ThrewFunction(side, call.Callee, types), applied);
         SeqExpr boxed = context.MkConcat([context.MkEmptySeq(values), .. Read(side, call.Callee, args, heap).Select(a => context.MkUnit(context.MkApp(boxes[SortMapper.Name(a.Type)], a.Term)))]);
