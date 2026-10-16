@@ -95,7 +95,13 @@
 //   - the result of one of the "prefixes" called on a valid path with the constant 0 as its startIndex (P2-188): the
 //     start of a path has no character the path does not, and a colon keeps its place;
 //   - a conditional expression both of whose branches are valid paths (P2-188);
-//   - a local variable whose initializer and every later assignment is such a result;
+//   - a local variable whose initializer and every later assignment is such a result, an assignment that reads the
+//     variable itself reading it as such a result (P2-208);
+//   - a valid path followed by a string constant with no control character, none of " < > | ? * and no colon (P2-208):
+//     a valid path's one colon follows its drive letter and stays there. Such a constant before a valid path is one only
+//     when that path is a local variable or a parameter passed by value where String.StartsWith has returned true for
+//     it on a constant that begins with / or \ and an ASCII letter or digit, in the places a guard counts, with nothing
+//     between that runs code or writes it: the path then has no drive, so no colon;
 //   - a parameter or local variable that nothing assigns after its declaration, used where one of the "guards" has
 //     returned true for it: under the guard in an if or a conditional expression, to the right of it in && (or of its
 //     negation in ||), or after an if that returns or throws when the guard is false. A guard returns false, and does
@@ -106,8 +112,9 @@
 //     member (P2-217): no call, property, await, yield, user-defined operator or static field read, and no assignment
 //     but to a local variable or parameter that is not a ref, another field, or an array element. A read in a lambda or
 //     local function, or in a method with a goto, is not followed; a loop between them counts whole;
-//   - the result of a call to one of the solution's own ordinary methods or property getters whose body returns at least
-//     once and only values that are valid paths by these rules (P2-188). The body read is the one that runs: the member's
+//   - the result of a call to one of the solution's own ordinary methods or property getters, or to a local function
+//     that reads no local variable or parameter of a method around it (P2-208), whose body returns at least once and
+//     only values that are valid paths by these rules (P2-188). The body read is the one that runs: the member's
 //     own when no override can replace it (not virtual, abstract or an override), or, when the receiver's type is sealed,
 //     the override that type itself declares (P2-200). A returned call there to another of the solution's members is
 //     read the same way, up to four calls from the method that makes the call (P2-200). A verdict assumes each callee
@@ -166,6 +173,7 @@
       "System.IO.Directory::GetCurrentDirectory(",
       "System.IO.Path::GetTempPath(",
       "System.IO.Path::GetTempFileName(",
+      "System.IO.Path::GetRandomFileName(",
       "System.IO.FileSystemInfo::get_FullName(",
       "System.IO.FileInfo::get_FullName(",
       "System.IO.DirectoryInfo::get_FullName(",

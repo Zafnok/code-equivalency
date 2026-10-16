@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: P2-207, P2-208
+Depends on: P2-207, P2-208, P2-232
 
 ## Goal
 P2-188, P2-200 and P2-201 (done) follow a valid path through the solution's own methods (four calls deep, through
@@ -16,7 +16,7 @@ EQ006 in its fresh samples on routes none of them names:
   an NSubstitute substitute that a `Returns` call in the same class set to a constant valid path;
 - `gitextensions-8522`, `GitCommands.GitModule::InTheMiddleOfMerge()`: an interface call on a `static readonly` field
   initialised with `new` of a sealed solution type (P2-200 reads an override only when the receiver's static type is
-  sealed); clearing it also needs P2-208's `WorkingDir`;
+  sealed); clearing it also needs P2-232's `WorkingDir` (filed by P2-208);
 - `duplicati-3124`, `Duplicati.UnitTest.CommandLineOperationsTests::get_zipAlternativeFilepath()`: a `static readonly`
   field that the same object's field initializers already passed to `Path.Combine`, so on .NET Framework an invalid
   value throws before the getter can run;
@@ -41,7 +41,7 @@ The path-row tests for the route taken, and a sample where the route carries an 
 A whole-solution call graph, or reading a mocking library's semantics beyond `Returns` of a constant: stop.
 
 ## Out of scope
-The routes P2-207 and P2-208 own.
+The routes P2-207, P2-208 and P2-232 own.
 
 ## Notes
 - Filed 2026-10-15 by P2-212 (criterion 6).

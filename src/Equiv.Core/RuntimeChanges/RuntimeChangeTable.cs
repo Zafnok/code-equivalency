@@ -95,6 +95,13 @@ public sealed class RuntimeChangeTable
             || (Lists(validPaths.Transforms, member) && !RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, arguments));
     }
 
+    /// <summary>
+    /// Whether <paramref name="text"/> can be joined to a valid path and leave one (ticket P2-208): it has no character
+    /// <see cref="RuntimeChangePrecondition.InvalidPath"/> names, and no colon, which could stand anywhere but after a drive
+    /// letter once joined.
+    /// </summary>
+    public static bool JoinsValidPath(string text) => RuntimeChangeReach.IsPathPart(text);
+
     /// <summary>The members that return their argument only once .NET Framework's validation has accepted it (ticket P2-188).</summary>
     internal ImmutableArray<string> PathValidators => validPaths.Validators;
 

@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: P2-207, P2-208
+Depends on: P2-207, P2-208, P2-232
 
 ## Goal
 P2-201 reads a `readonly` field or get-only auto-property through its type's constructors. A cache is neither: a
@@ -11,10 +11,10 @@ Notes and `docs/runs/2026-10-15-precision-verdict.md` have the traces):
 - Git Extensions row 52, `ConfigFileSettings::CreateLocal(GitModule,ConfigFileSettings,SettingLevel,bool)`:
   `GitModule.GitCommonDirectory` returns `_gitCommonDirectory`, written only in that getter, under a lock, from a local
   `dir` that is kept only when `Directory.Exists(dir)` passed and is otherwise reassigned to `GetGitDirectory()`, which
-  reads `WorkingDir` (P2-208's #55);
+  reads `WorkingDir` (P2-232's #55, filed by P2-208);
 - OpenRA #15, `Game::InitializeSettings(Arguments)`: `Platform.SupportDir` returns static fields that
   `InitializeSupportDir` fills, guarded by a flag, from `Environment.GetFolderPath` and `Path.Combine`, with a separator
-  appended (P2-208's trailing separator).
+  appended (P2-232's trailing separator).
 
 Git Extensions row 62, `AppSettings::get_AvatarImageCachePath()`, is the third lazily filled value P2-207 was given,
 and no rule here reaches it: `ApplicationDataPath` is a `Lazy<string?>` property with a private setter that the

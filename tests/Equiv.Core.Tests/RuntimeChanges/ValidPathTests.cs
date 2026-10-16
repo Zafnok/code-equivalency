@@ -137,11 +137,26 @@ public sealed class ValidPathTests
     [InlineData("System.AppDomain::get_BaseDirectory()")]
     [InlineData("System.Environment::GetFolderPath(System.Environment.SpecialFolder)")]
     [InlineData("System.IO.Path::GetTempPath()")]
+    [InlineData("System.IO.Path::GetRandomFileName()")]
     [InlineData("System.IO.FileSystemInfo::get_FullName()")]
     [InlineData("System.Windows.Forms.Application::get_UserAppDataPath()")]
     [InlineData("NUnit.Framework.TestContext::get_TestDirectory()")]
     public void TheShippedTableListsTheValidPathSources(string member) =>
         Assert.True(RuntimeChangeTable.Load().YieldsValidPath(new CallIdentity(member), []));
+
+    /// <summary>
+    /// Ticket P2-208: a constant joins a valid path when it has no character validation rejects and no colon, whatever its
+    /// length.
+    /// </summary>
+    [Theory]
+    [InlineData("a.txt", true)]
+    [InlineData("/private", true)]
+    [InlineData("", true)]
+    [InlineData("a|b", false)]
+    [InlineData("a:b", false)]
+    [InlineData("a	b", false)]
+    public void AConstantJoinsAValidPathWithNoRejectedCharacterAndNoColon(string text, bool joins) =>
+        Assert.Equal(joins, RuntimeChangeTable.JoinsValidPath(text));
 
     [Fact]
     public void TheShippedTableListsThePathTransformsAndTheGuards()
