@@ -38,6 +38,9 @@ internal static class LocalValues
     public static ImmutableArray<IOperation?> Writes(ISymbol symbol, IOperation root) =>
         [.. References(symbol, root).Select(Write).Where(static w => w.Written).Select(static w => w.Value)];
 
+    /// <summary>Whether the reference <paramref name="reference"/> writes what it refers to, or takes a <c>ref</c> to it (<see cref="Writes"/>).</summary>
+    public static bool IsWrite(IOperation reference) => Write(reference).Written;
+
     /// <summary>Every read or write of the local variable, parameter, field or property <paramref name="symbol"/> under <paramref name="root"/>.</summary>
     public static IEnumerable<IOperation> References(ISymbol symbol, IOperation root) =>
         root.DescendantsAndSelf().Where(o => SymbolEqualityComparer.Default.Equals(Symbol(o), symbol));

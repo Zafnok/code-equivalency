@@ -53,8 +53,6 @@ public sealed class ValidPathsTests
     [InlineData("static object M() { var d = AppContext.BaseDirectory; d += \"|\"; return new StreamReader(d); }", true)]
     [InlineData("static void Fill(ref string s) { }\nstatic object M() { var d = AppContext.BaseDirectory; Fill(ref d); return new StreamReader(d); }", true)]
     [InlineData("static object M() { var d = AppContext.BaseDirectory; (d, _) = (\"a|b\", 1); return new StreamReader(d); }", true)]
-    [InlineData("static object M() { string d; d = AppContext.BaseDirectory; return new StreamReader(d); }", true)]
-    [InlineData("static object M() { var a = AppContext.BaseDirectory; var b = a; a = b; return new StreamReader(a); }", true)]
     [InlineData("static object M(string[] fs) { foreach (var f in fs) { return new StreamReader(f); } return null; }", true)]
     [InlineData("static object M(object o) { if (o is string s) { return new StreamReader(s); } return null; }", true)]
     public void ALocalThatOnlyHoldsValidPathsIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
@@ -392,6 +390,94 @@ public sealed class ValidPathsTests
     [Fact]
     public void AGuardedFieldOfAStructIsNotAValidPath() => Assert.Contains(Calls(Source(
         "using System.IO;\nstruct C\n{\nstring f;\nvoid M() { if (File.Exists(f)) File.Delete(f); }\n}\n")), static call => call.Callee.RuntimeChanged);
+
+    /// <summary>
+    /// Ticket P2-207: a local or parameter read after a statement of an enclosing block that is a plain assignment to it (or
+    /// its declaration with a value) holds that value when nothing after that statement and up to the read writes it, and
+    /// nothing writes it through a <c>ref</c>, from a lambda or local function, or past a <c>goto</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M() { string d; d = AppContext.BaseDirectory; return new StreamReader(d); }", false)]
+    [InlineData("static object M(string p) { var d = AppContext.BaseDirectory; var r = new StreamReader(d); d = p; return r; }", false)]
+    [InlineData("static object M(string p) { var d = p; d = Path.GetTempPath(); GC.KeepAlive(p); return new StreamReader(d); }", false)]
+    [InlineData("static object M(string p) { p = AppContext.BaseDirectory; return new StreamReader(p); }", false)]
+    [InlineData("static object M(string p, bool b) { var d = p; d = AppContext.BaseDirectory; if (b) { return new StreamReader(d); } d = p; return null; }", false)]
+    [InlineData("static object M(string p) { var d = p; d = Path.Combine(AppContext.BaseDirectory, \"x\"); d = Path.Combine(d, \"y\"); return new StreamReader(d); }", false)]
+    [InlineData("static bool Get(out string s) { s = null; return true; }\nstatic object M() { string d; Get(out d); d = AppContext.BaseDirectory; return new StreamReader(d); }", false)]
+    [InlineData("static object M() { var a = AppContext.BaseDirectory; var b = a; a = b; return new StreamReader(a); }", false)]
+    [InlineData("static object M(string p) { var d = p; d = d + \"\"; return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p, bool b) { var d = AppContext.BaseDirectory; if (b) d = p; return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p, int n) { var d = AppContext.BaseDirectory; while (n-- > 0) { GC.KeepAlive(new StreamReader(d)); d = p; } return null; }", true)]
+    [InlineData("static object M(string p) { string d = null; Action a = () => d = p; d = AppContext.BaseDirectory; a(); return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p) { string d = null; void Set() => d = p; d = AppContext.BaseDirectory; Set(); return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p) { string s = p; ref string r = ref s; r = AppContext.BaseDirectory; return new StreamReader(r); }", true)]
+    [InlineData("ref struct S { public void Get(out string s) { s = null; } }\nstatic object M() { string d; new S().Get(out d); d = AppContext.BaseDirectory; return new StreamReader(d); }", true)]
+    [InlineData("static Span<char> Get(out string s) { s = null; return default; }\nstatic object M() { string d; Get(out d); d = AppContext.BaseDirectory; return new StreamReader(d); }", true)]
+    [InlineData("static void Get(Span<char> c, out string s) { s = null; }\nstatic object M() { string d; Get(default, out d); d = AppContext.BaseDirectory; return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p) { string d = p; ref string r = ref d; d = AppContext.BaseDirectory; r = p; return new StreamReader(d); }", true)]
+    [InlineData("static void Fill(ref string s) { }\nstatic object M(string p) { string d = p; Fill(ref d); d = AppContext.BaseDirectory; return new StreamReader(d); }", true)]
+    [InlineData("static ref string Stash([System.Diagnostics.CodeAnalysis.UnscopedRef] out string s) { s = null; return ref s; }\nstatic object M(string p) { string d; ref string r = ref Stash(out d); d = AppContext.BaseDirectory; r = p; return new StreamReader(d); }", true)]
+    [InlineData("static object M(ref string p) { p = AppContext.BaseDirectory; return new StreamReader(p); }", true)]
+    [InlineData("static object M(string p, bool b) { string d = p; if (b) goto L; d = AppContext.BaseDirectory; L: return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p) { string d = AppContext.BaseDirectory, e = d = p; return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p, int n) { var a = AppContext.BaseDirectory; var b = a; while (n-- > 0) { b = a; a = b; } return new StreamReader(a); }", true)]
+    public void TheLastPlainWriteBeforeAReadIsWhatTheReadSees(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-207, Duplicati's <c>RecoveryTool.Index::Run</c> shape: a local first written as an <c>out</c> argument, then
+    /// under an <c>if</c>, then last by a validator, holds the validator's result after it, so only the validator's row fires.
+    /// </summary>
+    [Fact]
+    public void ALocalLastWrittenByAValidatorIsAValidPathAfterIt() => Assert.Equal([GetFullPath], Flagged(
+        "static object M(System.Collections.Generic.Dictionary<string, string> options) { string ixfile; options.TryGetValue(\"indexfile\", out ixfile); if (string.IsNullOrWhiteSpace(ixfile)) ixfile = \"index.txt\"; ixfile = Path.GetFullPath(ixfile); var n = options.Count; foreach (var o in options) { n--; } return new StreamWriter(ixfile); }"));
+
+    /// <summary>
+    /// Ticket P2-207: a parameter of a private method that nothing assigns is a valid path when the method is only ever
+    /// called, never referred to otherwise, and every call in its type passes a valid path, each call a step toward the
+    /// bound of four. A path that really comes from a caller's own caller still fires the row.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(AppContext.BaseDirectory);", false)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(Path.GetTempPath());\nstatic object Other() => C.M(Path.Combine(AppContext.BaseDirectory, \"x\"));", false)]
+    [InlineData("object M(string file) => new StreamWriter(file);\nstatic object Run(C c) => c?.M(AppContext.BaseDirectory);", false)]
+    [InlineData("static object M<T>(string file) => new StreamWriter(file);\nstatic object Run() => M<int>(AppContext.BaseDirectory);", false)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nsealed class Inner { static object Run() => M(AppContext.BaseDirectory); }", false)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() { string ixfile; ixfile = Path.GetFullPath(\"index.txt\"); return M(ixfile); }", false)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\npublic static object Run(string p) => M(p);", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run(string p) => M(AppContext.BaseDirectory) ?? M(p);", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(\"index.txt\");", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run() { Func<string, object> f = M; return M(AppContext.BaseDirectory); }", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic string Name => nameof(M);\nstatic object Run() => M(AppContext.BaseDirectory);", true)]
+    [InlineData("internal static object M(string file) => new StreamWriter(file);\nstatic object Run() => M(AppContext.BaseDirectory);", true)]
+    [InlineData("static object M(string file) { if (file.Length == 0) file = Environment.MachineName; return new StreamWriter(file); }\nstatic object Run() => M(AppContext.BaseDirectory);", true)]
+    [InlineData("static object M(ref string file) => new StreamWriter(file);\nstatic object Run() { var f = AppContext.BaseDirectory; return M(ref f); }", true)]
+    [InlineData("static object M(string file, int n) => n > 0 ? M(file, n - 1) : new StreamWriter(file);\nstatic object Run() => M(AppContext.BaseDirectory, 2);", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run(string p) { var d = AppContext.BaseDirectory; Func<object> f = () => M(d); d = p; return f(); }", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object Run(string p) { var d = AppContext.BaseDirectory; object Call() => M(d); d = p; return Call(); }", true)]
+    [InlineData("object M(string file) => new StreamWriter(file);\nobject Run() { dynamic d = this; d.M(Environment.MachineName); return M(AppContext.BaseDirectory); }", true)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object M2(string a) => M3(a);\nstatic object M3(string b) => M4(b);\nstatic object M4(string c) => M(c);\nstatic object Run() => M2(AppContext.BaseDirectory);", false)]
+    [InlineData("static object M(string file) => new StreamWriter(file);\nstatic object M1(string z) => M2(z);\nstatic object M2(string a) => M3(a);\nstatic object M3(string b) => M4(b);\nstatic object M4(string c) => M(c);\nstatic object Run() => M1(AppContext.BaseDirectory);", true)]
+    public void EveryCallOfAPrivateMethodPassesItsParameter(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-207: an extension method called as an instance method is one of its calls; a method the compiler can call
+    /// by a name the source does not write, a constructor and a primary constructor's parameter, which other members write,
+    /// are not read.
+    /// </summary>
+    [Theory]
+    [InlineData("static class C\n{\nstatic object M(this string file) => new StreamWriter(file);\nstatic object Run() => AppContext.BaseDirectory.M();\n}\n", "M", false)]
+    [InlineData("static class C\n{\nstatic object M(this string file) => new StreamWriter(file);\nstatic object Run(string p) => AppContext.BaseDirectory.M() ?? p.M();\n}\n", "M", true)]
+    [InlineData("class C\n{\nobject Add(string file) => new StreamWriter(file);\nobject Run() => Add(AppContext.BaseDirectory);\n}\n", "Add", true)]
+    [InlineData("class C\n{\nprivate C(string file) { GC.KeepAlive(new StreamWriter(file)); }\nstatic C Run() => new C(AppContext.BaseDirectory);\n}\n", ".ctor", true)]
+    [InlineData("class C(string p)\n{\nvoid Reset() { p = \"a|b\"; }\nobject M() { p = AppContext.BaseDirectory; Reset(); return new StreamReader(p); }\n}\n", "M", true)]
+    public void OnlyCallsTheSourceNamesAreRead(string type, string method, bool flagged) =>
+        Assert.Equal(flagged, Calls(Source("using System;\nusing System.IO;\n" + type, method)).Any(static call => call.Callee.RuntimeChanged));
+
+    /// <summary>Ticket P2-207: a name that is another overload or a parameter of the same name is not a call of the method.</summary>
+    [Fact]
+    public void AnotherSymbolOfTheSameNameIsNotACall() => Assert.DoesNotContain(Calls(Source(
+        "using System;\nusing System.IO;\nclass C\n{\nstatic object M(string file) => new StreamWriter(file);\nstatic object M(int n, int m) => null;\nstatic object Run(string M) => C.M(M.Length, 0) ?? C.M(AppContext.BaseDirectory);\n}\n",
+        parameters: 1)), static call => call.Callee.RuntimeChanged);
 
     private const string GetFullPath = "System.IO.Path::GetFullPath(string)";
 

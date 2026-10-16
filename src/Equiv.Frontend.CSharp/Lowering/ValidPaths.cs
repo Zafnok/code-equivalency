@@ -24,11 +24,20 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// and P2-200). A read of a <c>readonly</c> field or a get-only auto-property of a class yields one when its initializer and
 /// every write in a constructor or <c>init</c> accessor of its type is one by these rules (ticket P2-201), each a step of
 /// that depth. A read of a field or auto-property where a validating guard has passed on the same member of the same
-/// receiver, with nothing between that runs code or writes the member, is one too (ticket P2-217). A path from a caller is
-/// not followed.
+/// receiver, with nothing between that runs code or writes the member, is one too (ticket P2-217). A local variable or
+/// parameter read after a plain assignment of a valid path that nothing writes over is one, and so is a parameter of a
+/// private method that every call in its type passes a valid path (ticket P2-207). Any other path from a caller is not
+/// followed.
 /// </summary>
 internal static class ValidPaths
 {
+    /// <summary>
+    /// The methods the compiler calls by a name the source does not write, so that a private one can have callers no name in
+    /// its type shows (ticket P2-207): a collection initializer's <c>Add</c> and an interpolated string handler's
+    /// <c>AppendLiteral</c> and <c>AppendFormatted</c>, the patterns whose methods take a string.
+    /// </summary>
+    private static readonly FrozenSet<string> ImplicitlyCalled = FrozenSet.ToFrozenSet(["Add", "AppendLiteral", "AppendFormatted"], StringComparer.Ordinal);
+
     /// <summary>
     /// How many calls deep a returned value is followed into the solution's own bodies (ticket P2-200), a field's stored
     /// values counting as one call (ticket P2-201). The deepest chain
@@ -106,10 +115,143 @@ internal static class ValidPaths
         IConditionalOperation conditional =>
             IsValid(conditional.WhenTrue, seen, compilation, depth) && IsValid(conditional.WhenFalse!, seen, compilation, depth),
         ILocalReferenceOperation local =>
-            IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, compilation, depth),
-        IParameterReferenceOperation parameter => IsGuarded(parameter.Parameter, value),
+            IsGuarded(local.Local, value)
+            || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, compilation, depth)
+            || (LastWrite(local.Local, local.Local.RefKind, value) is { } written && IsValid(written, seen, compilation, depth)),
+        IParameterReferenceOperation parameter =>
+            IsGuarded(parameter.Parameter, value)
+            || (LastWrite(parameter.Parameter, parameter.Parameter.RefKind, value) is { } written && IsValid(written, seen, compilation, depth))
+            || CallsPassOnlyValidPaths(parameter.Parameter, value, compilation, depth),
         _ => false,
     };
+
+    /// <summary>
+    /// The value the read <paramref name="use"/> of the local variable or parameter <paramref name="symbol"/> sees, when one
+    /// statement shows it (ticket P2-207): the last statement before the read, in a block that encloses it, that writes or
+    /// declares the symbol, when that statement is <c>symbol = value;</c> or a declaration that gives it a value, and nothing
+    /// from that statement up to the read writes the symbol again. Only a symbol <see cref="IsWrittenInPlace"/> is read, and
+    /// a read in a lambda or local function, which can run after any later write, is not. Each step reads an earlier
+    /// statement, so a chain of them ends.
+    /// </summary>
+    private static IOperation? LastWrite(ISymbol symbol, RefKind refKind, IOperation use)
+    {
+        IOperation root = LocalValues.Root(use);
+        if (refKind != RefKind.None || !IsWrittenInPlace(symbol, root))
+        {
+            return null;
+        }
+
+        foreach ((IOperation outer, IOperation inner) in Ancestors(use))
+        {
+            if (outer is IAnonymousFunctionOperation or ILocalFunctionOperation)
+            {
+                return null;
+            }
+
+            if (outer is IBlockOperation block
+                && block.Operations.TakeWhile(statement => statement != inner)
+                    .LastOrDefault(statement => !LocalValues.Writes(symbol, statement).IsEmpty || Assigned(statement, symbol) is not null) is { } writer)
+            {
+                return LocalValues.Writes(symbol, Assigned(inner, symbol) ?? inner).IsEmpty ? Assigned(writer, symbol) : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The value <paramref name="statement"/> leaves in <paramref name="symbol"/> when it is <c>symbol = value;</c>, or a
+    /// declaration that gives the symbol a value and writes it nowhere else; null for any other statement.
+    /// </summary>
+    private static IOperation? Assigned(IOperation statement, ISymbol symbol) => statement switch
+    {
+        IExpressionStatementOperation { Operation: ISimpleAssignmentOperation assignment }
+            when SymbolEqualityComparer.Default.Equals(LocalValues.Symbol(assignment.Target), symbol) => assignment.Value,
+        _ => LocalValues.Writes(symbol, statement).IsEmpty ? Declarator(statement, symbol)?.Initializer?.Value : null,
+    };
+
+    /// <summary>The declarator of <paramref name="symbol"/> in <paramref name="statement"/> when it is a declaration statement; null otherwise.</summary>
+    private static IVariableDeclaratorOperation? Declarator(IOperation statement, ISymbol symbol) =>
+        statement is IVariableDeclarationGroupOperation group
+            ? group.Declarations.SelectMany(static declaration => declaration.Declarators)
+                .FirstOrDefault(declarator => SymbolEqualityComparer.Default.Equals(declarator.Symbol, symbol))
+            : null;
+
+    /// <summary>
+    /// Whether every write of <paramref name="symbol"/> under <paramref name="root"/> is one a statement-by-statement reading
+    /// sees where it runs (ticket P2-207): a parameter belongs to the method <paramref name="root"/> is the body of (a
+    /// primary constructor's parameter is written by other members too), the method has no <c>goto</c>, and each write is
+    /// a plain assignment or an <c>out</c> argument whose call keeps no <c>ref</c> to it, in no lambda or local function,
+    /// which could run between any two statements.
+    /// </summary>
+    private static bool IsWrittenInPlace(ISymbol symbol, IOperation root) =>
+        (symbol is not IParameterSymbol parameter
+            || SymbolEqualityComparer.Default.Equals(root.SemanticModel!.GetDeclaredSymbol(root.Syntax), parameter.ContainingSymbol))
+        && !root.DescendantsAndSelf().Any(static operation => operation is IBranchOperation { BranchKind: BranchKind.GoTo })
+        && LocalValues.References(symbol, root).All(static reference =>
+            !LocalValues.IsWrite(reference)
+            || (IsInPlace(reference) && !Ancestors(reference).Any(static step => step.Outer is IAnonymousFunctionOperation or ILocalFunctionOperation)));
+
+    /// <summary>
+    /// Whether the write <paramref name="reference"/> leaves no alias behind: the target of a plain assignment, or an
+    /// <c>out</c> argument of a method that returns no <c>ref</c> and has no ref struct in its signature or as its type, the
+    /// only ways a callee can keep a <c>ref</c> to the argument past the call.
+    /// </summary>
+    private static bool IsInPlace(IOperation reference) => reference.Parent switch
+    {
+        ISimpleAssignmentOperation assignment => assignment.Target == reference,
+        IArgumentOperation { Parameter.RefKind: RefKind.Out } argument => KeepsNoRef((IMethodSymbol)argument.Parameter.ContainingSymbol),
+        _ => false,
+    };
+
+    private static bool KeepsNoRef(IMethodSymbol method) =>
+        method is { RefKind: RefKind.None, ReturnType.IsRefLikeType: false, ContainingType.IsRefLikeType: false }
+        && method.Parameters.All(static parameter => !parameter.Type.IsRefLikeType);
+
+    /// <summary>
+    /// Whether the by-value parameter <paramref name="parameter"/>, read at <paramref name="use"/>, holds a valid path
+    /// because its method is private and only ever called, every call in its type passing a valid path (ticket P2-207). Nothing
+    /// may assign the parameter, and each call is a step toward <see cref="CalleeDepth"/>. A method the compiler can call
+    /// by a name the source does not write (a collection initializer's <c>Add</c>, an interpolated string handler's
+    /// <c>Append</c> methods) is not read.
+    /// </summary>
+    private static bool CallsPassOnlyValidPaths(IParameterSymbol parameter, IOperation use, Compilation compilation, int depth) =>
+        depth < CalleeDepth
+        && parameter is { RefKind: RefKind.None, ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.Ordinary, DeclaredAccessibility: Accessibility.Private } method }
+        && !ImplicitlyCalled.Contains(method.Name)
+        && LocalValues.Writes(parameter, LocalValues.Root(use)).IsEmpty
+        && CallsOf(method, compilation) is [_, ..] calls
+        && calls.All(call => IsValid(
+            call.Arguments.First(argument => argument.Parameter!.Ordinal == parameter.Ordinal).Value, [], call.SemanticModel!.Compilation, depth + 1));
+
+    /// <summary>
+    /// Every call of the private method <paramref name="method"/>, from the declarations of its type, which are all the
+    /// source that can name it; empty when a name there refers to it other than by calling it (a method group, a
+    /// <c>nameof</c>) or may (a <c>dynamic</c> member name binds to no symbol).
+    /// </summary>
+    private static ImmutableArray<IInvocationOperation> CallsOf(IMethodSymbol method, Compilation compilation)
+    {
+        ImmutableArray<IInvocationOperation?> calls =
+        [
+            .. method.ContainingType.DeclaringSyntaxReferences
+                .SelectMany(static declaration => declaration.GetSyntax().DescendantNodes().OfType<SimpleNameSyntax>())
+                .Where(name => string.Equals(name.Identifier.ValueText, method.Name, StringComparison.Ordinal))
+                .Select(name => (Name: name, Model: compilation.GetSemanticModel(name.SyntaxTree)))
+                .Select(static named => (named.Name, named.Model, Symbol: Unreduced(named.Model.GetSymbolInfo(named.Name).Symbol)))
+                .Where(named => named.Symbol is null || SymbolEqualityComparer.Default.Equals(named.Symbol.OriginalDefinition, method.OriginalDefinition))
+                .Select(static named => named.Symbol is null ? null : Invoked(named.Name, named.Model)),
+        ];
+        return calls.Contains(null) ? [] : [.. calls.OfType<IInvocationOperation>()];
+    }
+
+    /// <summary>The method an extension method called as an instance method is reduced from, or <paramref name="symbol"/> itself.</summary>
+    private static ISymbol? Unreduced(ISymbol? symbol) => symbol is IMethodSymbol { ReducedFrom: { } unreduced } ? unreduced : symbol;
+
+    /// <summary>The call <paramref name="name"/> names the method of, alone or after <c>.</c> or <c>?.</c>; null when it is not called.</summary>
+    private static IInvocationOperation? Invoked(SimpleNameSyntax name, SemanticModel model) =>
+        (name.Parent is MemberAccessExpressionSyntax or MemberBindingExpressionSyntax ? name.Parent : name).Parent is InvocationExpressionSyntax invocation
+            ? model.GetOperation(invocation) as IInvocationOperation
+            : null;
 
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
 
