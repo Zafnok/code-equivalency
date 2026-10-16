@@ -63,3 +63,8 @@ Other removed .NET Framework APIs.
   record is history and is left as written.
 - Decision: no catalogue table test, wrapped-argument lowering test or sample pair, since no entry and no adapter form
   was added; the Tests list belongs to the entries. Recorded instead: the measurements above.
+- Criterion 3: `corpus.ps1 -Compare duplicati-3124 -Mode quick` on this branch (`src/` as `main` at 068d8d79), exit 1
+  after 253 s. `SystemIOWindows::GetAccessControlDir(string)`, `GetAccessControlFile(string)`,
+  `SetAccessControlFile(string,FileSecurity)` and `SetAccessControlDir(string,DirectorySecurity)`: EQ002 each, as in
+  the 2026-10-15 quick run (P2-217); the pair's EQ002 count is 13 in both. Their callers `GetMetadata` and
+  `SetMetadata` stay EQ001.
