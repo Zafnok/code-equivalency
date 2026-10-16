@@ -102,7 +102,16 @@ internal static partial class RuntimeChangeReach
     private static bool IsSuspectPath(string path) =>
         string.IsNullOrWhiteSpace(path)
         || path.Length >= LongPath
-        || path.Where(static (c, i) => c < ' ' || InvalidPathCharacters.Contains(c, StringComparison.Ordinal) || (c == ':' && i != 1)).Any();
+        || path.Where(static (c, i) => IsRejected(c) || (c == ':' && i != 1)).Any();
+
+    /// <summary>
+    /// Whether <paramref name="text"/> has no character .NET Framework's validation rejects and no colon, so joining it to a
+    /// valid path adds no such character and puts no colon off a drive letter (ticket P2-208).
+    /// </summary>
+    public static bool IsPathPart(string text) => !text.Any(static c => c == ':' || IsRejected(c));
+
+    /// <summary>A control character or one of <see cref="InvalidPathCharacters"/>.</summary>
+    private static bool IsRejected(char c) => c < ' ' || InvalidPathCharacters.Contains(c, StringComparison.Ordinal);
 
     /// <summary>An inline option group that turns <c>i</c> on: <c>(?i)</c>, <c>(?i:</c>, <c>(?mi-s)</c>.</summary>
     [GeneratedRegex(@"\(\?[a-z]*i", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]

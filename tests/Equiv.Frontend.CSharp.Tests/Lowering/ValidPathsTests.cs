@@ -165,7 +165,6 @@ public sealed class ValidPathsTests
     [InlineData("static string Pick(bool b) { if (b) { return AppContext.BaseDirectory; } return Environment.MachineName; }\nstatic object M(bool b) => new StreamReader(Pick(b));", true)]
     [InlineData("static string Dir() { throw new InvalidOperationException(); }\nstatic object M() => new StreamReader(Dir());", true)]
     [InlineData("protected virtual string Dir() => AppContext.BaseDirectory;\nobject M() => new StreamReader(Dir());", true)]
-    [InlineData("static object M() { return new StreamReader(Dir()); string Dir() => AppContext.BaseDirectory; }", true)]
     [InlineData("static object M(Func<string> dir) => new StreamReader(dir());", true)]
     public void ASolutionMemberThatReturnsOnlyValidPathsYieldsOne(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
 
@@ -420,7 +419,7 @@ public sealed class ValidPathsTests
     [InlineData("static object M(ref string p) { p = AppContext.BaseDirectory; return new StreamReader(p); }", true)]
     [InlineData("static object M(string p, bool b) { string d = p; if (b) goto L; d = AppContext.BaseDirectory; L: return new StreamReader(d); }", true)]
     [InlineData("static object M(string p) { string d = AppContext.BaseDirectory, e = d = p; return new StreamReader(d); }", true)]
-    [InlineData("static object M(string p, int n) { var a = AppContext.BaseDirectory; var b = a; while (n-- > 0) { b = a; a = b; } return new StreamReader(a); }", true)]
+    [InlineData("static object M(string p, int n) { var a = AppContext.BaseDirectory; var b = a; while (n-- > 0) { a = b; b = p; } return new StreamReader(a); }", true)]
     public void TheLastPlainWriteBeforeAReadIsWhatTheReadSees(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
 
     /// <summary>
@@ -482,6 +481,104 @@ public sealed class ValidPathsTests
     private const string GetFullPath = "System.IO.Path::GetFullPath(string)";
 
     private const string CreateDirectory = "System.IO.Directory::CreateDirectory(string)";
+
+    /// <summary>
+    /// Ticket P2-208: a local whose writes give it valid paths when it already holds one only ever holds valid paths, so
+    /// <c>a</c> and <c>b</c> copied into each other in a loop are, and a write that joins an invalid character to it is not.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M(int n) { var a = AppContext.BaseDirectory; var b = a; while (n-- > 0) { b = a; a = b; } return new StreamReader(a); }", false)]
+    [InlineData("static object M(int n) { var d = AppContext.BaseDirectory; while (n-- > 0) { d = d + \"x\"; } return new StreamReader(d); }", false)]
+    [InlineData("static object M(int n) { var d = AppContext.BaseDirectory; while (n-- > 0) { d = d + \"|\"; } return new StreamReader(d); }", true)]
+    public void ALocalEveryWriteOfWhichKeepsItValidIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-208: a call to a local function that reads no local variable or parameter of a method around it is read as
+    /// a solution callee: its body is the one that runs. One that reads them (a parameter, a valid local, or a parameter a
+    /// guard covers only after the call), or that is passed the path, still fires the row.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M() { return new StreamReader(Dir()); string Dir() => AppContext.BaseDirectory; }", false)]
+    [InlineData("static object M() { return new StreamReader(Dir()); static string Dir() { var t = Path.GetTempPath(); return Path.Combine(t, Path.GetRandomFileName()); } }", false)]
+    [InlineData("static object M() { return new StreamReader(Dir()); string Dir() { Func<string, string> f = s => s; GC.KeepAlive(f); return AppContext.BaseDirectory; } }", false)]
+    [InlineData("static object M(string p) { return new StreamReader(Dir()); string Dir() => p; }", true)]
+    [InlineData("static object M(string p) { var r = new StreamReader(Dir()); if (!File.Exists(p)) return null; return r; string Dir() => p; }", true)]
+    [InlineData("static object M() { var d = AppContext.BaseDirectory; return new StreamReader(Dir()); string Dir() => d; }", true)]
+    [InlineData("static object M(string p) { return new StreamReader(Dir(p)); static string Dir(string q) => q; }", true)]
+    [InlineData("static object M() { return new StreamReader(Dir()); static string Dir() { throw new InvalidOperationException(); } }", true)]
+    public void ALocalFunctionThatReadsNothingAroundItIsReadAsACallee(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-208: a valid path followed by a string constant with no character <c>invalidPath</c> names, colon included,
+    /// is one; a constant before a valid path is not, since the path's drive colon would move off its place.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M() => new StreamReader(AppContext.BaseDirectory + \"a.txt\");", false)]
+    [InlineData("static object M() => new StreamReader(AppContext.BaseDirectory + \"a|b\");", true)]
+    [InlineData("static object M() => new StreamReader(AppContext.BaseDirectory + \":x\");", true)]
+    [InlineData("static object M() => new StreamReader(\"x\" + AppContext.BaseDirectory);", true)]
+    [InlineData("static object M() => new StreamReader(\"x\" + Path.GetTempPath());", true)]
+    [InlineData("static object M(string p) => new StreamReader(p + \"a.txt\");", true)]
+    [InlineData("static object M(string p) => new StreamReader(AppContext.BaseDirectory + p);", true)]
+    [InlineData("static object M() => new StreamReader(AppContext.BaseDirectory + 1);", true)]
+    [InlineData("sealed class Q { public static string operator +(Q q, string s) => s; }\nstatic object M() => new StreamReader(new Q() + \"a.txt\");", true)]
+    [InlineData("sealed class Q { public static string operator -(Q q, string s) => s; }\nstatic object M() => new StreamReader(new Q() - \"a.txt\");", true)]
+    public void AConstantAfterAValidPathIsOne(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-208, Git Extensions' <c>GetTemporaryPath</c> shape: a constant before a valid path is one where a
+    /// <c>StartsWith</c> has returned true for the path on a constant that begins with a separator and an ASCII letter or
+    /// digit, so the path has no drive colon, and nothing between that guard and the read runs code or writes the path.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.StartsWith(\"/var\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", false)]
+    [InlineData("static object M(string p) => File.Exists(p) && p.StartsWith(\"/var\", StringComparison.Ordinal) ? new StreamReader(\"/private\" + p) : null;", false)]
+    [InlineData("static object M(string p) { var t = p; if (t.StartsWith(\"/var\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (!t.StartsWith(\"/var\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.StartsWith(\"C:\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.StartsWith(\"/\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.StartsWith(\"/-\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.StartsWith(\"v/\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M(string q) { var t = Path.GetTempPath(); if (t.StartsWith(q, StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.StartsWith('/')) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.EndsWith(\"/var\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var s = Path.GetTempPath(); var t = s; if (s.StartsWith(\"/var\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var s = Path.GetTempPath(); var t = s; if (t.StartsWith(\"/var\", StringComparison.Ordinal)) { t = s; t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    [InlineData("static object M() { var s = Path.GetTempPath(); ref string t = ref s; if (t.StartsWith(\"/var\", StringComparison.Ordinal)) { s = \"/private\" + t; } return new StreamReader(s); }", true)]
+    [InlineData("static object M() { var t = Path.GetTempPath(); if (t.StartsWith(\"\\\\tmp\", StringComparison.Ordinal)) { t = \"/private\" + t; } return new StreamReader(t); }", false)]
+    [InlineData("static readonly string F = Path.GetTempPath();\nstatic object M() => F.StartsWith(\"/var\", StringComparison.Ordinal) ? new StreamReader(\"/private\" + F) : null;", true)]
+    [InlineData("static readonly string F = Path.GetTempPath();\nstatic object M() { ref readonly string t = ref F; return t.StartsWith(\"/var\", StringComparison.Ordinal) ? new StreamReader(\"/private\" + t) : null; }", true)]
+    [InlineData("static object M(ref string p) => File.Exists(p) && p.StartsWith(\"/var\", StringComparison.Ordinal) ? new StreamReader(\"/private\" + p) : null;", true)]
+    [InlineData("static object M(string p) { p = Path.GetTempPath(); var s = p; if (p.StartsWith(\"/var\", StringComparison.Ordinal)) { p = s; return new StreamReader(\"/private\" + p); } return null; }", true)]
+    [InlineData("sealed class P { public bool StartsWith(string s) => true; }\nstatic object M() { var t = Path.GetTempPath(); if (new P().StartsWith(\"/var\")) { t = \"/private\" + t; } return new StreamReader(t); }", true)]
+    public void AConstantBeforeAValidPathIsOneWhereAGuardRulesOutADrive(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-208: the corpus's <c>StartsWith("/var")</c> compares by culture, which equates a colon with no letter or
+    /// digit either, so the joined path is valid; the <c>StartsWith</c> call's own culture row still fires.
+    /// </summary>
+    [Fact]
+    public void ACultureStartsWithRulesOutADriveToo() => Assert.Equal(
+        ["System.String::StartsWith(string)"],
+        Flagged("static object M() { var t = Path.GetTempPath(); if (t.StartsWith(\"/var\")) { t = \"/private\" + t; } return new StreamReader(t); }"));
+
+    /// <summary>
+    /// Ticket P2-208, Git Extensions #51's <c>GitModuleTestHelper.TemporaryPath</c>: a get-only auto-property its constructor
+    /// sets from a local function that joins the temp directory, maybe behind <c>/private</c>, to a random file name. The
+    /// same local function on a path the constructor was passed still fires the row.
+    /// </summary>
+    [Theory]
+    [InlineData("Path.GetTempPath()", false)]
+    [InlineData("root", true)]
+    public void ATemporaryPathSetFromALocalFunctionIsAValidPath(string start, bool flagged) => Assert.Equal(flagged, Calls(Source(
+        "using System;\nusing System.IO;\n"
+        + "sealed class Helper\n{\n"
+        + "public Helper(string root)\n{\nTemporaryPath = GetTemporaryPath();\nreturn;\n"
+        + "string GetTemporaryPath()\n{\nvar tempPath = " + start + ";\n"
+        + "if (tempPath.StartsWith(\"/var\"))\n{\ntempPath = \"/private\" + tempPath;\n}\n"
+        + "return Path.Combine(tempPath, Path.GetRandomFileName());\n}\n}\n"
+        + "public string TemporaryPath { get; }\n}\n"
+        + "class C\n{\nstatic object M(Helper h) => Directory.CreateDirectory(Path.Combine(h.TemporaryPath, \"Folder1\"));\n}\n")).Any(static call => call.Callee.RuntimeChanged));
 
     private static bool Flags(string member) => Flagged(member).Length > 0;
 

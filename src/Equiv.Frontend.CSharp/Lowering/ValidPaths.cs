@@ -26,8 +26,10 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// that depth. A read of a field or auto-property where a validating guard has passed on the same member of the same
 /// receiver, with nothing between that runs code or writes the member, is one too (ticket P2-217). A local variable or
 /// parameter read after a plain assignment of a valid path that nothing writes over is one, and so is a parameter of a
-/// private method that every call in its type passes a valid path (ticket P2-207). Any other path from a caller is not
-/// followed.
+/// private method that every call in its type passes a valid path (ticket P2-207). A local function that reads nothing of
+/// the method around it is read as a callee; a valid path followed by a constant with no character validation rejects and
+/// no colon is one, and so is such a constant before a valid path a <c>StartsWith</c> has shown to have no drive (ticket
+/// P2-208). Any other path from a caller is not followed.
 /// </summary>
 internal static class ValidPaths
 {
@@ -114,6 +116,10 @@ internal static class ValidPaths
         // Only an expression is a value, and a conditional expression has both branches.
         IConditionalOperation conditional =>
             IsValid(conditional.WhenTrue, seen, compilation, depth) && IsValid(conditional.WhenFalse!, seen, compilation, depth),
+        // A built-in + with a string operand joins strings.
+        IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join =>
+            (IsPathPart(join.RightOperand) && IsValid(join.LeftOperand, seen, compilation, depth))
+            || (IsPathPart(join.LeftOperand) && IsValid(join.RightOperand, seen, compilation, depth) && HasNoDrive(join.RightOperand)),
         ILocalReferenceOperation local =>
             IsGuarded(local.Local, value)
             || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, compilation, depth)
@@ -258,22 +264,67 @@ internal static class ValidPaths
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
 
     /// <summary>
+    /// Whether <paramref name="operand"/> is a string constant that can be joined to a valid path and leave one (ticket
+    /// P2-208): no character <c>invalidPath</c> names, and no colon.
+    /// </summary>
+    private static bool IsPathPart(IOperation operand) =>
+        operand.ConstantValue is { HasValue: true, Value: string text } && RuntimeChangeTable.JoinsValidPath(text);
+
+    /// <summary>
+    /// Whether the valid path <paramref name="value"/> has no drive, and so no colon (ticket P2-208): it reads a local
+    /// variable or a by-value parameter where <see cref="RulesOutADrive"/> has returned true for it, with nothing
+    /// <see cref="Quiet"/> between. A valid path's only colon follows its drive letter.
+    /// </summary>
+    private static bool HasNoDrive(IOperation value) =>
+        LocalValues.Symbol(value) is { } symbol
+        && symbol is ILocalSymbol { RefKind: RefKind.None } or IParameterSymbol { RefKind: RefKind.None }
+        && PassedBefore(value, symbol, call => RulesOutADrive(call, symbol));
+
+    /// <summary>
+    /// Whether <paramref name="call"/> is a <c>String.StartsWith</c> of a string on a read of <paramref name="symbol"/>,
+    /// whose prefix is a constant that begins with a directory separator and an ASCII letter or digit (ticket P2-208): a
+    /// path it returns true for then begins with a separator and has no colon after it, under an ordinal or a culture
+    /// comparison alike, since neither equates a colon with a letter or digit or ignores it.
+    /// </summary>
+    private static bool RulesOutADrive(IInvocationOperation call, ISymbol symbol) =>
+        call.TargetMethod is { Name: nameof(string.StartsWith), ContainingType.SpecialType: SpecialType.System_String }
+        && SymbolEqualityComparer.Default.Equals(LocalValues.Symbol(call.Instance!), symbol)
+        && call.Arguments.First(static argument => argument.Parameter!.Ordinal == 0).Value.ConstantValue is { HasValue: true, Value: string prefix }
+        && prefix is ['/' or '\\', var second, ..]
+        && char.IsAsciiLetterOrDigit(second);
+
+    /// <summary>
     /// Whether every value returned by the body that a call to <paramref name="method"/> on <paramref name="receiver"/> runs
-    /// is a valid path, when that body is one of the solution's own methods or property getters (ticket P2-188). The values
-    /// are read by these rules, and a call among them to another of the solution's members is followed the same way while
-    /// <paramref name="depth"/> is under <see cref="CalleeDepth"/> (ticket P2-200). False for a body that returns nothing,
-    /// an auto-property's getter among them.
+    /// is a valid path, when that body is one of the solution's own methods or property getters (ticket P2-188), or a local
+    /// function that <see cref="ReadsNothingAround"/> (ticket P2-208). The values are read by these rules, and a call among
+    /// them to another of the solution's members is followed the same way while <paramref name="depth"/> is under
+    /// <see cref="CalleeDepth"/> (ticket P2-200). False for a body that returns nothing, an auto-property's getter among them.
     /// </summary>
     private static bool ReturnsOnlyValidPaths(IMethodSymbol method, IOperation? receiver, Compilation compilation, int depth) =>
         depth < CalleeDepth
         && Dispatched(method, receiver) is
         {
-            MethodKind: MethodKind.Ordinary or MethodKind.PropertyGet,
+            MethodKind: MethodKind.Ordinary or MethodKind.PropertyGet or MethodKind.LocalFunction,
             DeclaringSyntaxReferences: [SyntaxReference declaration],
         }
         && Body(declaration, compilation) is { } body
-        && Returned(body).ToImmutableArray() is [_, ..] returned
+        && ReadsNothingAround(body)
+        && (body is ILocalFunctionOperation ? body.ChildOperations.SelectMany(Returned) : Returned(body)).ToImmutableArray() is [_, ..] returned
         && returned.All(value => IsValid(value, [], body.SemanticModel!.Compilation, depth + 1));
+
+    /// <summary>
+    /// Whether <paramref name="body"/> reads no local variable or parameter of a method around it (ticket P2-208): true for
+    /// a member's body, and for a local function whose every local variable and parameter read is its own or a lambda's in
+    /// it. Such a function returns the same values wherever it is called from, so the rules read its body as a callee's.
+    /// </summary>
+    private static bool ReadsNothingAround(IOperation body) =>
+        body is not ILocalFunctionOperation function
+        || function.Descendants().Select(LocalValues.Symbol).All(symbol =>
+            symbol is not (ILocalSymbol or IParameterSymbol) || IsWithin(symbol.ContainingSymbol, function.Symbol));
+
+    /// <summary>Whether <paramref name="symbol"/> is <paramref name="function"/> or is declared inside it.</summary>
+    private static bool IsWithin(ISymbol? symbol, ISymbol function) =>
+        symbol is not null && (SymbolEqualityComparer.Default.Equals(symbol, function) || IsWithin(symbol.ContainingSymbol, function));
 
     /// <summary>
     /// The method whose body a call to <paramref name="method"/> on <paramref name="receiver"/> runs: the method itself when
@@ -377,11 +428,16 @@ internal static class ValidPaths
         _ => operation.ChildOperations.SelectMany(Returned),
     };
 
-    /// <summary>Whether <paramref name="local"/> is declared with a valid path and every later assignment gives it one.</summary>
+    /// <summary>
+    /// Whether <paramref name="local"/> is declared with a valid path and every later assignment gives it one. An assignment
+    /// is read with the locals in <paramref name="seen"/>, this one among them, taken to hold valid paths (ticket P2-208):
+    /// each assignment runs when the locals already hold what earlier ones gave them, so if every one gives a valid path
+    /// from valid paths, the local only ever holds valid paths.
+    /// </summary>
     private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen, Compilation compilation, int depth) =>
-        !seen.Contains(local)
-        && LocalValues.Initializer(local, root) is { } initial
-        && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local), compilation, depth));
+        seen.Contains(local)
+        || (LocalValues.Initializer(local, root) is { } initial
+            && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local), compilation, depth)));
 
     /// <summary>
     /// Whether a validating guard has returned true for <paramref name="symbol"/> wherever <paramref name="use"/> runs.
@@ -389,7 +445,11 @@ internal static class ValidPaths
     /// </summary>
     private static bool IsGuarded(ISymbol symbol, IOperation use) =>
         LocalValues.Writes(symbol, LocalValues.Root(use)).IsEmpty
-        && Ancestors(use).Any(step => Guards(step.Outer, step.Inner, argument => SymbolEqualityComparer.Default.Equals(LocalValues.Symbol(argument), symbol)) is not null);
+        && Ancestors(use).Any(step => Guards(step.Outer, step.Inner, Validates(argument => SymbolEqualityComparer.Default.Equals(LocalValues.Symbol(argument), symbol))) is not null);
+
+    /// <summary>A test that a call is to one of the validating guards, on an argument <paramref name="guarded"/> accepts.</summary>
+    private static Func<IInvocationOperation, bool> Validates(Func<IOperation, bool> guarded) => call =>
+        RuntimeChangeTable.Load().ValidatesPath(Identity(call.TargetMethod)) && call.Arguments.Any(argument => guarded(argument.Value));
 
     /// <summary>
     /// Whether a validating guard has returned true for a read of the member <paramref name="use"/> reads, of the same
@@ -398,15 +458,22 @@ internal static class ValidPaths
     /// read, nor a use in a lambda or local function, which can run after anything; a use in a loop under the guard has the
     /// whole loop between, as the loop's earlier turns run there.
     /// </summary>
-    private static bool IsGuardedRead(IMemberReferenceOperation use)
+    private static bool IsGuardedRead(IMemberReferenceOperation use) =>
+        IsStable(use.Instance, LocalValues.Root(use)) && PassedBefore(use, use.Member.OriginalDefinition, Validates(read => Rereads(read, use)));
+
+    /// <summary>
+    /// Whether a guard <paramref name="passes"/> accepts has returned true wherever <paramref name="use"/> runs, with
+    /// nothing between them that is not <see cref="Quiet"/> for <paramref name="written"/>, the variable or member the use
+    /// reads (tickets P2-217 and P2-208). A method with a <c>goto</c> is not read, nor a use in a lambda or local function
+    /// below the guard, which can run after anything; a loop between them counts whole, as its earlier turns run there.
+    /// </summary>
+    private static bool PassedBefore(IOperation use, ISymbol written, Func<IInvocationOperation, bool> passes)
     {
-        IOperation root = LocalValues.Root(use);
-        if (!IsStable(use.Instance, root) || root.DescendantsAndSelf().Any(static operation => operation is IBranchOperation { BranchKind: BranchKind.GoTo }))
+        if (LocalValues.Root(use).DescendantsAndSelf().Any(static operation => operation is IBranchOperation { BranchKind: BranchKind.GoTo }))
         {
             return false;
         }
 
-        ISymbol member = use.Member.OriginalDefinition;
         List<IOperation> between = [];
         foreach ((IOperation outer, IOperation inner) in Ancestors(use))
         {
@@ -415,7 +482,7 @@ internal static class ValidPaths
                 return false;
             }
 
-            if (Guards(outer, inner, read => Rereads(read, use)) is { } after && after.Concat(between).All(operation => Quiet(operation, member)))
+            if (Guards(outer, inner, passes) is { } after && after.Concat(between).All(operation => Quiet(operation, written)))
             {
                 return true;
             }
@@ -466,14 +533,14 @@ internal static class ValidPaths
     });
 
     /// <summary>
-    /// Whether an assignment to <paramref name="target"/> writes neither <paramref name="member"/> nor through a <c>ref</c>
-    /// that can alias it, and calls no setter: a local variable or parameter that is not a <c>ref</c>, another field, an
-    /// array element or a discard.
+    /// Whether an assignment to <paramref name="target"/> writes neither <paramref name="member"/> (a field or property, or a
+    /// local variable or parameter, ticket P2-208) nor through a <c>ref</c> that can alias it, and calls no setter: another
+    /// local variable or parameter that is not a <c>ref</c>, another field, an array element or a discard.
     /// </summary>
     private static bool IsQuietTarget(IOperation target, ISymbol member) => target switch
     {
-        ILocalReferenceOperation local => local.Local.RefKind == RefKind.None,
-        IParameterReferenceOperation parameter => parameter.Parameter.RefKind == RefKind.None,
+        ILocalReferenceOperation local => local.Local.RefKind == RefKind.None && !SymbolEqualityComparer.Default.Equals(local.Local, member),
+        IParameterReferenceOperation parameter => parameter.Parameter.RefKind == RefKind.None && !SymbolEqualityComparer.Default.Equals(parameter.Parameter, member),
         IFieldReferenceOperation field => !SymbolEqualityComparer.Default.Equals(field.Field.OriginalDefinition, member),
         _ => target.Kind is OperationKind.ArrayElementReference or OperationKind.Discard,
     };
@@ -488,17 +555,17 @@ internal static class ValidPaths
     }
 
     /// <summary>
-    /// When <paramref name="inner"/>, a child of <paramref name="outer"/>, runs only once a guard has passed on an argument
-    /// <paramref name="guarded"/> accepts, the operations that run after that guard and before <paramref name="inner"/>;
+    /// When <paramref name="inner"/>, a child of <paramref name="outer"/>, runs only once a call <paramref name="passes"/>
+    /// accepts has returned true, the operations that run after that guard and before <paramref name="inner"/>;
     /// null otherwise.
     /// </summary>
-    private static IEnumerable<IOperation>? Guards(IOperation outer, IOperation inner, Func<IOperation, bool> guarded) => outer switch
+    private static IEnumerable<IOperation>? Guards(IOperation outer, IOperation inner, Func<IInvocationOperation, bool> passes) => outer switch
     {
-        IConditionalOperation conditional when inner == conditional.WhenTrue => Holds(conditional.Condition, whenTrue: true, guarded),
-        IConditionalOperation conditional when inner == conditional.WhenFalse => Holds(conditional.Condition, whenTrue: false, guarded),
-        IBinaryOperation { OperatorKind: BinaryOperatorKind.ConditionalAnd } both when inner == both.RightOperand => Holds(both.LeftOperand, whenTrue: true, guarded),
-        IBinaryOperation { OperatorKind: BinaryOperatorKind.ConditionalOr } either when inner == either.RightOperand => Holds(either.LeftOperand, whenTrue: false, guarded),
-        IBlockOperation block => Exits(block, inner, guarded),
+        IConditionalOperation conditional when inner == conditional.WhenTrue => Holds(conditional.Condition, whenTrue: true, passes),
+        IConditionalOperation conditional when inner == conditional.WhenFalse => Holds(conditional.Condition, whenTrue: false, passes),
+        IBinaryOperation { OperatorKind: BinaryOperatorKind.ConditionalAnd } both when inner == both.RightOperand => Holds(both.LeftOperand, whenTrue: true, passes),
+        IBinaryOperation { OperatorKind: BinaryOperatorKind.ConditionalOr } either when inner == either.RightOperand => Holds(either.LeftOperand, whenTrue: false, passes),
+        IBlockOperation block => Exits(block, inner, passes),
         _ => null,
     };
 
@@ -506,12 +573,12 @@ internal static class ValidPaths
     /// For the last statement of <paramref name="block"/> before <paramref name="inner"/> that leaves unless a guard has
     /// passed, the rest of its condition and the statements after it; null when there is none.
     /// </summary>
-    private static IEnumerable<IOperation>? Exits(IBlockOperation block, IOperation inner, Func<IOperation, bool> guarded)
+    private static IEnumerable<IOperation>? Exits(IBlockOperation block, IOperation inner, Func<IInvocationOperation, bool> passes)
     {
         ImmutableArray<IOperation> before = [.. block.Operations.TakeWhile(statement => statement != inner)];
         for (int index = before.Length - 1; index >= 0; index--)
         {
-            if (LeavesUnlessGuarded(before[index], guarded) is { } after)
+            if (LeavesUnlessGuarded(before[index], passes) is { } after)
             {
                 return after.Concat(before.Skip(index + 1));
             }
@@ -524,24 +591,22 @@ internal static class ValidPaths
     /// For an <c>if</c> without an <c>else</c> that returns or throws when no guard has passed, what its condition runs
     /// after the guard; null for any other statement.
     /// </summary>
-    private static IEnumerable<IOperation>? LeavesUnlessGuarded(IOperation statement, Func<IOperation, bool> guarded) =>
-        statement is IConditionalOperation { WhenFalse: null } conditional && Leaves(conditional.WhenTrue) ? Holds(conditional.Condition, whenTrue: false, guarded) : null;
+    private static IEnumerable<IOperation>? LeavesUnlessGuarded(IOperation statement, Func<IInvocationOperation, bool> passes) =>
+        statement is IConditionalOperation { WhenFalse: null } conditional && Leaves(conditional.WhenTrue) ? Holds(conditional.Condition, whenTrue: false, passes) : null;
 
     private static bool Leaves(IOperation statement) =>
         statement.Kind is OperationKind.Return or OperationKind.Throw || (statement is IBlockOperation { Operations: [.., IOperation last] } && Leaves(last));
 
     /// <summary>
-    /// When <paramref name="condition"/> being <paramref name="whenTrue"/> means a guard returned true for an argument
-    /// <paramref name="guarded"/> accepts, the operands of the condition that run after that guard; null otherwise.
+    /// When <paramref name="condition"/> being <paramref name="whenTrue"/> means a call <paramref name="passes"/> accepts
+    /// returned true, the operands of the condition that run after that guard; null otherwise.
     /// </summary>
-    private static IEnumerable<IOperation>? Holds(IOperation condition, bool whenTrue, Func<IOperation, bool> guarded) => condition switch
+    private static IEnumerable<IOperation>? Holds(IOperation condition, bool whenTrue, Func<IInvocationOperation, bool> passes) => condition switch
     {
-        IUnaryOperation { OperatorKind: UnaryOperatorKind.Not } not => Holds(not.Operand, !whenTrue, guarded),
+        IUnaryOperation { OperatorKind: UnaryOperatorKind.Not } not => Holds(not.Operand, !whenTrue, passes),
         IBinaryOperation binary when binary.OperatorKind == (whenTrue ? BinaryOperatorKind.ConditionalAnd : BinaryOperatorKind.ConditionalOr) =>
-            Holds(binary.RightOperand, whenTrue, guarded) ?? Holds(binary.LeftOperand, whenTrue, guarded)?.Append(binary.RightOperand),
-        IInvocationOperation call when whenTrue
-            && RuntimeChangeTable.Load().ValidatesPath(Identity(call.TargetMethod))
-            && call.Arguments.Any(argument => guarded(argument.Value)) => [],
+            Holds(binary.RightOperand, whenTrue, passes) ?? Holds(binary.LeftOperand, whenTrue, passes)?.Append(binary.RightOperand),
+        IInvocationOperation call when whenTrue && passes(call) => [],
         _ => null,
     };
 }
