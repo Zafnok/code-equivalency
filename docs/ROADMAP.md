@@ -1362,7 +1362,7 @@ false positives and Unknowns that verdict counts against each, they come before 
 1. P2-213 (S) Duplicati's replaced callees declared in the pair's committed config: 9 of the 45 false positives (all 11
    of P2-192's results), which a default run cannot show without it.
 2. Valid paths, 16 false EQ006: P2-218 (M, 5, five routes no done ticket follows), P2-207 (M, 4), P2-217 (M, 4, a
-   `File.Exists` guard on a member read again), P2-208 (M, 3).
+   `File.Exists` guard on a member read again; its two left are P2-222 and P2-223), P2-208 (M, 3).
 3. Rows that cannot reach their change, 8 false EQ006: P2-216 (M, 5, five rows), P2-220 (M, 2, and P2-190's kept
    `OAuthHttpClient::.cctor()`: an exclusion from another method's data flow), P2-219 (S, 1, the RSA XML rows that
    .NET Core 3.0 implements). In thorough mode only, P2-221 (M, 1, filed by P2-211): the `StringBuilder` append rows
@@ -1375,6 +1375,9 @@ false positives and Unknowns that verdict counts against each, they come before 
    14 on OpenRA), P2-215 (M, `Conversion`, 8 on Jellyfin).
 6. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates fresh samples as P2-212 did, and names
    the milestone after this one, once items 1 to 4 are done.
+
+Ahead of the list: P2-221 (M), an encoder bug in the refinement of a float-to-int conversion of NaN. A property
+test's random seed hits it on `main`, so any CI run that draws such a seed goes red. Filed 2026-10-15 from GH-407's PR.
 
 Not on it: P2-191's one false positive is congruent since P2-197's config, so it has nothing counted against it. 620 of
 the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture

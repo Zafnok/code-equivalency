@@ -198,6 +198,19 @@ public sealed class BodyFingerprinterTests
     public void ACallWhosePathIsValidIsNotRuntimeSensitive(string member, bool sensitive) =>
         Assert.Equal(sensitive, Fingerprint(member).RuntimeSensitive);
 
+    /// <summary>
+    /// Ticket P2-217: the fingerprint reads a guarded field as the lowering does, so a body whose path call reads a field a
+    /// guard passed on is not runtime-sensitive; one whose call is in a lambda or local function, which can run after the
+    /// field is written, or after a <c>yield return</c>, where the caller runs, is.
+    /// </summary>
+    [Theory]
+    [InlineData("""string f; void M() { if (System.IO.File.Exists(f)) { System.IO.File.Delete(f); } }""", false)]
+    [InlineData("""string f; void M() { if (System.IO.File.Exists(f)) { System.Action a = () => System.IO.File.Delete(f); a(); } }""", true)]
+    [InlineData("""string f; void M() { if (System.IO.File.Exists(f)) { Delete(); } void Delete() => System.IO.File.Delete(f); }""", true)]
+    [InlineData("""string f; System.Collections.Generic.IEnumerable<int> M() { if (System.IO.File.Exists(f)) { yield return 1; System.IO.File.Delete(f); } }""", true)]
+    public void ACallOnAGuardedFieldIsNotRuntimeSensitive(string member, bool sensitive) =>
+        Assert.Equal(sensitive, Fingerprint(member).RuntimeSensitive);
+
     [Fact]
     public void ASuppressedRuntimeChangeIsNotRuntimeSensitive()
     {

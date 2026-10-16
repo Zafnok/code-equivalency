@@ -18,13 +18,12 @@ internal static partial class SmtOutput
     public static SmtAnswer Parse(string output)
     {
         string text = output.TrimStart();
-        int end = text.IndexOfAny(['\r', '\n']);
-        string first = (end < 0 ? text : text[..end]).TrimEnd();
+        string first = text.Split(['\r', '\n'], 2)[0].TrimEnd();
         return first switch
         {
             "unsat" => new SmtUnsat(),
             "sat" => new SmtSat(Values(text[first.Length..])),
-            _ => new SmtUnknown(first.Length > ReasonLength ? first[..ReasonLength] : first),
+            _ => new SmtUnknown(first[..Math.Min(first.Length, ReasonLength)]),
         };
     }
 
@@ -38,9 +37,9 @@ internal static partial class SmtOutput
     private static ImmutableDictionary<string, string> Values(string text)
     {
         ImmutableDictionary<string, string>.Builder values = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
-        foreach (Match pair in Pair.Matches(text))
+        foreach (GroupCollection groups in Pair.Matches(text).Select(static pair => pair.Groups))
         {
-            values[pair.Groups["name"].Value] = pair.Groups["value"].Value;
+            values[groups["name"].Value] = groups["value"].Value;
         }
 
         return values.ToImmutable();

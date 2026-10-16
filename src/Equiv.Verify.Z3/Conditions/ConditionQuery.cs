@@ -96,13 +96,11 @@ internal sealed class ConditionQuery(Func<Context> createContext, VerificationOp
             return admitted;
         }
 
+        // Where is lazy, so each candidate is tested against kept as it stands after the earlier removals.
         List<ConditionTerm> kept = [.. admitted];
-        foreach (ConditionTerm candidate in admitted)
+        foreach (ConditionTerm candidate in admitted.Where(c => kept.Exists(other => other != c && Implies(context, encoding, c, other))))
         {
-            if (kept.Exists(other => other != candidate && Implies(context, encoding, candidate, other)))
-            {
-                kept.Remove(candidate);
-            }
+            kept.Remove(candidate);
         }
 
         return [.. kept];
