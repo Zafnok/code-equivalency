@@ -14,21 +14,21 @@
     <PackageVersion Include="Microsoft.Z3" Version="5.1.0" />
 
     <!-- Equiv.Core -->
-    <PackageVersion Include="Sarif.Sdk" Version="5.7.0" />
+    <PackageVersion Include="Sarif.Sdk" Version="5.8.0" />
 
     <!-- Equiv.Cli -->
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />
 
     <!-- tests -->
-    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="coverlet.MTP" Version="10.1.0" />
-    <PackageVersion Include="Verify.XunitV3" Version="33.3.2" />
+    <PackageVersion Include="Verify.XunitV3" Version="33.3.4" />
     <PackageVersion Include="CsCheck" Version="4.9.1" />
     <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.4" />
 
     <!-- all projects (see Directory.Build.props) -->
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.296" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.303" />
     <PackageVersion Include="MinVer" Version="8.0.0" />
   </ItemGroup>
 
