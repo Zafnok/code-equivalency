@@ -947,6 +947,8 @@ Found by P2-124's rerun of the two upgrade pairs (`docs/runs/2026-10-12-upgrade-
 - P2-211 (M) What P2-164 leaves of those appends, by reading the source: `PatchManager.ToPatch`'s EQ002 (the
   builder is handed to a call first) and `GitBlameCommitTests.TestToString`'s thorough-only EQ006 (two `DateTime`
   holes). The first step is the rerun. Needs P2-164.
+- P2-221 (M) The `StringBuilder` append rows fire in thorough's IL pass, which applies no `requires` fact, on an
+  append no hole can reach: P2-211's `TestToString` EQ006. Needs P2-211.
 - P2-165 (M) An unedited `extern` method is Unknown (`no-body`) on every pair that crosses a runtime
   (ADR 0054 decision 4): 53 of `gitextensions-9860`'s 605 changed pairs (8.8%), its largest opaque
   reason. Changes an accepted ADR, so it goes through `equiv-adr`. Needs P2-145 and P2-146.
@@ -1363,7 +1365,8 @@ false positives and Unknowns that verdict counts against each, they come before 
    `File.Exists` guard on a member read again), P2-208 (M, 3).
 3. Rows that cannot reach their change, 8 false EQ006: P2-216 (M, 5, five rows), P2-220 (M, 2, and P2-190's kept
    `OAuthHttpClient::.cctor()`: an exclusion from another method's data flow), P2-219 (S, 1, the RSA XML rows that
-   .NET Core 3.0 implements).
+   .NET Core 3.0 implements). In thorough mode only, P2-221 (M, 1, filed by P2-211): the `StringBuilder` append rows
+   fire in the IL pass, which applies no `requires` fact, on an append no hole can reach.
 4. The EQ002 causes, 13 false positives: P2-193 (S, 4), P2-185 (2), P2-186 (2), P2-211 (1, the upgrades' last),
    P2-187, P2-097, P2-205, P2-206 (1 each).
 5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs alone: P2-179 (`rebound-call`, 121 on
