@@ -1326,7 +1326,7 @@ They come before any other open ticket, in this order:
    P2-201 cleared 1 of its 4 (and 2 more results outside the samples) and left P2-208 (M, 3, a field
    written through a local function, a trailing separator or a private setter), after P2-207.
    P2-207 took 1 of its 6 off EQ006 (and changed 2 more results outside the samples) through a private method's
-   calls and a local's last write, and left P2-227 (M, 2, a partial validator), P2-228 (M, 1 and
+   calls and a local's last write, and left P2-231 (M, 2, a partial validator), P2-228 (M, 1 and
    OpenRA's `InitializeSettings`, a field filled on first use; row 62 has no sound route) and P2-229
    (S, 1 and OpenRA's `Select`, a listing of a valid directory), with P2-230 (S, soundness: a guard on
    a primary constructor's parameter).
