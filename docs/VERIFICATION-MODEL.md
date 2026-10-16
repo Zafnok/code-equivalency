@@ -359,7 +359,10 @@ and the last. Or the builder is a local declared with `new StringBuilder(...)` o
 of one of its own members (a result that is the builder again is dropped or is itself such a receiver), outside every
 lambda and local function, that no hole names, and the call is in no `try` statement: no code a hole runs can then reach
 the builder, the builder's members hand it to no other code, and once a hole throws out of the body nothing is left that
-can read what was written. Any other append, a hole that reads the builder included, keeps the handler's calls.
+can read what was written. A use may also hand the builder by value to a parameter of its own type of an ordinary
+method declared in the same compilation that is not virtual, abstract, an override, extern, async or an iterator, whose
+every use of that parameter is in turn such a use (P2-211): the body read is then the body that runs, it runs before
+the call returns, and it can neither keep the builder nor return it. Any other append, a hole that reads the builder included, keeps the handler's calls.
 
 Effect-free BCL members (ADR 0043; P2-071). One frontend catalogue lists, by name, the BCL members that
 run no observable code. A use of one is no `IrCall`: no trace event, no `threw` edge, no heap pair, no position.

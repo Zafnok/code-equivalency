@@ -98,64 +98,114 @@ internal sealed class InterpolatedAppends
         IOperation[] holes = [.. formatted.Select(static f => f.Arguments[0].Value)];
         return formatted.All(static f => f.Arguments.Length == 1)
             && InterpolatedStrings.AreJoined(holes)
-            && (holes.All(static h => InterpolatedStrings.IsRead(h) && (InterpolatedStrings.IsInteger(h) || h.Type!.SpecialType == SpecialType.System_String)) || IsUnreachable(bound, holes))
+            && (holes.All(static h => InterpolatedStrings.IsRead(h) && (InterpolatedStrings.IsInteger(h) || h.Type!.SpecialType == SpecialType.System_String)) || new Reach(compilation).IsUnreachable(bound, holes))
             ? call.TargetMethod.ContainingType.GetMembers(call.TargetMethod.Name).OfType<IMethodSymbol>().Single(static m => m.Parameters is [{ Type.SpecialType: SpecialType.System_String }])
             : null;
     }
 
     /// <summary>
-    /// Whether no code but the body's own reaches the builder <paramref name="call"/> appends to, so that a hole neither
-    /// reads it half written nor, by throwing, leaves it half written for anyone to see: the receiver is a local, or a
-    /// chain of the builder's own calls on one, declared with <c>new StringBuilder(...)</c> or <c>new()</c> (a conversion of
-    /// the creation with no operator method; the class is sealed, so the creation is of the builder); every use of the local
-    /// is the receiver of a member of the builder whose result, when it is the builder again, is dropped or is such a
-    /// receiver itself, and none is in a lambda or a local function; no hole names it; and the call is in no <c>try</c>
-    /// statement, so no <c>catch</c> or <c>finally</c> of the body runs between a throwing hole and the end of the body.
+    /// Which code reaches a builder, read in the body that declares it and in each method of the same compilation it is
+    /// handed to (ticket P2-211).
     /// </summary>
-    private static bool IsUnreachable(IInvocationOperation call, IOperation[] holes)
+    private sealed class Reach(Compilation compilation)
     {
-        if (Builder(call.Instance!) is not { } local || Ancestors(call).Any(static a => a is ITryOperation))
+        /// <summary>The parameters whose callee is being read or has been: a call back into one hands the builder to no code not already read.</summary>
+        private readonly HashSet<IParameterSymbol> read = new(SymbolEqualityComparer.Default);
+
+        /// <summary>
+        /// Whether no code but the body's own, and that of the methods it hands the builder to, reaches the builder
+        /// <paramref name="call"/> appends to, so that a hole neither reads it half written nor, by throwing, leaves it half
+        /// written for anyone to see: the receiver is a local, or a chain of the builder's own calls on one, declared with
+        /// <c>new StringBuilder(...)</c> or <c>new()</c> (a conversion of the creation with no operator method; the class is
+        /// sealed, so the creation is of the builder); every use of the local is one <see cref="IsBuilderUse"/> accepts; no
+        /// hole names it; and the call is in no <c>try</c> statement, so no <c>catch</c> or <c>finally</c> of the body runs
+        /// between a throwing hole and the end of the body.
+        /// </summary>
+        public bool IsUnreachable(IInvocationOperation call, IOperation[] holes)
         {
-            return false;
+            if (Builder(call.Instance!) is not { } local || Ancestors(call).Any(static a => a is ITryOperation))
+            {
+                return false;
+            }
+
+            IOperation body = Ancestors(call).Last();
+            return body.Descendants().OfType<IVariableDeclaratorOperation>().Any(d =>
+                    SymbolEqualityComparer.Default.Equals(d.Symbol, local)
+                    && d.Initializer?.Value is IObjectCreationOperation or IConversionOperation { OperatorMethod: null, Operand: IObjectCreationOperation })
+                && body.Descendants().OfType<ILocalReferenceOperation>().Where(r => SymbolEqualityComparer.Default.Equals(r.Local, local)).All(IsBuilderUse)
+                && !holes.SelectMany(static h => h.DescendantsAndSelf()).OfType<ILocalReferenceOperation>().Any(r => SymbolEqualityComparer.Default.Equals(r.Local, local));
         }
 
-        IOperation body = Ancestors(call).Last();
-        return body.Descendants().OfType<IVariableDeclaratorOperation>().Any(d =>
-                SymbolEqualityComparer.Default.Equals(d.Symbol, local)
-                && d.Initializer?.Value is IObjectCreationOperation or IConversionOperation { OperatorMethod: null, Operand: IObjectCreationOperation })
-            && body.Descendants().OfType<ILocalReferenceOperation>().Where(r => SymbolEqualityComparer.Default.Equals(r.Local, local)).All(IsBuilderUse)
-            && !holes.SelectMany(static h => h.DescendantsAndSelf()).OfType<ILocalReferenceOperation>().Any(r => SymbolEqualityComparer.Default.Equals(r.Local, local));
-    }
+        /// <summary>
+        /// Whether <paramref name="use"/> of the builder only hands it to the builder's own members, or to a method whose
+        /// body does no more with it, outside every lambda and local function.
+        /// </summary>
+        private bool IsBuilderUse(IOperation use) =>
+            !Ancestors(use).Any(static a => a is IAnonymousFunctionOperation or ILocalFunctionOperation) && IsReceiver(use);
 
-    /// <summary>The local <paramref name="receiver"/> reads, directly or through a chain of the builder's own calls that return it; else null.</summary>
-    private static ILocalSymbol? Builder(IOperation receiver) => receiver switch
-    {
-        ILocalReferenceOperation reference => reference.Local,
-        IInvocationOperation { Instance: { } inner } when SymbolEqualityComparer.Default.Equals(inner.Type, receiver.Type) => Builder(inner),
-        _ => null,
-    };
-
-    /// <summary>Whether <paramref name="use"/> of the builder only hands it to the builder's own members, outside every lambda and local function.</summary>
-    private static bool IsBuilderUse(IOperation use) =>
-        !Ancestors(use).Any(static a => a is IAnonymousFunctionOperation or ILocalFunctionOperation) && IsReceiver(use);
-
-    /// <summary>
-    /// Whether <paramref name="use"/> is the receiver of a call or property of the builder, whose result is not the builder,
-    /// or is dropped, or is in turn such a receiver. An argument sits under an <see cref="IArgumentOperation"/>, so a call or
-    /// property that is the parent is one <paramref name="use"/> is the receiver of.
-    /// </summary>
-    private static bool IsReceiver(IOperation use) => use.Parent switch
-    {
-        IInvocationOperation call => !SymbolEqualityComparer.Default.Equals(call.Type, use.Type) || call.Parent is IExpressionStatementOperation || IsReceiver(call),
-        IPropertyReferenceOperation => true,
-        _ => false,
-    };
-
-    private static IEnumerable<IOperation> Ancestors(IOperation operation)
-    {
-        for (IOperation? parent = operation.Parent; parent is not null; parent = parent.Parent)
+        /// <summary>
+        /// Whether <paramref name="use"/> is the receiver of a call or property of the builder, whose result is not the
+        /// builder, or is dropped, or is in turn such a receiver; or is an argument a callee keeps to itself
+        /// (<see cref="IsKept"/>). An argument sits under an <see cref="IArgumentOperation"/>, so a call or property that is
+        /// the parent is one <paramref name="use"/> is the receiver of.
+        /// </summary>
+        private bool IsReceiver(IOperation use) => use.Parent switch
         {
-            yield return parent;
+            IInvocationOperation call => !SymbolEqualityComparer.Default.Equals(call.Type, use.Type) || call.Parent is IExpressionStatementOperation || IsReceiver(call),
+            IPropertyReferenceOperation => true,
+            IArgumentOperation argument => IsKept(argument),
+            _ => false,
+        };
+
+        /// <summary>
+        /// Whether <paramref name="argument"/>, the builder passed by value to a parameter of its own type, is kept to the
+        /// callee's body: the callee is an ordinary method declared in this compilation that is not virtual, abstract, an
+        /// override, extern, async or an iterator, so the body read is the body that runs and it runs before the call
+        /// returns, and every use of the parameter in that body is one <see cref="IsBuilderUse"/> accepts. Such a callee
+        /// cannot return the builder, store it or hand it to code not read. A parameter already read is kept: a call back into
+        /// it hands the builder to no other code.
+        /// </summary>
+        private bool IsKept(IArgumentOperation argument)
+        {
+            if (argument is not
+                {
+                    Parameter: { RefKind: RefKind.None, Ordinal: var ordinal } parameter,
+                    Parent: IInvocationOperation { TargetMethod: { MethodKind: MethodKind.Ordinary, IsVirtual: false, IsAbstract: false, IsOverride: false, IsExtern: false, IsAsync: false, IsIterator: false } target },
+                }
+                || !SymbolEqualityComparer.Default.Equals(parameter.OriginalDefinition.Type, argument.Value.Type))
+            {
+                return false;
+            }
+
+            IMethodSymbol callee = target.OriginalDefinition.PartialImplementationPart ?? target.OriginalDefinition;
+            if (callee.DeclaringSyntaxReferences is not [var declaration] || !compilation.ContainsSyntaxTree(declaration.SyntaxTree))
+            {
+                return false;
+            }
+
+            IParameterSymbol kept = callee.Parameters[ordinal];
+            return !read.Add(kept)
+                || compilation.GetSemanticModel(declaration.SyntaxTree).GetOperation(declaration.GetSyntax())!
+                    .Descendants()
+                    .OfType<IParameterReferenceOperation>()
+                    .Where(r => SymbolEqualityComparer.Default.Equals(r.Parameter, kept))
+                    .All(IsBuilderUse);
+        }
+
+        /// <summary>The local <paramref name="receiver"/> reads, directly or through a chain of the builder's own calls that return it; else null.</summary>
+        private static ILocalSymbol? Builder(IOperation receiver) => receiver switch
+        {
+            ILocalReferenceOperation reference => reference.Local,
+            IInvocationOperation { Instance: { } inner } when SymbolEqualityComparer.Default.Equals(inner.Type, receiver.Type) => Builder(inner),
+            _ => null,
+        };
+
+        private static IEnumerable<IOperation> Ancestors(IOperation operation)
+        {
+            for (IOperation? parent = operation.Parent; parent is not null; parent = parent.Parent)
+            {
+                yield return parent;
+            }
         }
     }
 
