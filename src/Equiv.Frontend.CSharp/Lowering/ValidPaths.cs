@@ -180,12 +180,7 @@ internal static class ValidPaths
     private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
         (orEmpty && IsEmpty(value)) || IsValidConstant(value) || value switch
     {
-        // A property that overrides only the setter has no getter of its own to be a source (ticket P2-158).
-        IPropertyReferenceOperation property => (property.Property.GetMethod is { } getter
-                && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), [])
-                    || ReturnsOnlyValidPaths(getter, property.Instance, [], seen, orEmpty, compilation, depth)
-                    || (AutoProperty(Dispatched(getter, property.Instance)) is not null && IsGuardedRead(property))))
-            || StoresOnlyValidPaths(property, orEmpty, compilation, depth),
+        IPropertyReferenceOperation property => IsValidProperty(property, seen, orEmpty, compilation, depth),
         IFieldReferenceOperation field => StoresOnlyValidPaths(field, orEmpty, compilation, depth) || IsGuardedRead(field),
 
         // A transform's or a prefix's operands are read as valid paths, without what seen takes to be the empty string.
@@ -202,15 +197,8 @@ internal static class ValidPaths
         // A variable read as a path holds a string, and += on a string is the built-in join (ticket P2-232).
         ICompoundAssignmentOperation append =>
             IsPathPart(append.Value, orEmpty, compilation, depth) && IsValid(append.Target, seen, orEmpty, compilation, depth),
-        ILocalReferenceOperation local =>
-            IsGuarded(local.Local, value)
-            || HoldsOnlyValidPaths(local.Local, LocalValues.Root(value), seen, orEmpty, compilation, depth)
-            || (LastWrite(local.Local, local.Local.RefKind, value) is { } written && IsValid(written, seen, orEmpty, compilation, depth)),
-        IParameterReferenceOperation parameter =>
-            seen.Contains(parameter.Parameter)
-            || IsGuarded(parameter.Parameter, value)
-            || (LastWrite(parameter.Parameter, parameter.Parameter.RefKind, value) is { } written && IsValid(written, seen, orEmpty, compilation, depth))
-            || CallsPassOnlyValidPaths(parameter.Parameter, value, orEmpty, compilation, depth),
+        ILocalReferenceOperation local => IsValidLocal(local, seen, orEmpty, compilation, depth),
+        IParameterReferenceOperation parameter => IsValidParameter(parameter, seen, orEmpty, compilation, depth),
         _ => false,
     };
 
@@ -220,6 +208,39 @@ internal static class ValidPaths
     /// </summary>
     private static bool IsValidConstant(IOperation value) =>
         value.ConstantValue is { HasValue: true, Value: string text } && RuntimeChangeTable.IsValidPathConstant(text);
+
+    /// <summary>
+    /// Whether the property read <paramref name="property"/> is a valid path, as <see cref="IsValid"/> reads it: its getter
+    /// is a source, or a solution body that returns only valid paths, or an auto-property's under a guard; or the property
+    /// only ever stores valid paths. A property that overrides only the setter has no getter of its own to be a source
+    /// (ticket P2-158).
+    /// </summary>
+    private static bool IsValidProperty(IPropertyReferenceOperation property, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+        (property.Property.GetMethod is { } getter
+            && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), [])
+                || ReturnsOnlyValidPaths(getter, property.Instance, [], seen, orEmpty, compilation, depth)
+                || (AutoProperty(Dispatched(getter, property.Instance)) is not null && IsGuardedRead(property))))
+        || StoresOnlyValidPaths(property, orEmpty, compilation, depth);
+
+    /// <summary>
+    /// Whether the local variable read <paramref name="local"/> is a valid path, as <see cref="IsValid"/> reads it: under a
+    /// guard, holding only valid paths, or read after a plain write of one.
+    /// </summary>
+    private static bool IsValidLocal(ILocalReferenceOperation local, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+        IsGuarded(local.Local, local)
+        || HoldsOnlyValidPaths(local.Local, LocalValues.Root(local), seen, orEmpty, compilation, depth)
+        || (LastWrite(local.Local, local.Local.RefKind, local) is { } written && IsValid(written, seen, orEmpty, compilation, depth));
+
+    /// <summary>
+    /// Whether the parameter read <paramref name="parameter"/> is a valid path, as <see cref="IsValid"/> reads it: a callee's
+    /// parameter the call passes one (ticket P2-232), under a guard, read after a plain write of one, or of a private method
+    /// every call passes one.
+    /// </summary>
+    private static bool IsValidParameter(IParameterReferenceOperation parameter, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+        seen.Contains(parameter.Parameter)
+        || IsGuarded(parameter.Parameter, parameter)
+        || (LastWrite(parameter.Parameter, parameter.Parameter.RefKind, parameter) is { } written && IsValid(written, seen, orEmpty, compilation, depth))
+        || CallsPassOnlyValidPaths(parameter.Parameter, parameter, orEmpty, compilation, depth);
 
     /// <summary>The empty string: a constant <c>""</c>, or <c>String.Empty</c>, a field no C# constant gives (ticket P2-232).</summary>
     private static bool IsEmpty(IOperation value) =>

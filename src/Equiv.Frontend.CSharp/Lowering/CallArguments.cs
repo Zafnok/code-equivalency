@@ -23,21 +23,21 @@ internal static class CallArguments
 
     /// <summary>As the two-argument overload, with each operand <paramref name="isValidPath"/> holds of marked a <see cref="CallArgument.ValidPath"/> (ticket P2-074).</summary>
     public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath) =>
-        Of(site, method, new PathTests(isValidPath, static _ => false));
+        Operands(site, method, new PathTests(isValidPath, static _ => false));
 
     /// <summary>
     /// As the three-argument overload, with each operand that is a valid path, or that <paramref name="isValidPathOrEmpty"/>
     /// holds of, marked a <see cref="CallArgument.ValidPathOrEmpty"/> too (ticket P2-232).
     /// </summary>
     public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath, Func<IOperation, bool> isValidPathOrEmpty) =>
-        Of(site, method, new PathTests(isValidPath, isValidPathOrEmpty));
+        Operands(site, method, new PathTests(isValidPath, isValidPathOrEmpty));
 
-    private static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, PathTests tests) => site switch
+    private static ImmutableArray<CallArgument> Operands(IOperation? site, IMethodSymbol method, PathTests tests) => site switch
     {
         IInvocationOperation call when Calls(call.TargetMethod, method) =>
-            [.. Receiver(call.Instance, tests), .. call.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, tests))],
+            [.. Receiver(call.Instance, tests), .. call.Arguments.Select(a => Operand(a.Parameter!.Name, a.Parameter.Type, a.Value, tests))],
         IObjectCreationOperation creation when Calls(creation.Constructor, method) =>
-            [.. creation.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, tests))],
+            [.. creation.Arguments.Select(a => Operand(a.Parameter!.Name, a.Parameter.Type, a.Value, tests))],
         _ => [],
     };
 
@@ -52,9 +52,9 @@ internal static class CallArguments
     private static bool Calls(IMethodSymbol? called, IMethodSymbol method) => SymbolEqualityComparer.Default.Equals(called, method);
 
     private static IEnumerable<CallArgument> Receiver(IOperation? instance, PathTests tests) =>
-        instance is null ? [] : [Of(CallArgument.Receiver, instance.Type!, instance, tests)];
+        instance is null ? [] : [Operand(CallArgument.Receiver, instance.Type!, instance, tests)];
 
-    private static CallArgument Of(string parameter, ITypeSymbol type, IOperation value, PathTests tests)
+    private static CallArgument Operand(string parameter, ITypeSymbol type, IOperation value, PathTests tests)
     {
         bool valid = tests.IsValidPath(value);
         return Constant(new CallArgument(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value)
