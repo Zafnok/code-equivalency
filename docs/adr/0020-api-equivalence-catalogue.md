@@ -141,3 +141,23 @@ precondition is not an entry.
   its arguments through, so the fingerprint leaves its calls under their legacy name. The four
   entries name .NET 9 as the runtime that added their modern member (`addedIn`, the clarification
   above), so a pair that does not cross it, where both sides bind the array overload, is left alone.
+- 2026-10-16 (P2-193). **An argument wrapped in a constructor.** .NET Core removed the static ACL members
+  `File.GetAccessControl(string)`, `File.SetAccessControl(string, FileSecurity)` and their `Directory` forms, and the
+  documented replacement is `new FileInfo(path).GetAccessControl()` (and the `DirectoryInfo` and `Set` forms) from
+  `FileSystemAclExtensions`. The adapter lists positions and constants, so it cannot say "a new `FileInfo` of argument
+  0". An item that wraps a source argument in one constructor call would leave the soundness condition as it is: the
+  constructor is then part of the adapted call, so its exceptions count, and the two sides must still throw the same
+  type. A constructor that only allocates and never throws (ADR 0043's second kind) meets that by itself.
+  `FileInfo(string)` and `DirectoryInfo(string)` do not. On .NET Framework, the one runtime that has both members, the
+  constructor validates the full path first, where the legacy `Get` member first asks the operating system for the
+  descriptor of the path as given and the legacy `Set` member first checks its security object for null. Measured on
+  .NET Framework 4.8 (ticket P2-193's Notes): a path naming a missing alternate data stream, a lone `:`, a URI and an
+  over-long path throw `FileNotFoundException` or `ArgumentException` from the legacy `Get` member and
+  `NotSupportedException` or `PathTooLongException` from the constructor; with a null security object, every malformed
+  path throws `ArgumentNullException` from the legacy `Set` member and the path's own exception from the constructor.
+  On every path the constructor accepts, the two return the same descriptor and throw alike. Each pair therefore needs
+  a precondition, a path that .NET Framework's validation accepts, and is not an entry. That precondition could be shown
+  at a call, as P2-142 shows a range, by the valid-path analysis of ticket P2-074, but none of the calls that asked for
+  the entries would pass it: `duplicati-3124`'s four pass a parameter from the caller, which that analysis does not
+  follow. So no constructor item is added, and those four stay Divergent, on the malformed paths where the exception
+  type really changes.
