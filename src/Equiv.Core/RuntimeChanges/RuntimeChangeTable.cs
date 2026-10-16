@@ -294,8 +294,12 @@ public sealed class RuntimeChangeTable
         root.TryGetProperty("validPaths", out JsonElement lists)
             ? new ValidPaths(
                 Members(lists, "sources"), Members(lists, "validators"), Members(lists, "transforms"), Members(lists, "prefixes"), Members(lists, "guards"),
-                lists.TryGetProperty("separators", out JsonElement separators) ? [.. separators.EnumerateArray().Select(static field => field.GetString()!)] : [])
+                Separators(lists))
             : new ValidPaths([], [], [], [], [], []);
+
+    /// <summary>The optional <c>separators</c> list of <c>validPaths</c> (ticket P2-232); empty when it is absent.</summary>
+    private static ImmutableArray<string> Separators(JsonElement lists) =>
+        lists.TryGetProperty("separators", out JsonElement separators) ? [.. separators.EnumerateArray().Select(static field => field.GetString()!)] : [];
 
     private static ImmutableArray<string> Members(JsonElement lists, string name) =>
         [.. lists.GetProperty(name).EnumerateArray().Select(static member => member.GetString()!)];
