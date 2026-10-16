@@ -198,7 +198,7 @@ public sealed class RuntimeChangeTable
     /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
     /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c>, a <c>precondition</c>
     /// that is not one of <see cref="RuntimeChangePrecondition"/>'s names (ticket P2-073) or a <c>requires</c> that is not
-    /// one of <see cref="RowPrecondition"/>'s JSON names (tickets P2-114 and P2-190).
+    /// one of <see cref="RowPrecondition"/>'s JSON names (tickets P2-114, P2-190 and P2-216).
     /// </summary>
     internal static RuntimeChangeTable Parse(Stream stream)
     {
@@ -331,6 +331,8 @@ public sealed class RuntimeChangeTable
             "staticFieldSet" => RowPrecondition.StaticFieldSet,
             "utf8Decoding" => RowPrecondition.Utf8Decoding,
             "defaultShellExecute" => RowPrecondition.DefaultShellExecute,
+            "foreignProcess" => RowPrecondition.ForeignProcess,
+            "belowNoneIndex" => RowPrecondition.BelowNoneIndex,
             _ => throw new InvalidDataException($"runtime-changes row '{member}' has unknown requires {value.GetRawText()}"),
         };
 

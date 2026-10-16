@@ -1,0 +1,605 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::NewProcessFile(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 30,
+                  "endLine": 10,
+                  "endColumn": 44
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::NewProcessFile(string)",
+            "resultFingerprint/v1": "dc514af33535dd1220c53e304f3632644f63c7e9947074c3edd703ed9d95f524"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ProcessFile(System.Diagnostics.Process) diverges via a runtime-changed API between net48 and net10.0 (Reading StartInfo of a process this code did not start throws InvalidOperationException on .NET instead of returning a placeholder. https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#processstartinfo-throws-invalidoperationexception-for-processes-you-didnt-start): inputs(sort \"System.Diagnostics.Process\" 0, map<sort \"System.Diagnostics.Process\", bool> [] default bool false, map<sort \"System.Diagnostics.ProcessStartInfo\", bool> [sort \"System.Diagnostics.ProcessStartInfo\" 0 -> bool false] default bool true) old(threw \"System.NullReferenceException\" outs() trace(\"System.Diagnostics.Process::get_StartInfo()\"(sort \"System.Diagnostics.Process\" 0))) new(returned sort \"System.String\" 0 outs() trace(\"System.Diagnostics.Process::get_StartInfo()\"(sort \"System.Diagnostics.Process\" 0), \"System.Diagnostics.ProcessStartInfo::get_FileName()\"(sort \"System.Diagnostics.ProcessStartInfo\" 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 16,
+                  "startColumn": 30,
+                  "endLine": 16,
+                  "endColumn": 41
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ProcessFile(System.Diagnostics.Process)",
+            "resultFingerprint/v1": "8a899e35ca28876ec3fcc268f5c97e2718e07010103a5e41ffc2928b0203932b"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(sort \"System.Diagnostics.Process\" 0, map<sort \"System.Diagnostics.Process\", bool> [] default bool false, map<sort \"System.Diagnostics.ProcessStartInfo\", bool> [sort \"System.Diagnostics.ProcessStartInfo\" 0 -> bool false] default bool true) old(threw \"System.NullReferenceException\" outs() trace(\"System.Diagnostics.Process::get_StartInfo()\"(sort \"System.Diagnostics.Process\" 0))) new(returned sort \"System.String\" 0 outs() trace(\"System.Diagnostics.Process::get_StartInfo()\"(sort \"System.Diagnostics.Process\" 0), \"System.Diagnostics.ProcessStartInfo::get_FileName()\"(sort \"System.Diagnostics.ProcessStartInfo\" 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#processstartinfo-throws-invalidoperationexception-for-processes-you-didnt-start",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.Diagnostics.Process::get_StartInfo()"
+            },
+            "reviewGroup": "runtime-change:System.Diagnostics.Process::get_StartInfo("
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::Katakana() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 18,
+                  "startColumn": 30,
+                  "endLine": 18,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::Katakana()",
+            "resultFingerprint/v1": "2040bba69ef25de410a0bf4fae2f0c8df7cad65967ca5ad47a01ca1c45b66c0e"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::Truncated() diverges via a runtime-changed API between net48 and net10.0 (Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them. https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines): inputs(map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 26] default bv8 227, sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 80] default bv8 227, sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 22] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 1048576 -> bv8 227] default bv8 72, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 34] default bv8 72, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 59] default bv8 72] default map<bv32, bv8> [] default bv8 227, map<sort \"byte[]\", bv32> [sort \"byte[]\" 3 -> bv32 0] default bv32 3, map<bv32, sort \"byte[]\"> [bv32 0 -> sort \"byte[]\" 3] default sort \"byte[]\" 6, map<sort \"System.Text.Encoding\", bool> [] default bool false) old(threw \"System.Exception\" outs(map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 97] default bv8 227, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 132] default bv8 72, sort \"byte[]\" 8 -> map<bv32, bv8> [bv32 0 -> bv8 132] default bv8 227, sort \"byte[]\" 9 -> map<bv32, bv8> [bv32 0 -> bv8 224] default bv8 227] default map<bv32, bv8> [] default bv8 227, map<sort \"byte[]\", bv32> [sort \"byte[]\" 3 -> bv32 2] default bv32 3) trace(\"System.Text.Encoding::get_UTF8()\"() heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 26] default bv8 227, sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 80] default bv8 227, sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 22] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 0 -> bv8 227, bv32 1 -> bv8 130] default bv8 0, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 34] default bv8 72, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 59] default bv8 72] default map<bv32, bv8> [] default bv8 227), \"System.Text.Encoding::GetString(byte[])\"(sort \"System.Text.Encoding\" 0, sort \"byte[]\" 3) heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 72] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 2097152 -> bv8 48] default bv8 72, sort \"byte[]\" 7 -> map<bv32, bv8> [bv32 0 -> bv8 16] default bv8 227, sort \"byte[]\" 8 -> map<bv32, bv8> [bv32 0 -> bv8 96] default bv8 227] default map<bv32, bv8> [] default bv8 227))) new(threw \"System.Exception\" outs(map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 140] default bv8 227, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 149] default bv8 72, sort \"byte[]\" 7 -> map<bv32, bv8> [bv32 0 -> bv8 169] default bv8 227, sort \"byte[]\" 9 -> map<bv32, bv8> [bv32 0 -> bv8 2] default bv8 227] default map<bv32, bv8> [] default bv8 227, map<sort \"byte[]\", bv32> [sort \"byte[]\" 3 -> bv32 2] default bv32 3) trace(\"System.Text.Encoding::get_UTF8()\"() heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 26] default bv8 227, sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 80] default bv8 227, sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 22] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 0 -> bv8 227, bv32 1 -> bv8 130] default bv8 0, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 34] default bv8 72, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 59] default bv8 72] default map<bv32, bv8> [] default bv8 227), \"System.Text.Encoding::GetString(byte[])\"(sort \"System.Text.Encoding\" 0, sort \"byte[]\" 3) heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 72] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 2097152 -> bv8 48] default bv8 72, sort \"byte[]\" 7 -> map<bv32, bv8> [bv32 0 -> bv8 16] default bv8 227, sort \"byte[]\" 8 -> map<bv32, bv8> [bv32 0 -> bv8 96] default bv8 227] default map<bv32, bv8> [] default bv8 227)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 30,
+                  "endLine": 27,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::Truncated()",
+            "resultFingerprint/v1": "e46d522785ad3fb45042c6fd5f6310095e593025b4ccc20b571a50ebb34de8b2"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 26] default bv8 227, sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 80] default bv8 227, sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 22] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 1048576 -> bv8 227] default bv8 72, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 34] default bv8 72, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 59] default bv8 72] default map<bv32, bv8> [] default bv8 227, map<sort \"byte[]\", bv32> [sort \"byte[]\" 3 -> bv32 0] default bv32 3, map<bv32, sort \"byte[]\"> [bv32 0 -> sort \"byte[]\" 3] default sort \"byte[]\" 6, map<sort \"System.Text.Encoding\", bool> [] default bool false) old(threw \"System.Exception\" outs(map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 97] default bv8 227, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 132] default bv8 72, sort \"byte[]\" 8 -> map<bv32, bv8> [bv32 0 -> bv8 132] default bv8 227, sort \"byte[]\" 9 -> map<bv32, bv8> [bv32 0 -> bv8 224] default bv8 227] default map<bv32, bv8> [] default bv8 227, map<sort \"byte[]\", bv32> [sort \"byte[]\" 3 -> bv32 2] default bv32 3) trace(\"System.Text.Encoding::get_UTF8()\"() heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 26] default bv8 227, sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 80] default bv8 227, sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 22] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 0 -> bv8 227, bv32 1 -> bv8 130] default bv8 0, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 34] default bv8 72, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 59] default bv8 72] default map<bv32, bv8> [] default bv8 227), \"System.Text.Encoding::GetString(byte[])\"(sort \"System.Text.Encoding\" 0, sort \"byte[]\" 3) heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 72] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 2097152 -> bv8 48] default bv8 72, sort \"byte[]\" 7 -> map<bv32, bv8> [bv32 0 -> bv8 16] default bv8 227, sort \"byte[]\" 8 -> map<bv32, bv8> [bv32 0 -> bv8 96] default bv8 227] default map<bv32, bv8> [] default bv8 227))) new(threw \"System.Exception\" outs(map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 140] default bv8 227, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 149] default bv8 72, sort \"byte[]\" 7 -> map<bv32, bv8> [bv32 0 -> bv8 169] default bv8 227, sort \"byte[]\" 9 -> map<bv32, bv8> [bv32 0 -> bv8 2] default bv8 227] default map<bv32, bv8> [] default bv8 227, map<sort \"byte[]\", bv32> [sort \"byte[]\" 3 -> bv32 2] default bv32 3) trace(\"System.Text.Encoding::get_UTF8()\"() heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 0 -> map<bv32, bv8> [bv32 0 -> bv8 26] default bv8 227, sort \"byte[]\" 1 -> map<bv32, bv8> [bv32 0 -> bv8 80] default bv8 227, sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 22] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 0 -> bv8 227, bv32 1 -> bv8 130] default bv8 0, sort \"byte[]\" 4 -> map<bv32, bv8> [bv32 0 -> bv8 34] default bv8 72, sort \"byte[]\" 5 -> map<bv32, bv8> [bv32 0 -> bv8 59] default bv8 72] default map<bv32, bv8> [] default bv8 227), \"System.Text.Encoding::GetString(byte[])\"(sort \"System.Text.Encoding\" 0, sort \"byte[]\" 3) heap(\"array.byte__\" map<sort \"byte[]\", map<bv32, bv8>> [sort \"byte[]\" 2 -> map<bv32, bv8> [bv32 0 -> bv8 72] default bv8 227, sort \"byte[]\" 3 -> map<bv32, bv8> [bv32 2097152 -> bv8 48] default bv8 72, sort \"byte[]\" 7 -> map<bv32, bv8> [bv32 0 -> bv8 16] default bv8 227, sort \"byte[]\" 8 -> map<bv32, bv8> [bv32 0 -> bv8 96] default bv8 227] default map<bv32, bv8> [] default bv8 227)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.Text.Encoding::GetString(byte[])"
+            },
+            "reviewGroup": "runtime-change:System.Text.Encoding::GetString("
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ShowLastImage(System.Windows.Forms.TreeNode,System.Windows.Forms.ImageList) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 35,
+                  "startColumn": 28,
+                  "endLine": 35,
+                  "endColumn": 41
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ShowLastImage(System.Windows.Forms.TreeNode,System.Windows.Forms.ImageList)",
+            "resultFingerprint/v1": "40bedfc13cf77a0b26c4679ac5a8038d590195dd4040f89fc419193d15131859"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ShowImage(System.Windows.Forms.TreeNode,int) diverges via a runtime-changed API between net48 and net10.0 (Out-of-range values throw ArgumentOutOfRangeException on .NET where other exception types were thrown before. https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentoutofrangeexception): inputs(sort \"System.Windows.Forms.TreeNode\" 0, bv32 0, map<sort \"System.Windows.Forms.TreeNode\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.Windows.Forms.TreeNode::set_ImageIndex(int)\"(sort \"System.Windows.Forms.TreeNode\" 0, bv32 0))) new(returned outs() trace(\"System.Windows.Forms.TreeNode::set_ImageIndex(int)\"(sort \"System.Windows.Forms.TreeNode\" 0, bv32 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 38,
+                  "startColumn": 28,
+                  "endLine": 38,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ShowImage(System.Windows.Forms.TreeNode,int)",
+            "resultFingerprint/v1": "fcba57821ece12cbc63a7a3088e2d9fdb3f948fbf51d1bae998d9e9713b45805"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(sort \"System.Windows.Forms.TreeNode\" 0, bv32 0, map<sort \"System.Windows.Forms.TreeNode\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.Windows.Forms.TreeNode::set_ImageIndex(int)\"(sort \"System.Windows.Forms.TreeNode\" 0, bv32 0))) new(returned outs() trace(\"System.Windows.Forms.TreeNode::set_ImageIndex(int)\"(sort \"System.Windows.Forms.TreeNode\" 0, bv32 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentoutofrangeexception",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.Windows.Forms.TreeNode::set_ImageIndex(int)"
+            },
+            "reviewGroup": "runtime-change:System.Windows.Forms.TreeNode::set_ImageIndex("
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::IsVistaOrNewer() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 40,
+                  "startColumn": 28,
+                  "endLine": 40,
+                  "endColumn": 42
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::IsVistaOrNewer()",
+            "resultFingerprint/v1": "466d585db50d3372995cdfe86a865d96802c241144acb4b51702bbd82b6ab8c5"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::IsWindows10OrNewer() diverges via a runtime-changed API between net48 and net10.0 (OSVersion reports the real Windows version on .NET, while .NET Framework can report a compatibility-shimmed older version. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/environment-osversion-returns-correct-version): inputs(map<sort \"System.OperatingSystem\", bool> [] default bool false, map<sort \"System.Version\", bool> [] default bool false) old(returned bool true outs() trace(\"System.Environment::get_OSVersion()\"(), \"System.OperatingSystem::get_Version()\"(sort \"System.OperatingSystem\" 0), \"System.Version::get_Major()\"(sort \"System.Version\" 0))) new(returned bool false outs() trace(\"System.Environment::get_OSVersion()\"(), \"System.OperatingSystem::get_Version()\"(sort \"System.OperatingSystem\" 1), \"System.Version::get_Major()\"(sort \"System.Version\" 1)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 42,
+                  "startColumn": 28,
+                  "endLine": 42,
+                  "endColumn": 46
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowCallCannotReach.Calls::IsWindows10OrNewer()",
+            "resultFingerprint/v1": "680576c05c68757a9fb55e8a763547dc491dd84bae49357f9afb1d5785a0b502"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(map<sort \"System.OperatingSystem\", bool> [] default bool false, map<sort \"System.Version\", bool> [] default bool false) old(returned bool true outs() trace(\"System.Environment::get_OSVersion()\"(), \"System.OperatingSystem::get_Version()\"(sort \"System.OperatingSystem\" 0), \"System.Version::get_Major()\"(sort \"System.Version\" 0))) new(returned bool false outs() trace(\"System.Environment::get_OSVersion()\"(), \"System.OperatingSystem::get_Version()\"(sort \"System.OperatingSystem\" 1), \"System.Version::get_Major()\"(sort \"System.Version\" 1)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/environment-osversion-returns-correct-version",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "System.Environment::get_OSVersion()"
+            },
+            "reviewGroup": "runtime-change:System.Environment::get_OSVersion("
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 8,
+            "modern": 8
+          },
+          "matchedPairs": 8,
+          "pairsWithoutOpaque": 8,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 4,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 4,
+          "changedPairsWithoutOpaque": 4,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 4
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 10,
+              "modern": 10
+            },
+            "distinctMembers": {
+              "legacy": 5,
+              "modern": 5
+            },
+            "pairsWithAny": {
+              "legacy": 8,
+              "modern": 8
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.Diagnostics.Process::get_StartInfo()",
+                "callSites": 3
+              },
+              {
+                "member": "System.Diagnostics.ProcessStartInfo::get_FileName()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Environment::get_OSVersion()",
+                "callSites": 2
+              },
+              {
+                "member": "System.OperatingSystem::get_Version()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Text.Encoding::GetString(byte[])",
+                "callSites": 2
+              },
+              {
+                "member": "System.Text.Encoding::get_UTF8()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Version::get_Major()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Windows.Forms.TreeNode::set_ImageIndex(int)",
+                "callSites": 2
+              },
+              {
+                "member": "System.Diagnostics.Process::.ctor()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Diagnostics.ProcessStartInfo::set_FileName(string)",
+                "callSites": 1
+              },
+              {
+                "member": "System.Windows.Forms.ImageList.ImageCollection::get_Count()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Windows.Forms.ImageList::get_Images()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Windows.Forms.TreeNode::set_SelectedImageIndex(int)",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.Diagnostics.Process::get_StartInfo()",
+                "callSites": 3
+              },
+              {
+                "member": "System.Diagnostics.ProcessStartInfo::get_FileName()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Environment::get_OSVersion()",
+                "callSites": 2
+              },
+              {
+                "member": "System.OperatingSystem::get_Version()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Text.Encoding::GetString(byte[])",
+                "callSites": 2
+              },
+              {
+                "member": "System.Text.Encoding::get_UTF8()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Version::get_Major()",
+                "callSites": 2
+              },
+              {
+                "member": "System.Windows.Forms.TreeNode::set_ImageIndex(int)",
+                "callSites": 2
+              },
+              {
+                "member": "System.Diagnostics.Process::.ctor()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Diagnostics.ProcessStartInfo::set_FileName(string)",
+                "callSites": 1
+              },
+              {
+                "member": "System.Windows.Forms.ImageList.ImageCollection::get_Count()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Windows.Forms.ImageList::get_Images()",
+                "callSites": 1
+              },
+              {
+                "member": "System.Windows.Forms.TreeNode::set_SelectedImageIndex(int)",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 4,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 53,
+          "modern": 50
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.RuntimeRowCallCannotReach",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.RuntimeRowCallCannotReach",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "runtime-change:System.Diagnostics.Process::get_StartInfo(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ProcessFile(System.Diagnostics.Process)"
+            ]
+          },
+          {
+            "group": "runtime-change:System.Environment::get_OSVersion(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::IsWindows10OrNewer()"
+            ]
+          },
+          {
+            "group": "runtime-change:System.Text.Encoding::GetString(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::Truncated()"
+            ]
+          },
+          {
+            "group": "runtime-change:System.Windows.Forms.TreeNode::set_ImageIndex(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RuntimeRowCallCannotReach.Calls::ShowImage(System.Windows.Forms.TreeNode,int)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

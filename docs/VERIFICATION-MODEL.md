@@ -716,14 +716,18 @@ are lowered and fingerprinted with that one interval. The rules are:
   A row may also `require` a fact about the calling method (ticket P2-114): `asyncStreamOperation`, a call in the
   same method to `ReadAsync`, `WriteAsync`, `BeginRead`, `BeginWrite`, `CopyToAsync` or `FlushAsync` on a `Stream`.
   The `FileStream.get_Position` row requires it, and a method with no such call, whatever stream it reads, does not
-  fire the row. Five more facts (ticket P2-190) are each a call in the method to the row's own member, or to a forwarder
-  to it, that can reach the row's change, read from the call and the method around it: `shimmedVersionRead` for
-  `Environment.OSVersion` (not met by `.Platform`, or `.Version` compared with a constant two-part version no newer than
-  6.2, which .NET Framework's shim never crosses), `signedZeroResult` for `Math.Ceiling(double)` (not met by a result
-  converted to an integer type at once), `staticFieldSet` for `FieldInfo.SetValue` (not met on a field from `GetField` or
-  `GetFields` with constant flags that include `Instance` and not `Static`), `utf8Decoding` for the `Encoding` decoding
-  rows (not met on `Encoding.ASCII`) and `defaultShellExecute` for `Process.Start` (not met by a `ProcessStartInfo` the
-  method shows sets `UseShellExecute` and never sets `WindowStyle`). The header of `runtime-changes.json` has the rules;
+  fire the row. Seven more facts (tickets P2-190 and P2-216) are each a call in the method to the row's own member, or to
+  a forwarder to it, that can reach the row's change, read from the call and the method around it: `shimmedVersionRead`
+  for `Environment.OSVersion` (not met by `.Platform`, `.Version` compared with a constant two-part version no newer than
+  6.2, or `.Version.Major` compared with a constant that answers the same for 6 as for every greater major, which .NET
+  Framework's shim never crosses), `signedZeroResult` for `Math.Ceiling(double)` (not met by a result converted to an
+  integer type at once), `staticFieldSet` for `FieldInfo.SetValue` (not met on a field from `GetField` or `GetFields` with
+  constant flags that include `Instance` and not `Static`), `utf8Decoding` for the `Encoding` and `UTF8Encoding` decoding
+  rows (not met on `Encoding.ASCII`, or on constant bytes the method shows are well-formed UTF-8), `defaultShellExecute`
+  for `Process.Start` (not met by a `ProcessStartInfo` the method shows sets `UseShellExecute` and never sets
+  `WindowStyle`), `foreignProcess` for `Process.StartInfo` (not met on a process the method creates with `new`) and
+  `belowNoneIndex` for `TreeNode`'s image index setters (not met by a value the method shows is at least -2). The header
+  of `runtime-changes.json` has the rules;
 - floating-point to integer conversion, when the interval crosses `net9.0`;
 - x87 floating point, on the side whose project alone runs on the 32-bit .NET Framework JIT. This is
   the one rule that depends on the platform too, so it can apply between two projects on the same

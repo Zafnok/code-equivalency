@@ -215,6 +215,8 @@ public sealed class RuntimeChangeTableTests
     [InlineData("staticFieldSet", RowPrecondition.StaticFieldSet)]
     [InlineData("utf8Decoding", RowPrecondition.Utf8Decoding)]
     [InlineData("defaultShellExecute", RowPrecondition.DefaultShellExecute)]
+    [InlineData("foreignProcess", RowPrecondition.ForeignProcess)]
+    [InlineData("belowNoneIndex", RowPrecondition.BelowNoneIndex)]
     public void EachCallFactParses(string requires, RowPrecondition expected)
     {
         RuntimeChangeTable table = Parse(
@@ -223,13 +225,25 @@ public sealed class RuntimeChangeTableTests
         Assert.Equal(expected, Assert.Single(table.Rows).Requires);
     }
 
-    /// <summary>Ticket P2-190: the six rows whose adjudicated calls could not reach their change, each with the fact it needs.</summary>
+    /// <summary>
+    /// Tickets P2-190 and P2-216: the rows whose adjudicated calls could not reach their change, each with the fact it needs.
+    /// The UTF-8 decoding rows of <c>UTF8Encoding</c> need it too since P2-216, as well-formed bytes decode the same there.
+    /// </summary>
     [Theory]
     [InlineData(RowPrecondition.ShimmedVersionRead, "System.Environment::get_OSVersion(")]
     [InlineData(RowPrecondition.SignedZeroResult, "System.Math::Ceiling(double)")]
     [InlineData(RowPrecondition.StaticFieldSet, "System.Reflection.FieldInfo::SetValue(")]
-    [InlineData(RowPrecondition.Utf8Decoding, "System.Text.Encoding::GetCharCount(", "System.Text.Encoding::GetChars(", "System.Text.Encoding::GetString(")]
+    [InlineData(
+        RowPrecondition.Utf8Decoding,
+        "System.Text.UTF8Encoding::GetCharCount(",
+        "System.Text.UTF8Encoding::GetChars(",
+        "System.Text.UTF8Encoding::GetString(",
+        "System.Text.Encoding::GetCharCount(",
+        "System.Text.Encoding::GetChars(",
+        "System.Text.Encoding::GetString(")]
     [InlineData(RowPrecondition.DefaultShellExecute, "System.Diagnostics.Process::Start(")]
+    [InlineData(RowPrecondition.ForeignProcess, "System.Diagnostics.Process::get_StartInfo(")]
+    [InlineData(RowPrecondition.BelowNoneIndex, "System.Windows.Forms.TreeNode::set_ImageIndex(", "System.Windows.Forms.TreeNode::set_SelectedImageIndex(")]
     public void TheRowsRequiringACallFact(RowPrecondition fact, params string[] members)
     {
         Assert.Equal<string>(members, RuntimeChangeTable.Load().MembersRequiring(fact), StringComparer.Ordinal);

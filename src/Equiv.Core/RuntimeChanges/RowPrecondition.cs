@@ -13,9 +13,10 @@ public enum RowPrecondition
     AsyncStreamOperation,
 
     /// <summary>
-    /// The method reads the member's <c>OperatingSystem</c> other than as <c>.Platform</c>, or as <c>.Version</c> compared
-    /// with a constant two-part version no newer than 6.2, which the compatibility shim's 6.2.9200 never crosses; JSON
-    /// <c>shimmedVersionRead</c>.
+    /// The method reads the member's <c>OperatingSystem</c> other than as <c>.Platform</c>, as <c>.Version</c> compared
+    /// with a constant two-part version no newer than 6.2, which the compatibility shim's 6.2.9200 never crosses, or as
+    /// <c>.Version.Major</c> compared with a constant that gives the same answer for the shim's 6 as for every major from 6 up
+    /// (ticket P2-216); JSON <c>shimmedVersionRead</c>.
     /// </summary>
     ShimmedVersionRead,
 
@@ -29,7 +30,10 @@ public enum RowPrecondition
     /// </summary>
     StaticFieldSet,
 
-    /// <summary>The method calls the member on an encoding the method does not show is <c>Encoding.ASCII</c>; JSON <c>utf8Decoding</c>.</summary>
+    /// <summary>
+    /// The method calls the member on an encoding the method does not show is <c>Encoding.ASCII</c>, with bytes the method
+    /// does not show are constants that form well-formed UTF-8 (ticket P2-216); JSON <c>utf8Decoding</c>.
+    /// </summary>
     Utf8Decoding,
 
     /// <summary>
@@ -37,4 +41,17 @@ public enum RowPrecondition
     /// set and <c>WindowStyle</c> left alone; JSON <c>defaultShellExecute</c>.
     /// </summary>
     DefaultShellExecute,
+
+    /// <summary>
+    /// The method reads the member on a <c>Process</c> it does not show it created with <c>new</c>: only a process this code
+    /// did not start, one <c>GetProcesses</c> or <c>GetProcessById</c> returns, has no <c>StartInfo</c> to read (ticket
+    /// P2-216); JSON <c>foreignProcess</c>.
+    /// </summary>
+    ForeignProcess,
+
+    /// <summary>
+    /// The method sets the member to a value it does not show is at least -2, <c>ImageList.Indexer.NoneIndex</c>, below which
+    /// alone .NET throws (ticket P2-216); JSON <c>belowNoneIndex</c>.
+    /// </summary>
+    BelowNoneIndex,
 }
