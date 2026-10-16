@@ -1,5 +1,5 @@
 # P2-220 Precision: three row exclusions need data flow from another method
-Status: in-progress
+Status: done (PR #531)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
