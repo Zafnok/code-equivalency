@@ -491,7 +491,18 @@ internal static class ValidPaths
                 .SelectMany(static method => method.DeclaringSyntaxReferences)
                 .Select(declaration => Body(declaration, compilation))
                 .OfType<IOperation>()
-                .SelectMany(body => LocalValues.Writes(member, body)));
+                .SelectMany(body => LocalValues.Writes(Declared(member, body.SemanticModel!.Compilation), body)));
+
+    /// <summary>
+    /// <paramref name="member"/> as <paramref name="compilation"/>, the one whose source holds its declaration, declares it. A
+    /// project referenced as source is seen through retargeting symbols when it was compiled against other versions of the
+    /// assemblies the caller's project references, and those equal none of its own (ticket P2-232).
+    /// </summary>
+    private static ISymbol Declared(ISymbol member, Compilation compilation)
+    {
+        SyntaxReference declaration = member.DeclaringSyntaxReferences[0];
+        return compilation.GetSemanticModel(declaration.SyntaxTree).GetDeclaredSymbol(declaration.GetSyntax())!;
+    }
 
     /// <summary>
     /// The values the <c>return</c> statements of <paramref name="operation"/> return, leaving out those of the lambdas and

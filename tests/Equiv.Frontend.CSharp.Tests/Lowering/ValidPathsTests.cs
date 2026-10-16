@@ -340,6 +340,27 @@ public sealed class ValidPathsTests
     }
 
     /// <summary>
+    /// Ticket P2-232: a project referenced as source is seen through retargeting symbols when it was compiled against another
+    /// version of an assembly the caller's project references (Git Extensions' <c>GitUI</c> sees <c>GitCommands</c> so). The
+    /// member read is matched to the writes in its own project by its declaration, not by symbol identity.
+    /// </summary>
+    [Fact]
+    public void AStoredPathInAProjectSeenThroughRetargetingIsRead()
+    {
+        Compilation oldDependency = RoslynTestCompilations.Compile("[assembly: System.Reflection.AssemblyVersion(\"1.0.0.0\")]\npublic sealed class Dependency { }", "Dependency");
+        Compilation newDependency = RoslynTestCompilations.Compile("[assembly: System.Reflection.AssemblyVersion(\"2.0.0.0\")]\npublic sealed class Dependency { }", "Dependency");
+        Compilation library = RoslynTestCompilations.Compile(
+            "public sealed class Module { public Module(Dependency d) { WorkingDir = System.AppContext.BaseDirectory; } public string WorkingDir { get; } }", [oldDependency.ToMetadataReference()], "Library");
+        Compilation app = RoslynTestCompilations.Compile(
+            "class C { static object M(Module m) => new System.IO.StreamReader(m.WorkingDir); }", [library.ToMetadataReference(), newDependency.ToMetadataReference()], "App");
+        IMethodSymbol method = app.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+        CompilationReference reference = app.References.OfType<CompilationReference>().Single(reference => reference.Compilation == library);
+
+        Assert.False(SymbolEqualityComparer.Default.Equals(app.GetAssemblyOrModuleSymbol(reference), library.Assembly));
+        Assert.DoesNotContain(Calls(IrLowerer.Lower(method, app, RenameMap.Empty, [], Runtimes.Migration)), static call => call.Callee.RuntimeChanged);
+    }
+
+    /// <summary>
     /// Ticket P2-217: a listed guard on a field or auto-property read guards a later read of the same member on the same
     /// receiver (<c>this</c>, a parameter nothing assigns, or none for a static member) when nothing between them runs code
     /// or writes the member, as Duplicati's <c>TearDown</c> and <c>TempFile.Dispose</c> do.
