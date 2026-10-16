@@ -682,9 +682,10 @@ Migration-specific normalisations (applied to both sides before matching):
   `runtime-changes.json` has the exact shapes. Ticket P2-201 reads a `readonly` field or a get-only
   auto-property of a class the same way, through its initializer and every write in a constructor or
   `init` accessor of its type, the only places the language lets such a member be written. Ticket
-  P2-217 reads a field or an auto-property of `this`, of a parameter nothing assigns, or static, where
-  a guard has returned true for the same member of the same receiver and nothing between the guard and
-  the read runs code or writes the member, so both reads return one value. A path that came from a
+  P2-217 reads a field or an auto-property of a class's `this`, of a parameter passed by value that
+  nothing assigns, or static, where a guard has returned true for the same member of the same receiver
+  and nothing between the guard and the read runs code or writes the member, so both reads return one
+  value. A path that came from a
   caller is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
