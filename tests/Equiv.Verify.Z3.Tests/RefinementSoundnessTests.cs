@@ -218,6 +218,47 @@ public sealed class RefinementSoundnessTests
     }
 
     /// <summary>
+    /// A NaN stored in a <c>double</c> field, on one side as given and on the other narrowed to <c>float</c> and widened
+    /// back, and then a call that reads the heap (ticket P2-227): the two maps hold one NaN, so the call is given one map.
+    /// </summary>
+    [Fact]
+    public void ACallGivenAHeapHoldingANaNIsGivenOneNaN()
+    {
+        string direct =
+            $"""
+            proc "T::M(double)" (%a: {Double}, ref %field.C.d: map<sort "C", {Double}>, %this: sort "C") -> bv32 entry B0
+            B0:
+              %n: bool = pure "f64.ne"(%a, %a)
+              br %n, B1, B2
+            B1:
+              %d1: map<sort "C", {Double}> = mapwrite %field.C.d, %this, %a
+              %i: bv32 = call "Sink::F()"() heap("field.C.d" %d1 -> %d2: map<sort "C", {Double}>)
+              ret %i outs(%field.C.d = %d2)
+            B2:
+              %k: bv32 = const bv32 0
+              ret %k outs(%field.C.d = %field.C.d)
+            """;
+        string converted =
+            $"""
+            proc "T::M(double)" (%a: {Double}, ref %field.C.d: map<sort "C", {Double}>, %this: sort "C") -> bv32 entry B0
+            B0:
+              %n: bool = pure "f64.ne"(%a, %a)
+              br %n, B1, B2
+            B1:
+              %f: sort "System.Single" = pure "conv.f64.f32"(%a)
+              %s: {Double} = pure "conv.f32.f64"(%f)
+              %d1: map<sort "C", {Double}> = mapwrite %field.C.d, %this, %s
+              %i: bv32 = call "Sink::F()"() heap("field.C.d" %d1 -> %d2: map<sort "C", {Double}>)
+              ret %i outs(%field.C.d = %d2)
+            B2:
+              %k: bv32 = const bv32 0
+              ret %k outs(%field.C.d = %field.C.d)
+            """;
+
+        Assert.IsType<Equivalent>(new Z3Backend().Verify(IrText.Parse(direct), IrText.Parse(converted), Options));
+    }
+
+    /// <summary>
     /// The seed's pair: the old side truncates <c>%v0</c> twice, the new side <c>%v0 - %v1</c> once. With
     /// <paramref name="first"/>, <c>%v0</c> is that constant and <c>%v1</c> the one parameter.
     /// </summary>
