@@ -697,6 +697,16 @@ public sealed class ValidPathsTests
         + "public string WorkingDir { get; }\n}\n"
         + "class C\n{\nstatic void M(GitModule m) => " + call + "(m.WorkingDir);\n}\n")).Any(static call => call.Callee.RuntimeChanged));
 
+    /// <summary>
+    /// Ticket P2-232: an iterator's <c>yield break</c> returns no value, so a callee that is an iterator is read as returning
+    /// only what it yields; the null failed the empty-string check. <c>WriteAllLines</c>'s row
+    /// has no precondition, so its call lowers flagged; every argument is still read for a valid path.
+    /// </summary>
+    [Fact]
+    public void AnIteratorsYieldBreakReturnsNoValue() => Assert.Equal(
+        ["System.IO.File::WriteAllLines(string,System.Collections.Generic.IEnumerable<string>)"],
+        Flagged("static System.Collections.Generic.IEnumerable<string> Lines() { yield break; }\nstatic void M() => File.WriteAllLines(AppContext.BaseDirectory + \"x\", Lines());"));
+
     private static bool Flags(string member) => Flagged(member).Length > 0;
 
     /// <summary>The members of the calls <c>M</c> makes that a row flags, in order of their names.</summary>

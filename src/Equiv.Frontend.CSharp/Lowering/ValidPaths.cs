@@ -506,11 +506,11 @@ internal static class ValidPaths
 
     /// <summary>
     /// The values the <c>return</c> statements of <paramref name="operation"/> return, leaving out those of the lambdas and
-    /// local functions in it. A string-valued body, the only one a path is read from, has a value at each.
+    /// local functions in it. An iterator's <c>yield break</c> returns none, and adds nothing (ticket P2-232).
     /// </summary>
     private static IEnumerable<IOperation> Returned(IOperation operation) => operation switch
     {
-        IReturnOperation returned => [returned.ReturnedValue!],
+        IReturnOperation { ReturnedValue: { } returned } => [returned],
         IAnonymousFunctionOperation or ILocalFunctionOperation => [],
         _ => operation.ChildOperations.SelectMany(Returned),
     };

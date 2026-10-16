@@ -137,3 +137,7 @@ Device-path prefixes (P2-130's undetermined four). P2-228's fields filled on fir
   besides its interface call, `GitDirectoryResolver.Resolve` returns a path read from a `.git` file (P2-218's Notes). P2-228's
   row 52 (`ConfigFileSettings::CreateLocal`) has no result in either run of this pair. The P2-208 run's time was on another
   day's load; the two runs here differ by 6 s, one run each, not attributed.
+- Found by P2-218's rerun and fixed here (cherry-picked): `Returned` gave an iterator's `yield break` as a null value, and
+  this ticket's empty-string reading reads every returned value, so a callee that is an iterator reached by that
+  reading threw instead of lowering. A return with no value now adds nothing; `AnIteratorsYieldBreakReturnsNoValue`
+  covers it. None of this ticket's runs reached such a callee.
