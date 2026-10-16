@@ -1330,6 +1330,11 @@ They come before any other open ticket, in this order:
    OpenRA's `InitializeSettings`, a field filled on first use; row 62 has no sound route) and P2-229
    (S, 1 and OpenRA's `Select`, a listing of a valid directory), with P2-230 (S, soundness: a guard on
    a primary constructor's parameter).
+   P2-208 took none of its 3 off EQ006 (2 more results outside the samples became Equivalent, one of them the
+   2026-10-15 verdict's #28) through a local function read as a callee, `Path.GetRandomFileName` and a constant
+   joined to a valid path; #51's test-case parameter and OpenRA's #8 need a public method's callers and are recorded
+   as not followed, and #55 is P2-232 (M, 1, a trailing separator, an empty string, a callee's returned parameter),
+   with P2-233 (S, soundness: a guard trusted in a local function called before it).
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
    migrations. P2-184 cleared 7 of the 8 on Git Extensions and OpenRA (the eighth is P2-181's) and
    left two tickets for sample Divergents that ADR 0056's taint now reaches: P2-210 (S, a rewritten
@@ -1371,7 +1376,8 @@ false positives and Unknowns that verdict counts against each, they come before 
    of P2-192's results), which a default run cannot show without it.
 2. Valid paths, 16 false EQ006: P2-218 (M, 5, five routes no done ticket follows), P2-207 (M, 4; done,
    all four still EQ006: three are P2-228's and P2-229's, `AvatarImageCachePath` has no sound route), P2-217 (M, 4, a
-   `File.Exists` guard on a member read again; its two left are P2-222 and P2-223), P2-208 (M, 3).
+   `File.Exists` guard on a member read again; its two left are P2-222 and P2-223), P2-208 (M, 3; done: #28 is Equivalent, OpenRA's #1
+   and #13 are recorded as not followed).
 3. Rows that cannot reach their change, 8 false EQ006: P2-216 (M, 5, five rows), P2-220 (M, 2, and P2-190's kept
    `OAuthHttpClient::.cctor()`: an exclusion from another method's data flow), P2-219 (S, 1, the RSA XML rows that
    .NET Core 3.0 implements). P2-216 took four of its five and filed the fifth, an ordinal comparison a solution getter
