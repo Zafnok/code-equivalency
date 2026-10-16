@@ -1,4 +1,4 @@
-# P2-222 Precision: a migration that sets `UseShellExecute` to .NET Framework's default is still EQ006
+# P2-225 Precision: a migration that sets `UseShellExecute` to .NET Framework's default is still EQ006
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

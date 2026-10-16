@@ -53,7 +53,7 @@ Path rows (P2-207, P2-208, P2-217, P2-218).
   new (`foreignProcess`, `belowNoneIndex`) and two widened (`utf8Decoding`, `shimmedVersionRead`). Alternatives: a
   per-call `precondition` (P2-190's first decision says why not: a receiver's history and a setter's value are no
   operand of the call site the lowering hands `CallIdentityFactory`). Rule: 1.
-- Decision: the ordinal-comparison shape (`UsnJournalService::IsPathEnumerated`) -> not taken, filed as P2-221. Its
+- Decision: the ordinal-comparison shape (`UsnJournalService::IsPathEnumerated`) -> not taken, filed as P2-224. Its
   `StringComparison` is `Utility.ClientFilenameStringComparison`, a getter of another class whose body is
   `IsFSCaseSensitive ? Ordinal : OrdinalIgnoreCase`: reading it is data flow beyond one method, the size guard.
   Alternatives: P2-200's callee reading now (the size guard says file it). Rule: 4.
@@ -115,15 +115,15 @@ Path rows (P2-207, P2-208, P2-217, P2-218).
 
   | Pair | Procedure | Row | Baseline | After |
   |---|---|---|---|---|
-  | gitextensions-8522 | `ResourceManager.LinkFactory::ExecuteLink(...)` | `Process::get_StartInfo(` | EQ006 | EQ006, on `Process::Start(` (P2-222) |
+  | gitextensions-8522 | `ResourceManager.LinkFactory::ExecuteLink(...)` | `Process::get_StartInfo(` | EQ006 | EQ006, on `Process::Start(` (P2-225) |
   | gitextensions-8522 | `GitCommandsTests.Git.EncodingHelperTest::DecodeStringTestUtf8()` | `Encoding::GetString(` | EQ006 | EQ001 (congruence) |
   | gitextensions-8522 | `SettingsTreeViewUserControl::AddPage(...)` | `TreeNode::set_ImageIndex(`, `set_SelectedImageIndex(` | EQ006 | EQ001 (congruence) |
   | gitextensions-8522 | `GitUI.UserControls.ExListView::.ctor()` | `Environment::get_OSVersion(` | EQ006 | EQ001 (congruence) |
-  | duplicati-3124 | `UsnJournalService::IsPathEnumerated(string)` | `String::Equals(string,StringComparison)` | EQ006 | EQ006 (not taken, P2-221) |
+  | duplicati-3124 | `UsnJournalService::IsPathEnumerated(string)` | `String::Equals(string,StringComparison)` | EQ006 | EQ006 (not taken, P2-224) |
 
   `ExecuteLink` no longer stops on the `StartInfo` row: the legacy side's `process.Start()` reads `UseShellExecute`'s
   .NET Framework default, `true`, which the modern side sets explicitly, so the pair is equivalent but the `Process.Start`
-  row's change is reachable on the legacy call. No ticket owned that, so P2-222 is filed for it.
+  row's change is reachable on the legacy call. No ticket owned that, so P2-225 is filed for it.
 - Criterion 3, every other result that moved. `duplicati-3124`: none (EQ006 117, EQ002 23, EQ003 322 on both).
   `gitextensions-8522`: EQ006 137 to 132, EQ002 23 to 24, EQ003 575 to 574, EQ001 12,876 to 12,881. Besides the three
   above, each read by hand:

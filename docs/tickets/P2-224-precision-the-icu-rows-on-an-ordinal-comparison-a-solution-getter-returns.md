@@ -1,4 +1,4 @@
-# P2-221 Precision: the ICU rows fire on an ordinal comparison a solution getter returns
+# P2-224 Precision: the ICU rows fire on an ordinal comparison a solution getter returns
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
