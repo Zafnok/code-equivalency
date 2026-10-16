@@ -77,18 +77,7 @@ internal sealed class Definitions : IDisposable
         {
             if (ground && seen.Add(node.Id))
             {
-                Z3_ast_kind kind = node.ASTKind;
-                ground = kind is Z3_ast_kind.Z3_APP_AST or Z3_ast_kind.Z3_NUMERAL_AST;
-                if (defined.TryGetValue(node.Id, out List<int>? definitions))
-                {
-                    used.UnionWith(definitions);
-                }
-
-                uint arguments = kind == Z3_ast_kind.Z3_APP_AST ? node.NumArgs : 0;
-                for (uint i = 0; i < arguments; i++)
-                {
-                    pending.Push(node.Arg(i));
-                }
+                ground = Visit(node, used, pending);
             }
 
             if (!ReferenceEquals(node, term))
@@ -98,5 +87,26 @@ internal sealed class Definitions : IDisposable
         }
 
         return ground ? [.. used] : null;
+    }
+
+    /// <summary>
+    /// Adds the definitions of the constant <paramref name="node"/> is, if any, to <paramref name="used"/>, and its
+    /// arguments to <paramref name="pending"/>; whether it is an application or a numeral.
+    /// </summary>
+    private bool Visit(Expr node, SortedSet<int> used, Stack<Expr> pending)
+    {
+        Z3_ast_kind kind = node.ASTKind;
+        if (defined.TryGetValue(node.Id, out List<int>? definitions))
+        {
+            used.UnionWith(definitions);
+        }
+
+        uint arguments = kind == Z3_ast_kind.Z3_APP_AST ? node.NumArgs : 0;
+        for (uint i = 0; i < arguments; i++)
+        {
+            pending.Push(node.Arg(i));
+        }
+
+        return kind is Z3_ast_kind.Z3_APP_AST or Z3_ast_kind.Z3_NUMERAL_AST;
     }
 }
