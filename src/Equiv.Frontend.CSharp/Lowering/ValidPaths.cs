@@ -44,9 +44,10 @@ internal static class ValidPaths
     /// How many calls deep a returned value is followed into the solution's own bodies (ticket P2-200), a field's stored
     /// values counting as one call (ticket P2-201). The deepest chain
     /// in the corpus is three, from a sealed snapshot class's override through a nested type's method to a helper ending
-    /// in <c>Path.GetFullPath</c>; the bound keeps the work per argument small, recursion included.
+    /// in <c>Path.GetFullPath</c>; the bound keeps the work per argument small, recursion included. A row's guard is read
+    /// to the same depth (ticket P2-220).
     /// </summary>
-    private const int CalleeDepth = 4;
+    internal const int CalleeDepth = 4;
 
     /// <summary>
     /// The operations that run no code and write nothing (ticket P2-217); <see cref="Quiet"/> reads operators, field reads
@@ -308,15 +309,29 @@ internal static class ValidPaths
     /// </summary>
     private static bool ReturnsOnlyValidPaths(IMethodSymbol method, IOperation? receiver, Compilation compilation, int depth) =>
         depth < CalleeDepth
-        && Dispatched(method, receiver) is
+        && ReturnedValues(method, receiver, compilation) is [_, ..] returned
+        && returned.All(value => IsValid(value, [], value.SemanticModel!.Compilation, depth + 1));
+
+    /// <summary>
+    /// The values returned by the body that a call to <paramref name="method"/> on <paramref name="receiver"/> runs, when that
+    /// body is one of the solution's own methods or property getters, or a local function that <see cref="ReadsNothingAround"/>,
+    /// each read with the compilation whose source holds it (tickets P2-188, P2-200 and P2-208; a row's guard, ticket P2-220).
+    /// Empty when the body is not known, or returns nothing, an auto-property's getter among them.
+    /// </summary>
+    internal static ImmutableArray<IOperation> ReturnedValues(IMethodSymbol method, IOperation? receiver, Compilation compilation) =>
+        Dispatched(method, receiver) is
         {
             MethodKind: MethodKind.Ordinary or MethodKind.PropertyGet or MethodKind.LocalFunction,
             DeclaringSyntaxReferences: [SyntaxReference declaration],
         }
         && Body(declaration, compilation) is { } body
         && ReadsNothingAround(body)
-        && (body is ILocalFunctionOperation ? body.ChildOperations.SelectMany(Returned) : Returned(body)).ToImmutableArray() is [_, ..] returned
-        && returned.All(value => IsValid(value, [], body.SemanticModel!.Compilation, depth + 1));
+            ? [.. ReturnedBy(body)]
+            : [];
+
+    /// <summary>The values <paramref name="body"/> returns: a local function's own <c>return</c> statements, or a member's.</summary>
+    private static IEnumerable<IOperation> ReturnedBy(IOperation body) =>
+        body is ILocalFunctionOperation ? body.ChildOperations.SelectMany(Returned) : Returned(body);
 
     /// <summary>
     /// Whether <paramref name="body"/> reads no local variable or parameter of a method around it (ticket P2-208): true for
@@ -425,7 +440,7 @@ internal static class ValidPaths
 
     /// <summary>
     /// The values the <c>return</c> statements of <paramref name="operation"/> return, leaving out those of the lambdas and
-    /// local functions in it. A string-valued body, the only one a path is read from, has a value at each.
+    /// local functions in it. A valued body, the only one a path or a guard is read from, has a value at each.
     /// </summary>
     private static IEnumerable<IOperation> Returned(IOperation operation) => operation switch
     {

@@ -114,7 +114,9 @@ public sealed class IlLowererTests
     /// lowering null-checks the literal receiver, a path that ends before any call, and the IL lowering does not (ticket
     /// P2-126). They are known differences of <c>IlLoweringParityTests</c> too. After them is a <c>new long?(x)</c>: the
     /// IOperation lowering reads a <c>cast</c> input, as it does for the conversion, and the IL calls the constructor
-    /// (ticket P2-095).
+    /// (ticket P2-095). The last two are <c>Type.GetType(...) != null</c>: the IOperation lowering reads the result's
+    /// <c>null.System.Type</c> shadow, and the IL lowering applies <c>System.Type</c>'s <c>op_Inequality</c>, which the
+    /// compiler calls (ticket P2-234).
     /// </summary>
     private static readonly string[] KnownCalleeDifferences =
     [
@@ -122,6 +124,8 @@ public sealed class IlLowererTests
         "lone-surrogate-constant/legacy Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",
         "lone-surrogate-constant/modern Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",
         "il-fallback/legacy Equiv.Samples.IlFallback.Nullables::Wrap(int)",
+        "runtime-row-call-cannot-reach/legacy Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()",
+        "runtime-row-call-cannot-reach/modern Equiv.Samples.RuntimeRowCallCannotReach.Calls::get_IsMono()",
     ];
 
     /// <summary>The Design's pitfall: the instruction's sign decides the division, not its operands' C# types.</summary>

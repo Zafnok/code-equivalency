@@ -1381,7 +1381,9 @@ false positives and Unknowns that verdict counts against each, they come before 
 3. Rows that cannot reach their change, 8 false EQ006: P2-216 (M, 5, five rows), P2-220 (M, 2, and P2-190's kept
    `OAuthHttpClient::.cctor()`: an exclusion from another method's data flow), P2-219 (S, 1, the RSA XML rows that
    .NET Core 3.0 implements). P2-216 took four of its five and filed the fifth, an ordinal comparison a solution getter
-   returns, as P2-224 (M, 1). In thorough mode only, P2-226 (M, 1, filed by P2-211): the `StringBuilder` append rows
+   returns, as P2-224 (M, 1). P2-220 took `OAuthHttpClient::.cctor()` through its `IsMono` guard read in the getter and
+   recorded the other two as not taken (the cache filler needs a public constructor's every caller, and `MaxLineWidth`'s
+   own result differs), with P2-234 (S, soundness: a user-defined `== null` lowered as a null test). In thorough mode only, P2-226 (M, 1, filed by P2-211): the `StringBuilder` append rows
    fire in the IL pass, which applies no `requires` fact, on an append no hole can reach.
 4. The EQ002 causes, 13 false positives: P2-193 (S, 4), P2-185 (2), P2-186 (2), P2-211 (1, the upgrades' last),
    P2-187, P2-097, P2-205, P2-206 (1 each).

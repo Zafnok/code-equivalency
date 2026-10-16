@@ -54,6 +54,10 @@ internal static class RowPreconditions
     private const string GetField = "System.Type::GetField(string,System.Reflection.BindingFlags)";
     private const string GetFields = "System.Type::GetFields(System.Reflection.BindingFlags)";
     private const string StartWithInfo = "System.Diagnostics.Process::Start(System.Diagnostics.ProcessStartInfo)";
+    private const string GetTypeByName = "System.Type::GetType(string)";
+
+    /// <summary>The type Mono's core library defines and neither .NET Framework's nor .NET's does: the usual test for running on Mono.</summary>
+    private const string MonoRuntime = "Mono.Runtime";
 
     /// <summary>
     /// <paramref name="suppressed"/>, and the members of the rows whose <see cref="RowPrecondition"/> does not hold of a method
@@ -72,7 +76,7 @@ internal static class RowPreconditions
         FrozenSet<string> names = rows.Select(static row => SimpleName(row.Member)).ToFrozenSet(StringComparer.Ordinal);
         ImmutableArray<(IOperation Site, string Callee)> calls = [.. operations.SelectMany(site => Callees(site, compilation, names).Select(callee => (site, callee)))];
         IEnumerable<string> unreached = rows
-            .Where(row => !calls.Any(call => call.Callee.StartsWith(row.Member, StringComparison.Ordinal) && Reaches(row.Fact, call.Site)))
+            .Where(row => !calls.Any(call => call.Callee.StartsWith(row.Member, StringComparison.Ordinal) && Reaches(row.Fact, call.Site, compilation)))
             .Select(static row => row.Member);
         return [.. suppressed.Union(asyncStream.Concat(unreached), StringComparer.Ordinal)];
     }
@@ -99,12 +103,12 @@ internal static class RowPreconditions
     }
 
     /// <summary>Whether the call <paramref name="site"/> makes to a row's member can reach the change of a row that requires <paramref name="fact"/>.</summary>
-    private static bool Reaches(RowPrecondition fact, IOperation site) => fact switch
+    private static bool Reaches(RowPrecondition fact, IOperation site, Compilation compilation) => fact switch
     {
         RowPrecondition.ShimmedVersionRead => !IsUnshimmedRead(site),
         RowPrecondition.SignedZeroResult => !(site.Parent is IConversionOperation conversion && IsIntegral(conversion.Type!)),
         // The members of both are instance methods, which no forwarder calls: an invocation of one has a receiver.
-        RowPrecondition.StaticFieldSet => !(site is IInvocationOperation field && LocalValues.HoldsOnly(field.Instance!, IsInstanceField)),
+        RowPrecondition.StaticFieldSet => !(site is IInvocationOperation field && LocalValues.HoldsOnly(field.Instance!, IsInstanceField)) && !RunsOnlyOnMono(site, compilation),
         RowPrecondition.Utf8Decoding => !(site is IInvocationOperation decoding && (LocalValues.HoldsOnly(decoding.Instance!, IsAscii) || ConstantUtf8.IsWellFormed(decoding))),
         RowPrecondition.DefaultShellExecute => !(site is IInvocationOperation call && IsName(call.TargetMethod, StartWithInfo) && SetsShellExecute(call.Arguments[0].Value, call)),
         // StartInfo is an instance property, which only a reference to it reads, and that reference has a receiver.
@@ -194,6 +198,54 @@ internal static class RowPreconditions
             && IsInstanceLookup(collection, GetFields)),
         _ => false,
     };
+
+    /// <summary>
+    /// Whether <paramref name="site"/> lies in the branch an <c>if</c> or a conditional expression takes when its condition is a
+    /// <see cref="IsMonoCheck"/> (ticket P2-220), false on .NET Framework and on .NET, so that the site never runs on either.
+    /// A lambda or a local function in that branch is created or called only from it, so a site in one never runs either.
+    /// </summary>
+    private static bool RunsOnlyOnMono(IOperation site, Compilation compilation)
+    {
+        for (IOperation inner = site; inner.Parent is { } outer; inner = outer)
+        {
+            if (outer is IConditionalOperation conditional && conditional.WhenTrue == inner && IsMonoCheck(conditional.Condition, compilation, depth: 0))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// A test for running on Mono (ticket P2-220): <c>Type.GetType("Mono.Runtime") != null</c>, or a read of one of the
+    /// solution's properties whose getter, the one that runs, returns only such tests, followed as a returned call is
+    /// (ticket P2-200) while <paramref name="depth"/> is under <see cref="ValidPaths.CalleeDepth"/>. Each getter is read
+    /// with the compilation whose source holds it; a property with no body known returns nothing to read.
+    /// </summary>
+    private static bool IsMonoCheck(IOperation condition, Compilation compilation, int depth) => condition switch
+    {
+        IBinaryOperation { OperatorKind: BinaryOperatorKind.NotEquals } check =>
+            IsMonoLookup(check.LeftOperand, check.RightOperand) || IsMonoLookup(check.RightOperand, check.LeftOperand),
+        // A property read for its value has a getter.
+        IPropertyReferenceOperation property =>
+            depth < ValidPaths.CalleeDepth
+            && ValidPaths.ReturnedValues(property.Property.GetMethod!, property.Instance, compilation) is [_, ..] returned
+            && returned.All(value => IsMonoCheck(value, value.SemanticModel!.Compilation, depth + 1)),
+        _ => false,
+    };
+
+    /// <summary>
+    /// <paramref name="lookup"/> is <c>Type.GetType("Mono.Runtime")</c> and <paramref name="other"/> is <c>null</c>. The lookup
+    /// searches the assembly that makes it and the core library, so it returns null on .NET Framework and on .NET when no
+    /// assembly the compilation that makes it references, its own included, defines the type.
+    /// </summary>
+    private static bool IsMonoLookup(IOperation lookup, IOperation other) =>
+        Unconverted(other).ConstantValue is { HasValue: true, Value: null }
+        && Unconverted(lookup) is IInvocationOperation call
+        && IsName(call.TargetMethod, GetTypeByName)
+        && call.Arguments[0].Value.ConstantValue.Value is MonoRuntime
+        && call.SemanticModel!.Compilation.GetTypesByMetadataName(MonoRuntime).IsEmpty;
 
     private static bool IsInstanceLookup(IInvocationOperation call, string lookup) =>
         IsName(call.TargetMethod, lookup)
