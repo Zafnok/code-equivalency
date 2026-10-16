@@ -87,3 +87,8 @@ The routes P2-207, P2-208 and P2-232 own.
 - `equiv-adr` bar test: third row. Both rules apply the valid-path catalogue's existing reading (ADR 0019 is not
   touched: no callee is assumed anything new) to a new value shape; recorded here, as P2-201 and P2-208 recorded theirs.
   #26's, #32's and #41's routes are recorded as not followed, as P2-208 recorded #51's and #8's.
+- Found by this ticket's first Git Extensions run (exit 5, one pair not verified): lowering `GitModule::.ctor(string)`
+  threw `NullReferenceException`. `ValidPaths.Returned` gave an iterator's `yield break` as a null value; the old
+  `switch` read a null as no valid path, but P2-232's empty-string check and this ticket's constant check read the value
+  first. Fixed on P2-232's branch (PR #530, where the empty-string check could reach it too) and taken here by rebase: a
+  return with no value adds nothing. The run that hit it is void and was run again.
