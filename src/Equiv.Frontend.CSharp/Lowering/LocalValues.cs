@@ -31,9 +31,9 @@ internal static class LocalValues
 
     /// <summary>
     /// What is written to <paramref name="symbol"/> under <paramref name="root"/> after its declaration: the value of each
-    /// assignment, or null for a write whose value is not known (a compound assignment, a <c>ref</c> or <c>out</c>
-    /// argument, a tuple it is part of, or a <c>ref</c> to it that a ref local or a ref conditional takes, ticket P2-201; an
-    /// increment or a decrement, ticket P2-216).
+    /// assignment, a compound assignment itself, whose operator gives the value from the one before (ticket P2-232), or null
+    /// for a write whose value is not known (a <c>??=</c>, a <c>ref</c> or <c>out</c> argument, a tuple it is part of, or a
+    /// <c>ref</c> to it that a ref local or a ref conditional takes, ticket P2-201; an increment or a decrement, ticket P2-216).
     /// </summary>
     public static ImmutableArray<IOperation?> Writes(ISymbol symbol, IOperation root) =>
         [.. References(symbol, root).Select(Write).Where(static w => w.Written).Select(static w => w.Value)];
@@ -48,6 +48,7 @@ internal static class LocalValues
     private static (bool Written, IOperation? Value) Write(IOperation reference) => reference.Parent switch
     {
         ISimpleAssignmentOperation assignment when assignment.Target == reference => (true, assignment.Value),
+        ICompoundAssignmentOperation compound when compound.Target == reference => (true, compound),
         IAssignmentOperation assignment when assignment.Target == reference => (true, null),
         IArgumentOperation { Parameter.RefKind: not RefKind.None } or ITupleOperation => (true, null),
         IIncrementOrDecrementOperation => (true, null),

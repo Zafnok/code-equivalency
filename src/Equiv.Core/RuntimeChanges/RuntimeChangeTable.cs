@@ -118,6 +118,13 @@ public sealed class RuntimeChangeTable
     }
 
     /// <summary>
+    /// Whether <paramref name="field"/> (<c>Namespace.Type::Name</c>) is one of the framework <c>char</c> fields that
+    /// <c>validPaths</c> lists as <c>separators</c> (ticket P2-232): a directory separator on every runtime and operating
+    /// system, so joining it to a valid path leaves one. Matched by that identity alone, as a <c>fieldValues</c> field is.
+    /// </summary>
+    public bool IsPathSeparator(string field) => validPaths.Separators.Contains(field, StringComparer.Ordinal);
+
+    /// <summary>
     /// The documented <paramref name="value"/> of the framework <c>static readonly</c> field <paramref name="field"/>
     /// (<c>Namespace.Type::Name</c>), which a precondition reads as a constant's (ticket P2-189); false when the table's
     /// <c>fieldValues</c> does not list it.
@@ -170,7 +177,7 @@ public sealed class RuntimeChangeTable
             && !(ordinalComparison && row.OrdinalUnaffected)
             && identity.Value.StartsWith(row.Member, StringComparison.Ordinal)
             && !suppressed.Contains(row.Member, StringComparer.Ordinal)
-            && (row.Precondition is not { } precondition || RuntimeChangeReach.CanReach(precondition, arguments)))!;
+            && (row.Precondition is not { } precondition || RuntimeChangeReach.CanReach(precondition, arguments, row.EmptyPathUnchanged)))!;
         return match is not null;
     }
 
@@ -199,7 +206,7 @@ public sealed class RuntimeChangeTable
     /// <summary>
     /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c>, <c>rows</c> and, optionally,
     /// <c>validPaths</c> (its <c>sources</c>, <c>validators</c>, <c>transforms</c>, <c>prefixes</c> and <c>guards</c>, each a
-    /// list of member prefixes; tickets P2-074 and P2-188) and <c>fieldValues</c> (a field's identity to its documented
+    /// list of member prefixes, tickets P2-074 and P2-188, and its optional <c>separators</c>, a list of fields, ticket P2-232) and <c>fieldValues</c> (a field's identity to its documented
     /// string value; ticket P2-189). A row whose
     /// <c>source</c> is missing, or is not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), or whose
     /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
@@ -231,6 +238,7 @@ public sealed class RuntimeChangeTable
                 Precondition = ParsePrecondition(member, element),
 
                 OrdinalUnaffected = element.TryGetProperty("ordinalUnaffected", out JsonElement ordinal) && ordinal.GetBoolean(),
+                EmptyPathUnchanged = element.TryGetProperty("emptyPathUnchanged", out JsonElement empty) && empty.GetBoolean(),
                 Requires = ParseRequires(member, element),
 
             });
@@ -284,8 +292,14 @@ public sealed class RuntimeChangeTable
 
     private static ValidPaths ParseValidPaths(JsonElement root) =>
         root.TryGetProperty("validPaths", out JsonElement lists)
-            ? new ValidPaths(Members(lists, "sources"), Members(lists, "validators"), Members(lists, "transforms"), Members(lists, "prefixes"), Members(lists, "guards"))
-            : new ValidPaths([], [], [], [], []);
+            ? new ValidPaths(
+                Members(lists, "sources"), Members(lists, "validators"), Members(lists, "transforms"), Members(lists, "prefixes"), Members(lists, "guards"),
+                ParseSeparators(lists))
+            : new ValidPaths([], [], [], [], [], []);
+
+    /// <summary>The optional <c>separators</c> list of <c>validPaths</c> (ticket P2-232); empty when it is absent.</summary>
+    private static ImmutableArray<string> ParseSeparators(JsonElement lists) =>
+        lists.TryGetProperty("separators", out JsonElement separators) ? [.. separators.EnumerateArray().Select(static field => field.GetString()!)] : [];
 
     private static ImmutableArray<string> Members(JsonElement lists, string name) =>
         [.. lists.GetProperty(name).EnumerateArray().Select(static member => member.GetString()!)];
@@ -358,5 +372,10 @@ public sealed class RuntimeChangeTable
 
     /// <summary>The members <c>validPaths</c> lists (tickets P2-074 and P2-188), each a prefix matched as a row's <see cref="RuntimeChange.Member"/> is.</summary>
     private sealed record ValidPaths(
-        ImmutableArray<string> Sources, ImmutableArray<string> Validators, ImmutableArray<string> Transforms, ImmutableArray<string> Prefixes, ImmutableArray<string> Guards);
+        ImmutableArray<string> Sources,
+        ImmutableArray<string> Validators,
+        ImmutableArray<string> Transforms,
+        ImmutableArray<string> Prefixes,
+        ImmutableArray<string> Guards,
+        ImmutableArray<string> Separators);
 }

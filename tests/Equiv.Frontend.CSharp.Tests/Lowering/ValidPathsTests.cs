@@ -340,6 +340,27 @@ public sealed class ValidPathsTests
     }
 
     /// <summary>
+    /// Ticket P2-232: a project referenced as source is seen through retargeting symbols when it was compiled against another
+    /// version of an assembly the caller's project references (Git Extensions' <c>GitUI</c> sees <c>GitCommands</c> so). The
+    /// member read is matched to the writes in its own project by its declaration, not by symbol identity.
+    /// </summary>
+    [Fact]
+    public void AStoredPathInAProjectSeenThroughRetargetingIsRead()
+    {
+        Compilation oldDependency = RoslynTestCompilations.Compile("[assembly: System.Reflection.AssemblyVersion(\"1.0.0.0\")]\npublic sealed class Dependency { }", "Dependency");
+        Compilation newDependency = RoslynTestCompilations.Compile("[assembly: System.Reflection.AssemblyVersion(\"2.0.0.0\")]\npublic sealed class Dependency { }", "Dependency");
+        Compilation library = RoslynTestCompilations.Compile(
+            "public sealed class Module { public Module(Dependency d) { WorkingDir = System.AppContext.BaseDirectory; } public string WorkingDir { get; } }", [oldDependency.ToMetadataReference()], "Library");
+        Compilation app = RoslynTestCompilations.Compile(
+            "class C { static object M(Module m) => new System.IO.StreamReader(m.WorkingDir); }", [library.ToMetadataReference(), newDependency.ToMetadataReference()], "App");
+        IMethodSymbol method = app.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+        CompilationReference reference = app.References.OfType<CompilationReference>().Single(reference => reference.Compilation == library);
+
+        Assert.False(SymbolEqualityComparer.Default.Equals(app.GetAssemblyOrModuleSymbol(reference), library.Assembly));
+        Assert.DoesNotContain(Calls(IrLowerer.Lower(method, app, RenameMap.Empty, [], Runtimes.Migration)), static call => call.Callee.RuntimeChanged);
+    }
+
+    /// <summary>
     /// Ticket P2-217: a listed guard on a field or auto-property read guards a later read of the same member on the same
     /// receiver (<c>this</c>, a parameter nothing assigns, or none for a static member) when nothing between them runs code
     /// or writes the member, as Duplicati's <c>TearDown</c> and <c>TempFile.Dispose</c> do.
@@ -590,6 +611,101 @@ public sealed class ValidPathsTests
         + "return Path.Combine(tempPath, Path.GetRandomFileName());\n}\n}\n"
         + "public string TemporaryPath { get; }\n}\n"
         + "class C\n{\nstatic object M(Helper h) => Directory.CreateDirectory(Path.Combine(h.TemporaryPath, \"Folder1\"));\n}\n")).Any(static call => call.Callee.RuntimeChanged));
+
+    /// <summary>
+    /// Ticket P2-232: a callee's returned parameter is a valid path when the call passes it one and every write of it in the
+    /// callee keeps it one, the parameters so passed taken to hold valid paths. A parameter the call passes a path from its
+    /// own caller, one the callee overwrites with anything else (in a lambda too), and a <c>ref</c> parameter still fire.
+    /// </summary>
+    [Theory]
+    [InlineData("static string Ensure(string d) => d;\nstatic object M() => new StreamReader(Ensure(AppContext.BaseDirectory));", false)]
+    [InlineData("static string Ensure(string d) { if (d.Length > 0) { d += \"x\"; } return d; }\nstatic object M() => new StreamReader(Ensure(AppContext.BaseDirectory));", false)]
+    [InlineData("static string Pick(string a, string b) { a = b; return a; }\nstatic object M() => new StreamReader(Pick(AppContext.BaseDirectory, Path.GetTempPath()));", false)]
+    [InlineData("static string Ensure(string d) => d;\nstatic object M(string p) => new StreamReader(Ensure(p));", true)]
+    [InlineData("static string Ensure(string d) { d += \"|\"; return d; }\nstatic object M() => new StreamReader(Ensure(AppContext.BaseDirectory));", true)]
+    [InlineData("static string Pick(string a, string b) { a = b; return a; }\nstatic object M(string p) => new StreamReader(Pick(AppContext.BaseDirectory, p));", true)]
+    [InlineData("static string Ensure(string d) { Action a = () => d = Environment.MachineName; a(); return d; }\nstatic object M() => new StreamReader(Ensure(AppContext.BaseDirectory));", true)]
+    [InlineData("static string Ensure(ref string d) => d;\nstatic object M() { var d = AppContext.BaseDirectory; return new StreamReader(Ensure(ref d)); }", true)]
+    public void ACalleesReturnedParameterIsReadAsTheCallsArgument(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-232: a char joins a valid path as a constant with no rejected character and no colon does: a char constant,
+    /// a framework directory separator, or a solution's <c>readonly</c> char field that only ever holds one; and a compound
+    /// <c>+=</c> of one onto a valid local or parameter keeps it valid. A colon, the volume separator and a mutable field do not.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M() { var d = AppContext.BaseDirectory; d += Path.DirectorySeparatorChar; return new StreamReader(d); }", false)]
+    [InlineData("static object M() { var d = AppContext.BaseDirectory; d += Path.AltDirectorySeparatorChar; return new StreamReader(d); }", false)]
+    [InlineData("static object M() => new StreamReader(AppContext.BaseDirectory + Path.DirectorySeparatorChar);", false)]
+    [InlineData("static object M() => new StreamReader(AppContext.BaseDirectory + 'x');", false)]
+    [InlineData("static readonly char Sep = Path.DirectorySeparatorChar;\nstatic object M() { var d = AppContext.BaseDirectory; d += Sep; return new StreamReader(d); }", false)]
+    [InlineData("static readonly char Sep;\nstatic C() { Sep = '/'; }\nstatic object M() { var d = AppContext.BaseDirectory; d += Sep; return new StreamReader(d); }", false)]
+    [InlineData("static object M() { var d = AppContext.BaseDirectory; d += \"x\"; return new StreamReader(d); }", false)]
+    [InlineData("static object M() { var d = AppContext.BaseDirectory; d += ':'; return new StreamReader(d); }", true)]
+    [InlineData("static object M() { var d = AppContext.BaseDirectory; d += Path.VolumeSeparatorChar; return new StreamReader(d); }", true)]
+    [InlineData("static char Sep = '/';\nstatic object M() { var d = AppContext.BaseDirectory; d += Sep; return new StreamReader(d); }", true)]
+    [InlineData("static readonly char Sep = ':';\nstatic object M() { var d = AppContext.BaseDirectory; d += Sep; return new StreamReader(d); }", true)]
+    [InlineData("static readonly char Sep;\nstatic object M() { var d = AppContext.BaseDirectory; d += Sep; return new StreamReader(d); }", true)]
+    [InlineData("static object M(char c) { var d = AppContext.BaseDirectory; d += c; return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p) { var d = AppContext.BaseDirectory; d += p; return new StreamReader(d); }", true)]
+    [InlineData("static object M(string p) { var d = AppContext.BaseDirectory; d ??= p; return new StreamReader(d); }", true)]
+    [InlineData("sealed class Q { public static implicit operator string(Q q) => \"x\"; }\nstatic object M() { var d = AppContext.BaseDirectory; d += (string)new Q(); return new StreamReader(d); }", true)]
+    public void ASeparatorAppendedToAValidPathKeepsItValid(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-232: a value that is a valid path or the empty string does not fire a row the empty string does not reach
+    /// (<c>SetCurrentDirectory</c>, <c>Combine</c>), and still fires every other path row. A blank string that is not empty,
+    /// or the empty string joined to one, is not such a value.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M(string p) { Directory.SetCurrentDirectory(p.Length == 0 ? string.Empty : AppContext.BaseDirectory); return null; }", false)]
+    [InlineData("static object M(string p) { Directory.SetCurrentDirectory(p.Length == 0 ? \"\" : AppContext.BaseDirectory); return null; }", false)]
+    [InlineData("static object M(string p) => Path.Combine(p.Length == 0 ? \"\" : AppContext.BaseDirectory, \"a.txt\");", false)]
+    [InlineData("static object M(string p) { var d = p.Length == 0 ? \"\" : AppContext.BaseDirectory; d += Path.DirectorySeparatorChar; Directory.SetCurrentDirectory(d); return null; }", false)]
+    [InlineData("static object M(string p) { var d = p.Length == 0 ? \"\" : AppContext.BaseDirectory; d += \"\"; Directory.SetCurrentDirectory(d); return null; }", false)]
+    [InlineData("static object M(string p) => new StreamReader(p.Length == 0 ? \"\" : AppContext.BaseDirectory);", true)]
+    [InlineData("static object M(string p) { Directory.SetCurrentDirectory(p.Length == 0 ? \" \" : AppContext.BaseDirectory); return null; }", true)]
+    [InlineData("static object M(string p) { var d = p.Length == 0 ? \"\" : AppContext.BaseDirectory; d += \" \"; Directory.SetCurrentDirectory(d); return null; }", true)]
+    [InlineData("static object M(string p) { Directory.SetCurrentDirectory(p.Length == 0 ? string.Empty : p); return null; }", true)]
+    [InlineData("static object M(string p) => Path.GetDirectoryName(p.Length == 0 ? \"\" : AppContext.BaseDirectory);", true)]
+    [InlineData("static readonly string Empty = \" \";\nstatic object M(string p) { Directory.SetCurrentDirectory(p.Length == 0 ? Empty : AppContext.BaseDirectory); return null; }", true)]
+    public void AValidPathOrTheEmptyStringPassesOnlyTheRowsTheEmptyStringDoesNotReach(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-232, Git Extensions #55's <c>GitModule.WorkingDir</c>: a get-only auto-property set to a path normalised to
+    /// the empty string or a full path, then given a trailing separator by an extension that returns its own parameter. It
+    /// is a valid path or the empty string, so <c>SetCurrentDirectory</c> does not fire on it and <c>CreateDirectory</c> does;
+    /// the same extension on the path the constructor was passed still fires.
+    /// </summary>
+    [Theory]
+    [InlineData("(workingDir ?? \"\").NormalizePath()", "Directory.SetCurrentDirectory", false)]
+    [InlineData("(workingDir ?? \"\").NormalizePath()", "Directory.CreateDirectory", true)]
+    [InlineData("workingDir", "Directory.SetCurrentDirectory", true)]
+    public void AWorkingDirectoryWithATrailingSeparatorIsAValidPathOrEmpty(string normalised, string call, bool flagged) => Assert.Equal(flagged, Calls(Source(
+        "using System;\nusing System.IO;\n"
+        + "static class PathUtil\n{\n"
+        + "public static readonly char NativeDirectorySeparatorChar = Path.DirectorySeparatorChar;\n"
+        + "public static readonly char PosixDirectorySeparatorChar = '/';\n"
+        + "public static string EnsureTrailingPathSeparator(this string dirPath)\n{\n"
+        + "if (!string.IsNullOrEmpty(dirPath) && dirPath[dirPath.Length - 1] != NativeDirectorySeparatorChar && dirPath[dirPath.Length - 1] != PosixDirectorySeparatorChar)\n{\n"
+        + "dirPath += NativeDirectorySeparatorChar;\n}\nreturn dirPath;\n}\n"
+        + "public static string NormalizePath(this string path)\n{\n"
+        + "if (string.IsNullOrWhiteSpace(path))\n{\nreturn string.Empty;\n}\n"
+        + "try\n{\nreturn Path.GetFullPath(path);\n}\ncatch (UriFormatException)\n{\nreturn string.Empty;\n}\n}\n}\n"
+        + "sealed class GitModule\n{\n"
+        + "public GitModule(string workingDir)\n{\nWorkingDir = " + normalised + ".EnsureTrailingPathSeparator();\n}\n"
+        + "public string WorkingDir { get; }\n}\n"
+        + "class C\n{\nstatic void M(GitModule m) => " + call + "(m.WorkingDir);\n}\n")).Any(static call => call.Callee.RuntimeChanged));
+
+    /// <summary>
+    /// Ticket P2-232: an iterator's <c>yield break</c> returns no value, so a callee that is an iterator is read as returning
+    /// only what it yields; the null failed the empty-string check. <c>WriteAllLines</c>'s row
+    /// has no precondition, so its call lowers flagged; every argument is still read for a valid path.
+    /// </summary>
+    [Fact]
+    public void AnIteratorsYieldBreakReturnsNoValue() => Assert.Equal(
+        ["System.IO.File::WriteAllLines(string,System.Collections.Generic.IEnumerable<string>)"],
+        Flagged("static System.Collections.Generic.IEnumerable<string> Lines() { yield break; }\nstatic void M() => File.WriteAllLines(AppContext.BaseDirectory + \"x\", Lines());"));
 
     private static bool Flags(string member) => Flagged(member).Length > 0;
 
