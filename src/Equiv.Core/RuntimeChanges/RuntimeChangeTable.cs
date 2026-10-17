@@ -362,23 +362,18 @@ public sealed class RuntimeChangeTable
     /// The optional <c>frameworkCheck</c> of a path row (ticket P2-231): one of <see cref="PathCheck"/>'s JSON names, on a row
     /// whose <c>precondition</c> is <c>invalidPath</c>; anything else is rejected with <see cref="InvalidDataException"/>.
     /// </summary>
-    private static PathCheck? ParseFrameworkCheck(string member, JsonElement element)
-    {
-        if (!element.TryGetProperty("frameworkCheck", out JsonElement value))
-        {
-            return null;
-        }
-
-        return ParsePrecondition(member, element) != RuntimeChangePrecondition.InvalidPath
-            ? throw new InvalidDataException($"runtime-changes row '{member}' has a frameworkCheck but no invalidPath precondition")
-            : (value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText()) switch
-            {
-                "pathCharacters" => PathCheck.PathCharacters,
-                "limitedNormalization" => PathCheck.LimitedNormalization,
-                "fullPath" => PathCheck.FullPath,
-                var unknown => throw new InvalidDataException($"runtime-changes row '{member}' has unknown frameworkCheck '{unknown}'"),
-            };
-    }
+    private static PathCheck? ParseFrameworkCheck(string member, JsonElement element) =>
+        !element.TryGetProperty("frameworkCheck", out JsonElement value)
+            ? null
+            : ParsePrecondition(member, element) != RuntimeChangePrecondition.InvalidPath
+                ? throw new InvalidDataException($"runtime-changes row '{member}' has a frameworkCheck but no invalidPath precondition")
+                : (value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText()) switch
+                {
+                    "pathCharacters" => PathCheck.PathCharacters,
+                    "limitedNormalization" => PathCheck.LimitedNormalization,
+                    "fullPath" => PathCheck.FullPath,
+                    var unknown => throw new InvalidDataException($"runtime-changes row '{member}' has unknown frameworkCheck '{unknown}'"),
+                };
 
     private static RuntimeChangeWitness? ParseWitness(JsonElement element) =>
         element.TryGetProperty("witness", out JsonElement witness) ? BuildWitness(witness) : null;
