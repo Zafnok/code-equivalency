@@ -1,5 +1,5 @@
 # P2-233 Soundness bug: a guard is trusted in a local function that is called before the guard runs
-Status: in-progress
+Status: done (PR #534)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
