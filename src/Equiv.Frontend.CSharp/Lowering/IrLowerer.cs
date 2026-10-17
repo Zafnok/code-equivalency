@@ -55,6 +55,9 @@ internal sealed class IrLowerer
 
     private static readonly IrBool Bool = new();
 
+    /// <summary>The type of a scope's activation counter (<see cref="activations"/>).</summary>
+    private static readonly IrBitVec Activation = new(64);
+
     private readonly SsaBuilder ssa = new();
     private readonly RenameMap renames;
     private readonly ImmutableArray<string> suppressedRuntimeChanges;
@@ -81,6 +84,14 @@ internal sealed class IrLowerer
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> indices = [];
     private readonly Dictionary<ICollectionExpressionOperation, SsaBuilder.Variable> collections = [];
     private readonly Dictionary<string, List<SyntaxNode>> lambdaSites = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The counter of each scope a loop enters afresh (<see cref="RenewedScopes"/>; ticket P2-182), one more at each entry,
+    /// and the counter of each local such a scope declares: a delegate capturing that local reads it, so the closures of two
+    /// iterations are two values, as <c>Delegate.Equals</c> has them.
+    /// </summary>
+    private readonly Dictionary<ControlFlowRegion, SsaBuilder.Variable> activations = [];
+    private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> activationOf = [];
     private int selects;
     private HeapLowerer heap = null!;
     private ExceptionLowerer exceptions = null!;
@@ -416,6 +427,13 @@ internal sealed class IrLowerer
             }
         }
 
+        foreach (ControlFlowRegion scope in graphs.SelectMany(static g => RenewedScopes.Find(g)))
+        {
+            SsaBuilder.Variable activation = new(new IrVar($"$activation.{activations.Count.ToString(CultureInfo.InvariantCulture)}", Activation));
+            activations[scope] = activation;
+            ssa.Store(start, activation, Zero(Activation, entry));
+        }
+
         for (int i = 0; i < graphs.Length; i++)
         {
             IrBlockId? next = i < graphs.Length - 1 ? ssa.NewBlock() : null;
@@ -557,12 +575,29 @@ internal sealed class IrLowerer
     /// iteration's included, as the compiled code sets it (ticket M4-011). Roslyn's CFG never assigns it: the one it
     /// declares is <c>lock</c>'s <c>bool lockTaken</c>, which it passes by <c>ref</c> to <c>Monitor.Enter</c>, so the
     /// type always has a constant default. A user-declared local is not touched: C# rejects a read before its assignment.
+    /// <para>
+    /// A scope a loop enters afresh (<see cref="RenewedScopes"/>; ticket P2-182) counts one more activation, and its locals
+    /// are new instances from here: a store the next iteration makes is not one a lambda of this iteration sees.
+    /// </para>
     /// </summary>
     private void EnterRegion(ControlFlowRegion region, LoweringContext context)
     {
         foreach (ILocalSymbol local in region.Locals.Where(static l => l.IsImplicitlyDeclared))
         {
             ssa.Store(context.Current, Local(local), Const(TypeMapper.Default(local.Type, catalogue.Sorts)!, context));
+        }
+
+        if (activations.TryGetValue(region, out SsaBuilder.Variable? activation))
+        {
+            IrVar one = Const(new IrBitVecValue(Activation.Width, 1), context);
+            ssa.Store(context.Current, activation, Emit(IrBinaryOp.Add, ssa.Load(context.Current, activation), one, Activation, context));
+            ImmutableArray<SsaBuilder.Variable> locals = [.. region.Locals.Select(Local)];
+            foreach (SsaBuilder.Variable local in locals)
+            {
+                activationOf[local] = activation;
+            }
+
+            ssa.Renew(context.Current, locals);
         }
     }
 
@@ -1507,7 +1542,9 @@ internal sealed class IrLowerer
     /// delegates are never equal: a lambda's function also names its site, by position among the body's lambdas with that
     /// fingerprint, and a site copied onto several paths, as a <c>finally</c>'s is, stays one site. Two conversions of one
     /// method group with one receiver are equal, so a method group's function has no site. A capture stored after the
-    /// conversion makes it opaque again (<see cref="SsaBuilder.EmitDelegate"/>). A method group whose receiver is evaluated
+    /// conversion makes it opaque again (<see cref="SsaBuilder.EmitDelegate"/>). A store the next iteration of a loop makes to
+    /// a local its body declares is to another variable, so it does not (ticket P2-182); the delegate then also reads that
+    /// body's activation counter, since the closures of two iterations are two delegates. A method group whose receiver is evaluated
     /// (which is null-checked, and may itself run code) stays opaque with reason <c>DelegateCreation</c>, shared as any
     /// fingerprinted fragment is, and a conversion with no fingerprint stays opaque and unshared. Either way the delegate
     /// is never null.
@@ -1532,7 +1569,8 @@ internal sealed class IrLowerer
         }
 
         IrVar target = ssa.Temp(Map(creation.Type!));
-        IrPure value = new(target, [], PureCatalogue.Delegate(fragment.Fingerprint, LambdaSite(creation, fragment.Fingerprint)), Loaded(fragment.Reads, context))
+        ImmutableArray<IrVar> scopes = [.. fragment.Captured.Select(activationOf.GetValueOrDefault).OfType<SsaBuilder.Variable>().Distinct().Select(a => ssa.Load(context.Current, a))];
+        IrPure value = new(target, [], PureCatalogue.Delegate(fragment.Fingerprint, LambdaSite(creation, fragment.Fingerprint)), [.. Loaded(fragment.Reads, context), .. scopes])
         {
             RuntimeSensitive = fragment.RuntimeSensitive,
         };

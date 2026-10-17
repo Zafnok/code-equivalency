@@ -242,6 +242,62 @@ public sealed class DelegateLoweringTests
         Assert.Equal(new IrSort("System.Func`2"), opaque.Target!.Type);
     }
 
+    /// <summary>
+    /// Ticket P2-182: a local a loop body declares, a <c>foreach</c>'s iteration variable among them, is a new variable each
+    /// iteration, so the store the next iteration makes is not one the lambda sees. The delegate is the pure function of the
+    /// local, and of the body's activation counter, which is one more at each entry of the body.
+    /// </summary>
+    [Theory]
+    [InlineData("foreach (int x in xs) { int k = x; n += ys.Count(y => y > k); }")]
+    [InlineData("foreach (int x in xs) { n += ys.Count(y => y > x); }")]
+    [InlineData("int i = 0; while (i < 3) { int k = i; n += ys.Count(y => y > k); i++; }")]
+    public void ALambdaCapturingALocalOfALoopBodyIsPureEachIteration(string loop)
+    {
+        IrProcedure procedure = Source(Linq + "class C { int M(List<int> xs, int[] ys) { int n = 0; " + loop + " return n; } }");
+
+        IrPure lambda = Assert.Single(Delegates(procedure));
+        Assert.DoesNotContain(Opaques(procedure), static o => string.Equals(o.Reason, DelegateCreation, StringComparison.Ordinal));
+        Assert.Equal(2, lambda.Args.Length);
+        IrVar activation = lambda.Args[1];
+        Assert.Equal(new IrBitVec(64), activation.Type);
+        IrBinary counted = Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrBinary>(), b => b.Target == activation);
+        Assert.Equal(IrBinaryOp.Add, counted.Op);
+    }
+
+    /// <summary>
+    /// The closures of two iterations are two delegates, and two lambdas of one body that differ are two functions: the
+    /// first differ in the activation they read, the second in their names.
+    /// </summary>
+    [Fact]
+    public void TwoDelegatesOfALoopBodyThatDifferAreNotOneFunction()
+    {
+        IrProcedure procedure = Source(Linq + "class C { int M(List<int> xs, int[] ys) { int n = 0; foreach (int x in xs) { int k = x; n += ys.Count(y => y > k) + ys.Count(y => y >= k); } return n; } }");
+
+        ImmutableArray<IrPure> lambdas = Delegates(procedure);
+        Assert.Equal(2, lambdas.Length);
+        Assert.NotEqual(lambdas[0].Function[..^2], lambdas[1].Function[..^2], StringComparer.Ordinal);
+        Assert.Equal(lambdas[0].Args, lambdas[1].Args);
+        Assert.Equal(2, lambdas[0].Args.Length);
+    }
+
+    /// <summary>
+    /// A scope entered again by a jump from inside it is the same instance of its locals, so a store reached that way is
+    /// after the lambda: the conversion stays opaque. So does one capturing a local declared before the loop, a <c>for</c>'s
+    /// variable (one for the whole loop), or a local of the body stored again later in the same iteration.
+    /// </summary>
+    [Theory]
+    [InlineData("int n = 0; for (int i = 0; i < 3; i++) { n += xs.Count(x => x > i); } return n;")]
+    [InlineData("int n = 0; foreach (int x in xs) { int k = x; var q = xs.Where(y => y > k); k = 0; n += q.Count(); } return n;")]
+    [InlineData("int n = 0; { int k; again: k = n; n += xs.Count(x => x > k); if (n < 3) { goto again; } } return n;")]
+    [InlineData("int n = 0; int k = 0; foreach (int x in xs) { k = x; n += xs.Count(y => y > k); } return n;")]
+    public void ALambdaCapturingALocalTheNextIterationStoresAgainIsOpaque(string body)
+    {
+        IrProcedure procedure = Source(Linq + "class C { int M(int[] xs) { " + body + " } }");
+
+        Assert.Empty(Delegates(procedure));
+        Assert.Contains(Opaques(procedure), static o => string.Equals(o.Reason, DelegateCreation, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ALambdaCapturingALocalWrittenOnlyBeforeItIsPure()
     {
