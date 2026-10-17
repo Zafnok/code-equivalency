@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="App/Equiv.Samples.PackageVersionRebound.Modern.csproj" />
+  <Project Path="Text/Equiv.Samples.PackageVersionRebound.Text.Modern.csproj" />
+</Solution>

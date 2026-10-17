@@ -613,6 +613,24 @@ Migration-specific normalisations (applied to both sides before matching):
   the receiver is null-checked. An input that reaches one has an unknown outcome (ADR 0014). The pair
   lists its rebound pairs in `properties.reboundCalls`. A call to a member with another name, or at a
   site with other text, is an ordinary call. The IL lowering (section 3.1) marks the same identities.
+  A rebound pair whose two callees are declared in assemblies with the same simple name (one package,
+  or one project of the solution, at two versions) is one call when the two members run the same IL
+  (ADR 0061, ticket P2-179). Each is read from the assembly its side's compilation references: a
+  package's file, or a project's compilation emitted in memory; never a reference assembly. Neither
+  call is dispatched virtually, neither member is declared in a value type, and both are static or
+  both instance members, with the same signature and type arguments at the call. The two bodies have
+  the same instructions, immediates, exception regions, local types and flags, a token in each naming
+  the same string, member or type. A method of the assembly that they call non-virtually or create is
+  compared the same way in turn (a pair already being compared counts as the same, ADR 0019's
+  mutual-summary rule). A static field also needs its type's static constructor to be the same, and
+  a type of the assembly must not be a value type and must have the same flags, base type and
+  interfaces. A member of any other assembly has the same name on both sides and is either a framework
+  member (a reference assembly) that no runtime-changes row names at any runtime, and that no virtual
+  method of either version can override when called virtually, or a member of the same build on both
+  sides. A virtual call into the assembly, `calli` and a field with initial data are never the same,
+  and at most 256 member pairs are compared. A callee in two rebound pairs is one call with neither.
+  Every legacy call to such a pair's legacy member, in both lowerings, is then the same call to its
+  modern member, and the pair is listed in `properties.reboundCallsProved` instead of `reboundCalls`.
 - Forwarders (ADR 0047, ticket P2-068). A forwarder is an ordinary static method declared in the
   solution's source that is not `virtual`, not `async`, not generic and not in a generic type, has no
   `ref`, `out` or `in` parameter, does not return by reference, whose declaring type has no static
@@ -1083,7 +1101,9 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 `properties.unprovenAssumptions` (ADR 0019), `properties.equivalencesApplied` when a
 catalogue entry fired (ADR 0020), and `properties.reboundCalls` when a call site was rebound (ADR
 0042): one `{ legacy, modern }` per rebound pair of callee identities, sorted by legacy and then
-modern identity. It is not part of the fingerprint. `properties.forwardersResolved` lists the forwarders a body's calls were
+modern identity. It is not part of the fingerprint. `properties.reboundCallsProved` lists, in the same
+form and order, the rebound pairs proved one call because their two members run the same IL (ADR
+0061); such a pair is not in `reboundCalls`, and is not part of the fingerprint either. `properties.forwardersResolved` lists the forwarders a body's calls were
 resolved through (ADR 0047): one `{ forwarder, target }` per forwarder, sorted by forwarder and then target; it is not part
 of the fingerprint either. `properties.callIdentitiesMapped` lists the call-identity map entries the legacy body calls (ADR
 0059): one `{ legacy, modern }` per entry, sorted by legacy identity, each legacy identity also in `assumedCallees` and

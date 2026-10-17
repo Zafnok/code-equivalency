@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Emit;
 using Microsoft.CodeAnalysis.Text;
 
 using Xunit;
@@ -58,4 +59,26 @@ internal static class RoslynTestCompilations
     }
 
     public static MetadataReference ToReference(this Compilation compilation) => compilation.ToMetadataReference();
+
+    /// <summary>
+    /// <paramref name="source"/> compiled as <paramref name="assembly"/> to a file of its own in a new temporary directory, as
+    /// a restored package is (ADR 0061; ticket P2-179), or as a reference assembly when <paramref name="referenceAssembly"/> is
+    /// set. Returns the file's path.
+    /// </summary>
+    public static string EmitLibrary(string assembly, string source, bool referenceAssembly = false, IEnumerable<MetadataReference>? references = null)
+    {
+        string path = Path.Combine(Directory.CreateTempSubdirectory("equiv-P2-179-").FullName, assembly + ".dll");
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            assembly,
+            [CSharpSyntaxTree.ParseText(source, cancellationToken: TestContext.Current.CancellationToken)],
+            [.. References, .. references ?? []],
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
+        using FileStream file = File.Create(path);
+        EmitResult emitted = compilation.Emit(file, options: new EmitOptions(metadataOnly: referenceAssembly, includePrivateMembers: !referenceAssembly), cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        return path;
+    }
+
+    /// <summary>A reference to the file at <paramref name="path"/>, read into memory so the file stays free to delete.</summary>
+    public static PortableExecutableReference FileReference(string path) => MetadataReference.CreateFromImage(File.ReadAllBytes(path), filePath: path);
 }

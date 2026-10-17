@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Equiv.Samples.PackageVersionRebound</RootNamespace>
+    <AssemblyName>Equiv.Samples.PackageVersionRebound</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Text\Equiv.Samples.PackageVersionRebound.Text.Modern.csproj" />
+  </ItemGroup>
+
+</Project>

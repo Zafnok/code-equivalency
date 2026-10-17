@@ -35,11 +35,53 @@ internal sealed class CallSites(IEnumerable<string> rebound)
     /// </summary>
     public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
 
+    /// <summary>
+    /// The legacy identities of the pair's rebound pairs proved one call (ADR 0061; ticket P2-179), each with its modern
+    /// identity: a call to one is lowered as the same call to the other. Empty on the modern side.
+    /// </summary>
+    public ImmutableDictionary<string, string> Proved { get; init; } = [];
+
     public bool IsRebound(CallIdentity callee) => rebound.Contains(callee.Value);
 
-    /// <summary>Records a call to <paramref name="callee"/>, a member named <paramref name="member"/>, lowered at <paramref name="syntax"/>.</summary>
-    public void Add(SyntaxNode syntax, string member, CallIdentity callee) =>
-        seen.Add(new Site(string.Join(' ', syntax.DescendantTokens().Select(static t => t.Text)), member, callee));
+    /// <summary><paramref name="callee"/>, or the modern identity it was proved one call with (ADR 0061).</summary>
+    public CallIdentity Same(CallIdentity callee) => Proved.TryGetValue(callee.Value, out string? modern) ? callee with { Value = modern } : callee;
+
+    /// <summary>
+    /// Records a call to <paramref name="callee"/>, a member named <paramref name="member"/>, lowered at <paramref name="syntax"/>,
+    /// and the method it binds to when there is one.
+    /// </summary>
+    public void Add(SyntaxNode syntax, string member, CallIdentity callee, IMethodSymbol? method = null) =>
+        seen.Add(new Site(string.Join(' ', syntax.DescendantTokens().Select(static t => t.Text)), member, callee, method));
+
+    /// <summary>The method the first recorded call to <paramref name="identity"/> binds to, or null when none was recorded with one.</summary>
+    public IMethodSymbol? Method(string identity) =>
+        seen.FirstOrDefault(s => string.Equals(s.Callee.Value, identity, StringComparison.Ordinal))?.Method;
+
+    /// <summary>
+    /// <paramref name="rebound"/>, each pair marked proved when neither callee is in another pair and <paramref name="same"/>
+    /// says the two are one call (ADR 0061; ticket P2-179). A callee in two pairs is not one call with either.
+    /// </summary>
+    public static ImmutableArray<ReboundCall> Prove(ImmutableArray<ReboundCall> rebound, Func<ReboundCall, bool> same) =>
+    [
+        .. rebound.Select(r => r with
+        {
+            Proved = rebound.Where(o => string.Equals(o.Legacy, r.Legacy, StringComparison.Ordinal) || string.Equals(o.Modern, r.Modern, StringComparison.Ordinal)).Take(2).Count() == 1
+                && same(r),
+        }),
+    ];
+
+    /// <summary>
+    /// Both sides' call sites for a lowering told <paramref name="rebound"/>: each side holds the identities of the pairs not
+    /// proved as rebound, and the legacy side maps each proved pair's legacy identity to its modern one.
+    /// </summary>
+    public static (CallSites Legacy, CallSites Modern) For(ImmutableArray<ReboundCall> rebound, ImmutableHashSet<string> kept) =>
+    (
+        new CallSites(rebound.Where(static r => !r.Proved).Select(static r => r.Legacy))
+        {
+            KeptForwarders = kept,
+            Proved = rebound.Where(static r => r.Proved).ToImmutableDictionary(static r => r.Legacy, static r => r.Modern, StringComparer.Ordinal),
+        },
+        new CallSites(rebound.Where(static r => !r.Proved).Select(static r => r.Modern)) { KeptForwarders = kept });
 
     /// <summary>Records that a call to <paramref name="forwarder"/> was lowered as a call to <paramref name="target"/>.</summary>
     public void Forwarded(CallIdentity forwarder, CallIdentity target) => forwarders.Add(new ResolvedForwarder(forwarder.Value, target.Value));
@@ -84,6 +126,6 @@ internal sealed class CallSites(IEnumerable<string> rebound)
         string Renamed(string identity) => callIdentityRenames.GetValueOrDefault(identity, identity);
     }
 
-    /// <summary>One lowered call: its site's tokens, the member's name and the callee it binds to.</summary>
-    private sealed record Site(string Text, string Member, CallIdentity Callee);
+    /// <summary>One lowered call: its site's tokens, the member's name, the callee it binds to and that callee's method, if any.</summary>
+    private sealed record Site(string Text, string Member, CallIdentity Callee, IMethodSymbol? Method);
 }

@@ -5,10 +5,15 @@ namespace Equiv.Core.Matching;
 /// the same source text on both sides binds to <paramref name="Legacy"/> on the legacy side and to
 /// <paramref name="Modern"/> on the modern side. Every call to either is an <c>IrOpaque</c> with reason
 /// <see cref="OpaqueReason"/>, so an input that reaches one has an unknown outcome (ADR 0014). SARIF
-/// <c>properties.reboundCalls</c>.
+/// <c>properties.reboundCalls</c>. A pair that is <see cref="Proved"/> is not opaque: the two are one assembly's members at
+/// two versions that run the same IL, and every legacy call to <paramref name="Legacy"/> is the same call to
+/// <paramref name="Modern"/> (ADR 0061; ticket P2-179). SARIF <c>properties.reboundCallsProved</c>.
 /// </summary>
 public sealed record ReboundCall(string Legacy, string Modern)
 {
     /// <summary>The <c>IrOpaque</c> reason of a call to an identity in a rebound pair.</summary>
     public const string OpaqueReason = "rebound-call";
+
+    /// <summary>Whether the two callees were proved one call from their code (ADR 0061).</summary>
+    public bool Proved { get; init; }
 }

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Equiv.Samples.PackageVersionRebound.Text</RootNamespace>
+    <AssemblyName>Equiv.Samples.PackageVersionRebound.Text</AssemblyName>
+    <Version>2.0.0</Version>
+  </PropertyGroup>
+
+</Project>

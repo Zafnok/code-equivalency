@@ -1,6 +1,6 @@
 # ADR 0042: A call site with the same text on both sides that binds to a different callee is possibly the same call, and its outcome is unknown
 
-Status: accepted (2026-10-01). Narrows VERIFICATION-MODEL section 3's rule that two different callee
+Status: accepted (2026-10-01); superseded in part by 0061 (a rebound pair whose two callees run the same IL is one call). Narrows VERIFICATION-MODEL section 3's rule that two different callee
 identities are two different functions.
 
 ## Context
