@@ -44,6 +44,15 @@ internal sealed class IrLowerer
     /// <summary><c>Enumerable.Cast&lt;T&gt;()</c>, which returns a <c>T[]</c> it is given as it is (ticket P2-117).</summary>
     private const string CastMember = "System.Linq.Enumerable::Cast`1(System.Collections.IEnumerable)<{T}>";
 
+    /// <summary>
+    /// The one type whose user-defined <c>==</c> and <c>!=</c> are null tests when an operand is <c>null</c> (ticket P2-234):
+    /// <c>System.Type</c>'s return <c>true</c> for the same reference and <c>false</c> when either operand is <c>null</c>,
+    /// before they compare anything else. On .NET Framework 4.8 <c>Type.op_Equality</c> is the CLR's internal call
+    /// <c>RuntimeTypeHandle::TypeEQ</c> (open-sourced as dotnet/coreclr <c>src/vm/runtimehandles.cpp</c>); on .NET it is
+    /// managed (dotnet/runtime <c>Type.Helpers.cs</c>, <c>operator ==(Type? left, Type? right)</c>).
+    /// </summary>
+    private const string NullTestOperatorType = "System.Type";
+
     private static readonly IrBool Bool = new();
 
     private readonly SsaBuilder ssa = new();
@@ -2057,7 +2066,7 @@ internal sealed class IrLowerer
 
     private IrVar? Binary(IBinaryOperation binary, LoweringContext context)
     {
-        if (binary.OperatorKind is BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals && NullTest(binary, context) is { } test)
+        if (binary.OperatorKind is BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals && IsNullTestOperator(binary.OperatorMethod) && NullTest(binary, context) is { } test)
         {
             return test;
         }
@@ -2130,6 +2139,15 @@ internal sealed class IrLowerer
             .OfType<IMethodSymbol>()
             .FirstOrDefault(static m => m.Parameters is [{ Type.SpecialType: SpecialType.System_String }, { Type.SpecialType: SpecialType.System_String }]);
     }
+
+    /// <summary>
+    /// Whether a comparison with <c>null</c> under <paramref name="method"/> is a null test (ticket P2-234): a predefined one,
+    /// with no method, is, <c>string</c>'s included, which Roslyn reports with none and whose <c>String.Equals(string, string)</c>
+    /// is documented as equal when both are <c>null</c> and not equal when one is; a user-defined one is the operator the
+    /// compiler calls, which need not be, unless <see cref="NullTestOperatorType"/> declares it.
+    /// </summary>
+    private static bool IsNullTestOperator(IMethodSymbol? method) =>
+        method is null || string.Equals(TypeMapper.MetadataName(method.ContainingType), NullTestOperatorType, StringComparison.Ordinal);
 
     /// <summary><c>x == null</c> and <c>x != null</c> compare the shadow (acceptance criterion 5); null when neither side is <c>null</c>.</summary>
     private IrVar? NullTest(IBinaryOperation binary, LoweringContext context)
