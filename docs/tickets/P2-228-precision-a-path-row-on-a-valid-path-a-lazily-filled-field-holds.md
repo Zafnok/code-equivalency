@@ -108,3 +108,50 @@ Row 62's `Lazy<T>` factory.
 
   Neither of the two clears with this rule alone, as P2-207 expected for row 52; each blocker is a value no sound rule
   shows valid, not a missing route through the field.
+- Decision: no `Release:` footer. A precision fix that changes no surface is a patch (`equiv-release`).
+- Decision: the rule can reach any private field, so all three migration pairs were rerun, not only the two the procedures
+  are in. The before runs are at `main` (`ea498160`) from a detached worktree at `D:\eq228m`; this branch ran at
+  `a6d1d9d2` from one at `D:\eq228` (P2-200's path-length note). Both used the `.corpus` of the
+  `precision-audit-large-pairs` worktree, linked in by junction, with `corpus.ps1 -Env` set. Compare mode quick,
+  `--jobs 4`, one run at a time, each started once no other session's run was in its load phase. Every run exited 1 (a
+  Divergent result), no project skipped. The later commit `1fbde809` only drops a null-forgiving operator.
+- Criterion 2, the two procedures (and row 62), P2-207's run, then `main`, then this branch:
+
+  | Pair | # | Procedure | P2-207 | `main` | P2-228 |
+  |---|---|---|---|---|---|
+  | Git Extensions | row 52 | `GitCommands.Settings.ConfigFileSettings::CreateLocal(GitCommands.GitModule,GitCommands.Settings.ConfigFileSettings,GitUIPluginInterfaces.SettingLevel,bool)` | EQ006 | EQ006 | EQ006 |
+  | OpenRA | 15 | `OpenRA.Game::InitializeSettings(OpenRA.Arguments)` | EQ006 | EQ006 | EQ006 |
+  | Git Extensions | row 62 | `GitCommands.AppSettings::get_AvatarImageCachePath()` | EQ006 | EQ006 | EQ006 |
+
+  All three stay EQ006, as criterion 1's table says they must. (P2-232's note that row 52 had no result in its runs does
+  not hold for these: both runs here report it.)
+- Criterion 2, path-row EQ006 (counted as P2-188 did: an EQ006 whose `reviewGroup` names a row with the `invalidPath`
+  precondition) and all EQ006:
+
+  | Pair | Path-row EQ006: P2-207, `main`, P2-228 | All EQ006: P2-207, `main`, P2-228 |
+  |---|---|---|
+  | `gitextensions-8522` | 54, 47, 47 | 130, 123, 123 |
+  | `duplicati-3124` | 94, 91, 88 | 113, 110, 107 |
+  | `openra-17989` | 16, 16, 16 | 34, 34, 34 |
+  | All three | 164, 154, 151 | 277, 267, 264 |
+
+  `main` has fewer than P2-207's branch; P2-208, P2-232, P2-218, P2-220 and the other tickets merged since moved them, and
+  that difference is not attributed. Between `main` and this branch every other result of the three pairs is the same.
+  The fifteen that changed, each correct by reading the source, each reading a private field of a test fixture or a
+  monitor that only ever holds a valid path:
+  - EQ006 to Equivalent, on Duplicati: `Duplicati.UnitTest.ImportExportTests::Setup()` (`Directory.CreateDirectory`) and
+    `::TearDown()` (`Directory.Delete`), whose `serverDatafolder` is written once, in `Setup`, as
+    `Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())`; and `Duplicati.UnitTest.RecoveryToolTests::TearDown()`
+    (`Directory.SetCurrentDirectory`), whose `originalCurrentDirectory` is written once, from `Directory.GetCurrentDirectory()`;
+  - Unknown to Equivalent, on Duplicati: `ImportExportTests::RoundTrip()`, which reads `serverDatafolder`;
+  - Unknown to Equivalent, on Git Extensions: ten `GitCommandsTests.Settings.SettingTests` methods
+    (`Should_return_default_value_for_nullable_{bool,byte,char,enum,float,int}_setting_if_value_is_incorrect()`,
+    `Should_return_default_value_for_setting_if_value_is_incorrect<T>(T)`,
+    `Should_save_nullable_enum_setting_as_string(TestEnum?)`, `Should_save_setting<T>(T,T)` and
+    `Should_save_string_setting(string,string)`), whose `File.ReadAllText(_settingFilePath)` reads a field written once,
+    in the fixture's set-up, from `Path.GetTempFileName()`; and `GitUI.CommandsDialogs.BrowseDialog.GitStatusMonitor::StartWatchingChanges(string,string)`,
+    whose `Path.Combine(_gitPath, "modules")` reads a field written once, just before, as `Path.GetDirectoryName(gitDirPath)`
+    under `Directory.Exists(gitDirPath)`.
+
+  No result became Divergent or Unknown. Run times at `main` and this branch: Git Extensions 370 s and 416 s, Duplicati
+  539 s and 490 s, OpenRA 257 s and 235 s; one run each, so the difference is not attributed.
