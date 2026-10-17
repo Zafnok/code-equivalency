@@ -469,8 +469,10 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
   dynamic type is not known statically, and `throw;` is `IrOpaque` with reason `rethrow`.
 - The exception a `catch` reads into its variable is a value when the body only ever reads that variable
-  as `e.Message`, in the handler and outside a `when` filter, a lambda and a local function (P2-140;
-  ADR 0018, clarification of 2026-10-11); a variable nothing reads counts. Each raise the clause may
+  as `e.Message` or hands it to the constructor of a new exception it throws at once, `throw new T(..., e)`,
+  which makes it the inner exception of what is thrown (P2-180), in the handler and outside a `when`
+  filter, a lambda and a local function (P2-140; ADR 0018, clarification of 2026-10-11); a variable
+  nothing reads counts. Each raise the clause may
   take then goes there through a block of its own that gives the clause its exception: the object a
   `throw new T(...)` in the `try` made; for a call or a shared fragment whose `threw` flag is set, the
   `thrown.System.Exception` cell as that call left it, read on that edge, before any `finally` on the
@@ -481,11 +483,13 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   never null. Every call reads and writes the cell as it does a `field.*` map, so the exception a call
   throws is a function of callee, arguments, the heap at the call and the call's position: two sides
   that catch after the same calls hold the same exception, and an exception caught after another call
-  is another value. `e.Message` is then the call to `get_Message` that any property read is. Any
-  other use of the variable (an argument, an inner exception, `ToString`, a filter) leaves the read
-  `IrOpaque` with reason `CaughtException`: what is handed the object can read its stack trace, which
-  depends on where it was thrown. A raise whose route is unknown (`call-throw-in-try`) hands nothing
-  over.
+  is another value. `e.Message` is then the call to `get_Message` that any property read is, and an inner
+  exception an argument of the constructor call that any argument is. Any other use of the variable (an
+  argument of a call, `ToString`, a filter) leaves the read `IrOpaque` with reason `CaughtException`: what
+  is handed the object can read its stack trace, which depends on where it was thrown. An inner
+  exception's stack trace leaves the body only inside the exception thrown, which is observed by its type,
+  or reaches an enclosing clause of the same body, which these rules govern again (ADR 0018, clarification
+  of 2026-10-17). A raise whose route is unknown (`call-throw-in-try`) hands nothing over.
 
 An `async` method (ticket M4-006) is lowered as the synchronous body its CFG already is, over the original
 operations, never over the compiler's state machine. `await e` is `IrCall(await:<awaiter type>, [e])`: its result is
