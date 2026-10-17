@@ -159,6 +159,46 @@ public sealed class PureLoweringTests
         Assert.Empty(Lowered.Calls(procedure));
     }
 
+    /// <summary>
+    /// Ticket P2-234 criterion 1: a comparison with <c>null</c> under a user-defined <c>==</c> or <c>!=</c> is the operator
+    /// the compiler calls, applied to the operand and <c>null</c>, not the operand's null shadow: <c>D</c>'s <c>==</c>
+    /// answers <c>true</c> for a non-null <c>d</c> here, and so does <c>M</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("d == null", "op:D::op_Equality(D,D)", 0)]
+    [InlineData("null == d", "op:D::op_Equality(D,D)", 1)]
+    [InlineData("d != null", "op:D::op_Inequality(D,D)", 0)]
+    public void AComparisonWithNullUnderAUserDefinedOperatorIsTheOperator(string comparison, string function, int operand)
+    {
+        const string D = "class D { public static bool operator ==(D a, D b) => true; public static bool operator !=(D a, D b) => false; public override bool Equals(object o) => true; public override int GetHashCode() => 0; } ";
+
+        IrProcedure procedure = Lowered.Source(D + $"class C {{ static bool M(D d) => {comparison}; }}");
+
+        IrPure pure = Assert.Single(Pures(procedure));
+        Assert.Equal(function, pure.Function);
+        Assert.Equal(procedure.Parameters[0].Var, pure.Args[operand]);
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), Run(procedure, new Answers(new IrBoolValue(Value: true), false), Element(0, "D"), Lowered.Nulls("D", 0, isNull: false)));
+    }
+
+    /// <summary>
+    /// Ticket P2-234 criterion 1: <c>string</c>'s comparison with <c>null</c>, which Roslyn reports with no method, the
+    /// predefined reference comparison, and <c>System.Type</c>'s operators, null tests when an operand is <c>null</c>, stay
+    /// null tests.
+    /// </summary>
+    [Theory]
+    [InlineData("static bool M(string s) => s == null;")]
+    [InlineData("static bool M(string s) => s != null;")]
+    [InlineData("static bool M(C c) => c == null;")]
+    [InlineData("static bool M(Type t) => t != null;")]
+    [InlineData("static bool M(Action a) => a == null;")]
+    public void AComparisonWithNullWithNoOperatorMethodStaysANullTest(string members)
+    {
+        IrProcedure procedure = Lowered.Method(members);
+
+        Assert.Empty(Pures(procedure));
+        Assert.Contains(procedure.Parameters, static p => p.Var.Name.StartsWith("null.", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void UserDefinedOperatorsAndConversionsAreTheirOpFunctions()
     {

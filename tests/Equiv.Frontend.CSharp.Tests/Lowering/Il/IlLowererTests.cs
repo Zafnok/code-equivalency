@@ -115,8 +115,8 @@ public sealed class IlLowererTests
     /// P2-126). They are known differences of <c>IlLoweringParityTests</c> too. After them is a <c>new long?(x)</c>: the
     /// IOperation lowering reads a <c>cast</c> input, as it does for the conversion, and the IL calls the constructor
     /// (ticket P2-095). The last two are <c>Type.GetType(...) != null</c>: the IOperation lowering reads the result's
-    /// <c>null.System.Type</c> shadow, and the IL lowering applies <c>System.Type</c>'s <c>op_Inequality</c>, which the
-    /// compiler calls (ticket P2-234).
+    /// <c>null.System.Type</c> shadow, because <c>System.Type</c>'s <c>op_Inequality</c> is a null test when an operand is
+    /// <c>null</c> (ticket P2-234), and the IL lowering applies that operator, which the compiler calls.
     /// </summary>
     private static readonly string[] KnownCalleeDifferences =
     [

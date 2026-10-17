@@ -195,11 +195,11 @@ public sealed class IlLoweringParityTests
     private const string LiteralReceiver = "IOperation null-checks a string literal receiver through null.System.String; the IL does not";
 
     /// <summary>
-    /// The IOperation lowering reads <c>x != null</c> as the null shadow of <c>x</c> even where <c>!=</c> is a user-defined
-    /// operator, here <c>System.Type</c>'s; the IL lowering applies the operator's <c>op:</c> function, which the compiler
-    /// calls (ticket P2-234).
+    /// The IOperation lowering reads <c>x != null</c> as the null shadow of <c>x</c> where <c>!=</c> is <c>System.Type</c>'s,
+    /// a null test when an operand is <c>null</c> (ticket P2-234); the IL lowering applies the operator's <c>op:</c> function,
+    /// which the compiler calls.
     /// </summary>
-    private const string NullComparison = "IOperation reads a user-defined != null as the null shadow; the IL applies the operator's op: function";
+    private const string NullComparison = "IOperation reads System.Type's != null, a null test, as the null shadow; the IL applies the operator's op: function";
 
     /// <summary>
     /// The IOperation lowering makes the span the compiler builds for a <c>params ReadOnlySpan&lt;T&gt;</c> parameter a new

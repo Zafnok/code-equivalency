@@ -1,5 +1,5 @@
 # P2-234 Soundness bug: a user-defined `==` or `!=` with `null` is lowered as a null test, not as the operator
-Status: todo
+Status: done (PR #535)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -41,3 +41,19 @@ A rewrite of how null shadows are tracked: stop.
 
 ## Notes
 - Filed 2026-10-16 by P2-220.
+- Decision: the null test applies when Roslyn reports no `OperatorMethod` (the predefined reference comparison, a
+  delegate's, and `string`'s `==`/`!=`, whose `String.Equals(string, string)` is documented as equal when both are `null`
+  and not equal when one is) or when the method is declared by `System.Type` (`IrLowerer.NullTestOperatorType`). Every
+  other user-defined operator is its `op:` function.
+- Criterion 3 takes its second branch: `System.Type`'s operator is listed as a null test because with a `null` operand it
+  returns `true` for the same reference and `false` otherwise, before comparing anything, on .NET Framework 4.8 (the
+  CLR's internal call `RuntimeTypeHandle::TypeEQ`, open-sourced in dotnet/coreclr `src/vm/runtimehandles.cpp`) and on .NET
+  (dotnet/runtime `Type.Helpers.cs`). Without the entry `IrLowererTests.TypeOfIsNeverNull` (`typeof(string) == null` is
+  `false`) failed: the operator's `op:` result is unknown. So the two `get_IsMono()` entries stay in
+  `IlLowererTests.KnownCalleeDifferences` and `IlLoweringParityTests.Known`, their reason reworded: the IOperation lowering
+  reads the shadow because the operator is a null test, and the IL lowering applies it.
+- Precision given up: other BCL operators that are null tests too (`Uri`, `Version`, the reflection types) are now their
+  `op:` functions, so `uri == null` to `uri is null` is no longer proved. Filed as P2-235 rather than listed here, since
+  criterion 1 asks for a cited source per entry.
+- `IlLoweringParityTests` could not run locally: the legacy samples fail to load in this worktree (`System` unresolved), a
+  machine issue unrelated to the change; CI runs it.
