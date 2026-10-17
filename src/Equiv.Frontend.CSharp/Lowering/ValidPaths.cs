@@ -378,7 +378,7 @@ internal static class ValidPaths
 
     /// <summary>The expression <paramref name="name"/> ends: the member access or member binding it is the name of, or itself.</summary>
     private static SyntaxNode Callee(SimpleNameSyntax name) =>
-        (name.Parent is MemberAccessExpressionSyntax access && access.Name == name) || name.Parent is MemberBindingExpressionSyntax ? name.Parent! : name;
+        (name.Parent is MemberAccessExpressionSyntax access && access.Name == name) || name.Parent is MemberBindingExpressionSyntax ? name.Parent : name;
 
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
 
