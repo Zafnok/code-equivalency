@@ -105,6 +105,66 @@ public sealed class CallSitesTests
         Assert.False(new CallSites().IsRebound(new CallIdentity(Legacy)));
     }
 
+    /// <summary>
+    /// ADR 0061 (ticket P2-179): a pair is proved only when the comparison says so and neither callee is in another pair;
+    /// the comparison is not asked about a pair whose legacy or modern callee another pair shares.
+    /// </summary>
+    [Fact]
+    public void APairIsProvedOnlyWhenItsCalleesAreInNoOtherPair()
+    {
+        List<ReboundCall> asked = [];
+        ImmutableArray<ReboundCall> rebound =
+        [
+            new("A::F()", "C::F()"), new("A::F()", "D::F()"), new("B::G()", "E::G()"), new("H::G()", "E::G()"), new("I::K()", "J::K()"), new("L::K()", "M::K()"),
+        ];
+
+        ImmutableArray<ReboundCall> proved = CallSites.Prove(rebound, r =>
+        {
+            asked.Add(r);
+            return string.Equals(r.Legacy, "I::K()", StringComparison.Ordinal);
+        });
+
+        Assert.Equal([new ReboundCall("I::K()", "J::K()"), new ReboundCall("L::K()", "M::K()")], asked);
+        Assert.Equal(["I::K()"], proved.Where(static r => r.Proved).Select(static r => r.Legacy), StringComparer.Ordinal);
+        Assert.Equal(rebound.Select(static r => (r.Legacy, r.Modern)), proved.Select(static r => (r.Legacy, r.Modern)));
+    }
+
+    /// <summary>
+    /// ADR 0061: a lowering told a proved pair calls the modern callee where the legacy one was called, and holds only the
+    /// pairs not proved as rebound; the modern side maps nothing.
+    /// </summary>
+    [Fact]
+    public void SitesForProvedPairsMapTheLegacyCalleeAndHoldTheRestRebound()
+    {
+        ImmutableHashSet<string> kept = ["K::F()"];
+
+        (CallSites legacy, CallSites modern) = CallSites.For([new ReboundCall(Legacy, Modern) { Proved = true }, new ReboundCall("A::F()", "B::F()")], kept);
+
+        Assert.Equal(new CallIdentity(Modern, External: true), legacy.Same(new CallIdentity(Legacy, External: true)));
+        Assert.Equal(new CallIdentity("A::F()"), legacy.Same(new CallIdentity("A::F()")));
+        Assert.False(legacy.IsRebound(new CallIdentity(Legacy)));
+        Assert.True(legacy.IsRebound(new CallIdentity("A::F()")));
+        Assert.True(modern.IsRebound(new CallIdentity("B::F()")));
+        Assert.False(modern.IsRebound(new CallIdentity(Modern)));
+        Assert.Empty(modern.Proved);
+        Assert.Same(kept, legacy.KeptForwarders);
+        Assert.Same(kept, modern.KeptForwarders);
+    }
+
+    /// <summary>ADR 0061: a site remembers the method its callee is, which the rebound pair's two callees are read from.</summary>
+    [Fact]
+    public void ASiteRemembersTheMethodItsCalleeIs()
+    {
+        Microsoft.CodeAnalysis.IMethodSymbol method = RoslynTestCompilations.Compile("class C { void M() { } }").GetTypeByMetadataName("C")!.GetMembers("M").OfType<Microsoft.CodeAnalysis.IMethodSymbol>().Single();
+        CallSites sites = new();
+        sites.Add(SyntaxFactory.ParseExpression("M()"), "M", new CallIdentity("C::M()"), method);
+        sites.Add(SyntaxFactory.ParseExpression("N()"), "N", new CallIdentity("C::N()"));
+
+        Assert.Same(method, sites.Method("C::M()"));
+        Assert.Null(sites.Method("C::N()"));
+        Assert.Null(sites.Method("C::O()"));
+    }
+
     /// <summary>ADR 0047 (ticket P2-068): the forwarders of both bodies, each once, sorted by forwarder and then target.</summary>
     [Fact]
     public void TheForwardersOfBothBodiesAreListedOnceAndSorted()

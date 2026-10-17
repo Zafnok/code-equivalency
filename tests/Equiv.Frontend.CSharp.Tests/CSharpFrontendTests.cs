@@ -517,6 +517,49 @@ public sealed class CSharpFrontendTests
         }
     }
 
+    /// <summary>
+    /// ADR 0061 (ticket P2-179): a rebound pair whose callees are one library's members at two versions with the same IL is
+    /// one call. The legacy body calls the modern member, no call is opaque, and the pair lists it as proved. A member whose
+    /// body changed between the versions stays a rebound pair, opaque in both bodies. The IL lowering, told the same pairs,
+    /// calls the modern member too.
+    /// </summary>
+    [Fact]
+    public void AReboundPairOfOneLibraryAtTwoVersionsWithTheSameIlIsOneCall()
+    {
+        const string Shout = "Lib.StringExtensions::Shout(string)";
+        Compilation legacy = RoslynTestCompilations.Compile(
+            "using Lib; namespace N { public static class Probe { public static string Loud(string s) => s.Shout(); public static string Quiet(string s) => s.Whisper(); } }",
+            [RoslynTestCompilations.FileReference(RoslynTestCompilations.EmitLibrary(
+                "Lib",
+                "namespace Lib { public static class TextExtensions { public static string Shout(this string s) => s.ToUpperInvariant() + \"!\"; public static string Whisper(this string s) => s.ToLowerInvariant(); } }"))]);
+        Compilation modern = RoslynTestCompilations.Compile(
+            "using Lib; namespace N { public static class Probe { public static string Loud(string s) => s.Shout(); public static string Quiet(string s) => s.Whisper(); } }",
+            [RoslynTestCompilations.FileReference(RoslynTestCompilations.EmitLibrary(
+                "Lib",
+                "namespace Lib { public static class StringExtensions { public static string Shout(this string s) => s.ToUpperInvariant() + \"!\"; public static string Whisper(this string s) => s.ToLowerInvariant() + \".\"; } }"))]);
+
+        MatchResult result = Analyzed(legacy, modern, ilFallback: false);
+
+        ProcedurePair loud = result.Pairs.Single(static p => p.New.Value.Contains("::Loud(", StringComparison.Ordinal));
+        Assert.Equal([new ReboundCall("Lib.TextExtensions::Shout(string)", Shout) { Proved = true }], loud.ReboundCalls);
+        foreach (IrProcedure body in (IrProcedure[])[loud.OldBody!, loud.NewBody!])
+        {
+            Assert.DoesNotContain(body.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+            Assert.Equal([Shout], body.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        }
+
+        ProcedurePair quiet = result.Pairs.Single(static p => p.New.Value.Contains("::Quiet(", StringComparison.Ordinal));
+        Assert.False(Assert.Single(quiet.ReboundCalls).Proved);
+        Assert.Equal(ReboundCall.OpaqueReason, Assert.Single(quiet.OldBody!.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()).Reason);
+
+        IMethodSymbol method = legacy.GetTypeByMetadataName("N.Probe")!.GetMembers("Loud").OfType<IMethodSymbol>().Single();
+        (CallSites sites, _) = CallSites.For(loud.ReboundCalls, []);
+        Assert.Equal(
+            [Shout],
+            IlLowerer.Lower(method, legacy, Runtimes.Migration, sites).Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee.Value),
+            StringComparer.Ordinal);
+    }
+
     private const string LegacyExists = "Lib.FileBase::Exists(string)";
 
     private const string ModernExists = "Lib.IFile::Exists(string)";

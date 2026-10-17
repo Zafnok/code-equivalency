@@ -352,6 +352,25 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-179 criterion 3 (ADR 0061): the same text binds to two members of one library at two versions. Where the two
+    /// run the same IL they are one call and the pair is Equivalent, naming them in <c>reboundCallsProved</c>; where version
+    /// 2.0's body changed, the call stays rebound and the pair Unknown, naming them in <c>reboundCalls</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("::Loud(", "EQ001", "reboundCallsProved", "Shout")]
+    [InlineData("::Neat(", "EQ003", "reboundCalls", "Tidy")]
+    public void PackageVersionRebound_TwoVersionsOfOneLibraryAreOneCallOnlyWhereTheirIlIsTheSame(string procedure, string rule, string property, string member)
+    {
+        const string Text = "Equiv.Samples.PackageVersionRebound.Text.";
+        Result result = Single("package-version-rebound", procedure);
+
+        Assert.Equal(rule, result.RuleId);
+        Dictionary<string, string> rebound = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>(property));
+        Assert.Equal(($"{Text}TextExtensions::{member}(string)", $"{Text}StringExtensions::{member}(string)"), (rebound["legacy"], rebound["modern"]));
+        Assert.False(result.TryGetProperty(string.Equals(property, "reboundCalls", StringComparison.Ordinal) ? "reboundCallsProved" : "reboundCalls", out string? _));
+    }
+
+    /// <summary>
     /// Ticket P2-142 criterion 3: a call of each of the five <c>TimeSpan</c> factories whose argument is known to be in the
     /// range on which the <c>double</c> and the integer overload agree, a constant in it or an <c>int</c> of seconds, is not a
     /// rebound call, and the pair is Equivalent with the entry applied.

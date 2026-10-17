@@ -269,15 +269,16 @@ public static class SarifReportWriter
 
     /// <summary>
     /// ADR 0042: the callee pairs a call site with the same text binds to, which the pair treats as possibly the same, as
-    /// <c>reboundCalls</c>. ADR 0047: the forwarders the pair's bodies call, each with the callee its calls were lowered as
+    /// <c>reboundCalls</c>; ADR 0061: those of them proved one call from the two versions' code, as <c>reboundCallsProved</c>
+    /// instead, in the same order. ADR 0047: the forwarders the pair's bodies call, each with the callee its calls were lowered as
     /// calls to, as <c>forwardersResolved</c>. ADR 0059: the config's call-identity map entries the legacy body calls, as
     /// <c>callIdentitiesMapped</c>. Each is left out when there is none.
     /// </summary>
     private static void SetCalleeProperties(Result sarifResult, VerificationResult result)
     {
-        if (!result.ReboundCalls.IsEmpty)
+        foreach (IGrouping<bool, ReboundCall> rebound in result.ReboundCalls.GroupBy(static r => r.Proved))
         {
-            sarifResult.SetProperty("reboundCalls", result.ReboundCalls.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
+            sarifResult.SetProperty(rebound.Key ? "reboundCallsProved" : "reboundCalls", rebound.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [LegacyKey] = r.Legacy,
                 [ModernKey] = r.Modern,

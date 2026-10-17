@@ -65,6 +65,8 @@ internal static class IlAstReader
 
     private static readonly ConditionalWeakTable<Compilation, Module?> Modules = [];
 
+    private static readonly ConditionalWeakTable<Compilation, Dictionary<string, MetadataModule?>> Files = [];
+
     /// <summary>
     /// A missing reference leaves its types unknown instead of failing the read; the type system spells types as metadata
     /// does, without the tuple, <c>dynamic</c>, native-integer or nullable-annotation views, as <see cref="TypeMapper"/> does.
@@ -117,6 +119,45 @@ internal static class IlAstReader
             CancellationToken.None);
         function.RunTransforms(Transforms(), new ILTransformContext(function, module.TypeSystem, module.Pdb, Settings));
         return new Body(function, module, Failure: null);
+    }
+
+    /// <summary>
+    /// The module that declares <paramref name="assembly"/>'s members as <paramref name="compilation"/> sees them (ADR 0061;
+    /// ticket P2-179): the compilation's own, or a project reference's, emitted as <see cref="Read"/> emits one; a file
+    /// reference read from its path, each once per compilation, with the compilation's references resolving its own. Null
+    /// for a reference assembly, whose bodies are stubs, and for a module that does not emit or cannot be read.
+    /// </summary>
+    public static MetadataModule? Library(IAssemblySymbol assembly, Compilation compilation)
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+        ArgumentNullException.ThrowIfNull(compilation);
+        return (ReferenceAssemblies.IsReferenceAssembly(assembly), SymbolEqualityComparer.Default.Equals(assembly, compilation.Assembly)) switch
+        {
+            (true, _) => null,
+            (_, true) => Modules.GetValue(compilation, Emit)?.TypeSystem.MainModule,
+            _ => compilation.GetMetadataReference(assembly) switch
+            {
+                CompilationReference project => Modules.GetValue(project.Compilation, Emit)?.TypeSystem.MainModule,
+                PortableExecutableReference { FilePath: { } path } => FromFile(path, compilation),
+                _ => null,
+            },
+        };
+    }
+
+    /// <summary>The module at <paramref name="path"/>, with <paramref name="compilation"/>'s references, read once per compilation.</summary>
+    private static MetadataModule? FromFile(string path, Compilation compilation)
+    {
+        Dictionary<string, MetadataModule?> read = Files.GetValue(compilation, static _ => new(StringComparer.OrdinalIgnoreCase));
+        lock (read)
+        {
+            if (!read.TryGetValue(path, out MetadataModule? module))
+            {
+                module = Resolver.FromPath(path) is { } file ? new DecompilerTypeSystem(file, new Resolver(compilation), Settings).MainModule : null;
+                read[path] = module;
+            }
+
+            return module;
+        }
     }
 
     private static List<IILTransform> Transforms()
@@ -211,7 +252,7 @@ internal static class IlAstReader
         };
 
         /// <summary>A module read from <paramref name="path"/>, or none when the file has gone or is no longer a module.</summary>
-        private static PortableFile? FromPath(string path)
+        internal static PortableFile? FromPath(string path)
         {
             try
             {

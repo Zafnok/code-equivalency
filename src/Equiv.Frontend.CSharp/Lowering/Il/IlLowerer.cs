@@ -950,7 +950,8 @@ internal sealed partial class IlLowerer
     /// A call to a forwarder is the same call to its target (<see cref="Callee"/>; ADR 0047).
     /// A member in the effect-free catalogue is no call (ADR 0043): a getter is its receiver's pure function and a
     /// constructor's object the next of <c>new.&lt;Sort&gt;</c>, each as <see cref="IrLowerer"/> lowers it, less the family rule.
-    /// A call to an identity the pair's other side binds differently at the same source text is <see cref="Rebound"/> (ADR 0042).
+    /// A call to an identity the pair's other side binds differently at the same source text is <see cref="Rebound"/> (ADR 0042),
+    /// unless the two were proved one call, when it is the same call to the modern member (ADR 0061).
     /// </summary>
     private Val? Call(CallInstruction call)
     {
@@ -984,7 +985,8 @@ internal sealed partial class IlLowerer
             ThrowIfNull(call.Arguments[0], receiver.Value.Var);
         }
 
-        (CallIdentity identity, bool closed) = Callee(target);
+        (CallIdentity callee, bool closed) = Callee(target);
+        CallIdentity identity = Sites.Same(callee);
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
         return (isOperator, Sites.IsRebound(identity)) switch
         {

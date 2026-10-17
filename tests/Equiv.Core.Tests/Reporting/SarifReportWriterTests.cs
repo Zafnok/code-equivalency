@@ -1105,6 +1105,30 @@ public sealed class SarifReportWriterTests
         Assert.False(results[1].TryGetProperty("reboundCalls", out List<Dictionary<string, string>>? _));
     }
 
+    /// <summary>
+    /// ADR 0061; ticket P2-179: a rebound pair proved one call from the two versions' code is listed apart, in
+    /// <c>reboundCallsProved</c>, and is no longer in <c>reboundCalls</c>; a result with only proved pairs has no <c>reboundCalls</c>.
+    /// </summary>
+    [Fact]
+    public void Sarif_ListsProvedReboundCallsApart()
+    {
+        ReboundCall proved = new("Lib.TextExtensions::Shout(string)", "Lib.StringExtensions::Shout(string)") { Proved = true };
+        VerificationResult both = Fixtures.Result(new Unknown(UnknownReason.Opaque, "old: rebound-call; new: rebound-call")) with
+        {
+            ReboundCalls = [proved, new ReboundCall("Lib.TextExtensions::Whisper(string)", "Lib.StringExtensions::Whisper(string)")],
+        };
+        VerificationResult onlyProved = Fixtures.Result(new Equivalent(ProofMethod.Bounded)) with { ReboundCalls = [proved] };
+
+        Result[] results = [.. SarifReportWriter.Write([both, onlyProved]).Runs[0].Results];
+
+        Dictionary<string, string> listed = Assert.Single(results[0].GetProperty<List<Dictionary<string, string>>>("reboundCallsProved"));
+        Assert.Equal("Lib.TextExtensions::Shout(string)", listed["legacy"]);
+        Assert.Equal("Lib.StringExtensions::Shout(string)", listed["modern"]);
+        Assert.Equal("Lib.TextExtensions::Whisper(string)", Assert.Single(results[0].GetProperty<List<Dictionary<string, string>>>("reboundCalls"))["legacy"]);
+        Assert.Single(results[1].GetProperty<List<Dictionary<string, string>>>("reboundCallsProved"));
+        Assert.False(results[1].TryGetProperty("reboundCalls", out List<Dictionary<string, string>>? _));
+    }
+
     /// <summary>ADR 0047; ticket P2-068 criterion 2: a result names each forwarder its pair resolved, and what to.</summary>
     [Fact]
     public void Sarif_ListsForwardersResolved()

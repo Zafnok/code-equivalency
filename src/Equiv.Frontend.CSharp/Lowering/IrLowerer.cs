@@ -2839,7 +2839,7 @@ internal sealed class IrLowerer
             (target, callee) = (resolved.Target, forwarded);
         }
 
-        return new Callee(callee, ClosedCalls.IsClosed(target), site, method.Name);
+        return new Callee(callee, ClosedCalls.IsClosed(target), site, method.Name) { Method = target };
     }
 
     /// <summary>
@@ -3185,7 +3185,7 @@ internal sealed class IrLowerer
         CallIdentityFactory.Of(method, compilation, renames, suppressedRuntimeChanges, runtime.Interval, site);
 
     /// <summary>A call to <paramref name="method"/> lowered at <paramref name="site"/>.</summary>
-    private Callee Called(IMethodSymbol method, IOperation site) => new(Identity(method, site), ClosedCalls.IsClosed(method), site, method.Name);
+    private Callee Called(IMethodSymbol method, IOperation site) => new(Identity(method, site), ClosedCalls.IsClosed(method), site, method.Name) { Method = method };
 
     /// <summary>
     /// A member access's call operands: the receiver, then the arguments. The receiver is null-checked at the call, by
@@ -3231,14 +3231,16 @@ internal sealed class IrLowerer
     /// site. When the other side binds that site to another callee, the call is rebound (ADR 0042; ticket P2-069): its
     /// result and each output are an opaque with reason <see cref="ReboundCall.OpaqueReason"/> at the site, which no fragment
     /// shares, and it has no <c>threw</c> edge, since an input that reaches it has an unknown outcome. A call to a member
-    /// that never throws (<see cref="ClosedCalls.NeverThrows"/>; ADR 0056) has no <c>threw</c> flag either.
+    /// that never throws (<see cref="ClosedCalls.NeverThrows"/>; ADR 0056) has no <c>threw</c> flag either. A legacy call to
+    /// a member the pair's rebound pair proved one call with a modern member is the same call to that member (ADR 0061).
     /// </summary>
     private IrVar? Call(Callee callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
     {
-        catalogue.Sites.Add(callee.Site.Syntax, callee.Member, callee.Identity);
+        catalogue.Sites.Add(callee.Site.Syntax, callee.Member, callee.Identity, callee.Method);
+        CallIdentity identity = catalogue.Sites.Same(callee.Identity);
         IrVar? target = returns is null ? null : ssa.Temp(returns);
-        bool rebound = catalogue.Sites.IsRebound(callee.Identity);
-        IrVar? threw = rebound || ClosedCalls.NeverThrows(callee.Identity) ? null : ssa.Temp(Bool);
+        bool rebound = catalogue.Sites.IsRebound(identity);
+        IrVar? threw = rebound || ClosedCalls.NeverThrows(identity) ? null : ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(w => ssa.Temp(w.Type))];
         if (rebound)
         {
@@ -3251,7 +3253,7 @@ internal sealed class IrLowerer
         }
         else
         {
-            ssa.Emit(context.Current, new IrCall(target, threw, callee.Identity, args) { RefOuts = outputs, Closed = callee.Closed });
+            ssa.Emit(context.Current, new IrCall(target, threw, identity, args) { RefOuts = outputs, Closed = callee.Closed });
         }
 
         foreach ((RefOut output, IrVar value) in written.Zip(outputs))
@@ -3276,9 +3278,13 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// What a call calls and where: the callee's identity, whether the call is closed (ADR 0041), and its call site, the
-    /// operation it is lowered for and the member's name (ADR 0042).
+    /// operation it is lowered for and the member's name (ADR 0042); and the method it calls, when it calls one, which a
+    /// rebound pair's callees are read from (ADR 0061).
     /// </summary>
-    private sealed record Callee(CallIdentity Identity, bool Closed, IOperation Site, string Member);
+    private sealed record Callee(CallIdentity Identity, bool Closed, IOperation Site, string Member)
+    {
+        public IMethodSymbol? Method { get; init; }
+    }
 
     /// <summary>
     /// How a collection expression is built (ticket P2-099): the type built; the call that yields it, a constructor or

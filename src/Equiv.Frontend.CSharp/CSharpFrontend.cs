@@ -36,7 +36,8 @@ namespace Equiv.Frontend.CSharp;
 /// the pair carries as <see cref="ProcedurePair.Runtimes"/>. Under
 /// <c>--il-fallback</c> a pair may keep bodies lowered from IL instead (<see cref="IlFallback"/>, ADR 0039; P1-016). A pair
 /// with a call site that has the same text on both sides and binds to a different callee is lowered again with each such
-/// call an opaque, and lists the callee pairs (<see cref="CallSites"/>, ADR 0042; P2-069).
+/// call an opaque, and lists the callee pairs (<see cref="CallSites"/>, ADR 0042; P2-069); a pair whose two callees are one
+/// assembly's members at two versions that run the same IL is one call instead (<see cref="TwoVersions"/>, ADR 0061; P2-179).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
@@ -169,6 +170,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
     {
         RuntimeChangeTable table = RuntimeChangeTable.Load();
         ImmutableHashSet<string> kept = KeptForwarders(pairs, sides, config.Renames);
+        TwoVersions versions = new();
         log.Phase("lower", pairs.Length, pairs.Length);
         ImmutableArray<ProcedurePair>.Builder lowered = ImmutableArray.CreateBuilder<ProcedurePair>(pairs.Length);
         ImmutableArray<LoweringFailure>.Builder failures = ImmutableArray.CreateBuilder<LoweringFailure>();
@@ -182,7 +184,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
             try
             {
                 (IrProcedure oldBody, IrProcedure newBody, ImmutableArray<string> applied, ImmutableArray<ReboundCall> rebound, ImmutableArray<ResolvedForwarder> forwarders) =
-                    Bodies((legacy, legacyRuntime), (modern, modernRuntime), config, kept);
+                    Bodies((legacy, legacyRuntime), (modern, modernRuntime), config, kept, versions);
                 BodyFingerprint? oldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime, kept);
                 BodyFingerprint? newFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime, kept);
                 lowered.Add(Relowered(
@@ -234,11 +236,16 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <summary>
     /// Both bodies of a pair, the catalogue entries that fired in either, sorted, the pair's rebound calls (ADR 0042;
     /// ticket P2-069) and the forwarders the bodies it returns resolved (ADR 0047; ticket P2-068). The bodies are lowered once to record their call sites. When a site with the same text binds to a
-    /// different callee on each side, both are lowered again with every call to such a callee an opaque. Every lowering of a
-    /// side uses that side's runtime facts (ADR 0040; ticket P2-055).
+    /// different callee on each side, both are lowered again with every call to such a callee an opaque, unless
+    /// <paramref name="versions"/> proves the two callees one call, when the legacy side calls the modern callee (ADR 0061;
+    /// ticket P2-179). Every lowering of a side uses that side's runtime facts (ADR 0040; ticket P2-055).
     /// </summary>
     private (IrProcedure Old, IrProcedure New, ImmutableArray<string> Applied, ImmutableArray<ReboundCall> Rebound, ImmutableArray<ResolvedForwarder> Forwarders) Bodies(
-        (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config, ImmutableHashSet<string> kept)
+        (SideProcedure Procedure, SideRuntime Runtime) legacySide,
+        (SideProcedure Procedure, SideRuntime Runtime) modernSide,
+        EquivConfig config,
+        ImmutableHashSet<string> kept,
+        TwoVersions versions)
     {
         (SideProcedure legacy, SideRuntime legacyRuntime) = legacySide;
         (SideProcedure modern, SideRuntime modernRuntime) = modernSide;
@@ -249,8 +256,10 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ImmutableArray<ReboundCall> rebound = CallSites.Rebound(oldSites, newSites, config.CallIdentityRenames);
         if (!rebound.IsEmpty)
         {
-            oldSites = new CallSites(rebound.Select(static r => r.Legacy)) { KeptForwarders = kept };
-            newSites = new CallSites(rebound.Select(static r => r.Modern)) { KeptForwarders = kept };
+            CallSites told = oldSites;
+            CallSites other = newSites;
+            rebound = CallSites.Prove(rebound, r => versions.Same(told.Method(r.Legacy), legacy.Compilation, other.Method(r.Modern), modern.Compilation));
+            (oldSites, newSites) = CallSites.For(rebound, kept);
             (oldBody, oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, oldSites);
             (newBody, newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, newSites);
         }
@@ -277,8 +286,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         if (thorough || config.IlFallback)
         {
             bool congruent = pair.OldFingerprint is { RuntimeSensitive: false } fingerprint && fingerprint == pair.NewFingerprint;
-            CallSites oldSites = new(pair.ReboundCalls.Select(static r => r.Legacy)) { KeptForwarders = kept };
-            CallSites newSites = new(pair.ReboundCalls.Select(static r => r.Modern)) { KeptForwarders = kept };
+            (CallSites oldSites, CallSites newSites) = CallSites.For(pair.ReboundCalls, kept);
             (IrProcedure old, IrProcedure @new, bool tried, string lowering) = IlFallback.Choose(
                 new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!, legacySide.Runtime) { Sites = oldSites },
                 new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!, modernSide.Runtime) { Sites = newSites },

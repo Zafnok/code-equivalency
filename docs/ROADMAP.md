@@ -1393,7 +1393,9 @@ false positives and Unknowns that verdict counts against each, they come before 
 4. The EQ002 causes, 13 false positives: P2-193 (S, 4), P2-185 (2), P2-186 (2), P2-211 (1, the upgrades' last),
    P2-187, P2-097, P2-205, P2-206 (1 each).
 5. Unknown, the opaque reasons at or above 5% of a pair's changed pairs alone: P2-179 (`rebound-call`, 121 on
-   `gitextensions-8522`), P2-214 (M, `no-body`, 51 there and 76 `runtime-rule` Unknowns over three pairs), P2-182
+   `gitextensions-8522`) is done: ADR 0061 makes a rebound pair of one assembly at two versions one call when its IL is
+   the same, and none of `gitextensions-8522`'s third-party pairs is, so the 121 stay, as honest Unknowns of library
+   code that changed. P2-214 (M, `no-body`, 51 there and 76 `runtime-rule` Unknowns over three pairs), P2-182
    (`DelegateCreation`, 20 on OpenRA and 28 on `gitextensions-9860`), P2-180 (`CaughtException`, 36 on Duplicati and
    14 on OpenRA), P2-215 (M, `Conversion`, 8 on Jellyfin).
 6. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates fresh samples as P2-212 did, and names
