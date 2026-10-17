@@ -757,6 +757,53 @@ public sealed class ValidPathsTests
         + "struct C\n{\nstatic readonly string Base = Environment.GetEnvironmentVariable(\"X\");\nreadonly string data = Path.Combine(Base, \"data\");\n"
         + "public C() { }\nobject M() => Path.Combine(Base, \"x\");\n}\n")).Any(static call => call.Callee.RuntimeChanged));
 
+    /// <summary>
+    /// Ticket P2-231: the result of a member whose .NET Framework check is <c>Path.CheckInvalidPathChars</c>
+    /// (<c>Path.GetFileName</c>, <c>Path.Combine</c>, <c>Path.GetDirectoryName</c>) passed that check, so a row whose own check
+    /// is that one (<c>Path.Combine</c>) does not fire on it, through a local, a solution callee or a private method's only
+    /// caller as on any valid path; the member's own row fires on its argument instead. A row whose check is wider
+    /// (<c>StreamReader</c>, <c>Path.GetDirectoryName</c>) still fires, as a <c>?</c>, a <c>*</c> or a stray colon passes the
+    /// character check. <c>ChangeExtension</c> does not check its extension, so its result has passed nothing, and a path that
+    /// really comes from an argument still fires.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M(string p) => Path.Combine(AppContext.BaseDirectory, Path.GetFileName(p));", new[] { GetFileName })]
+    [InlineData("static object M(string p) => new StreamReader(Path.GetFileName(p));", new[] { GetFileName, StreamReaderOfPath })]
+    [InlineData("static object M(string p) => Path.Combine(AppContext.BaseDirectory, p);", new[] { Combine })]
+    [InlineData("static object M(string p) => Path.Combine(p, Path.GetFileName(AppContext.BaseDirectory));", new[] { Combine })]
+    [InlineData("static object M(string p, string q) => Path.Combine(Path.Combine(p, q), \"web\", \"index.html\");", new[] { Combine })]
+    [InlineData("static object M(string p) { var name = Path.GetFileNameWithoutExtension(p); return Path.Combine(Path.GetTempPath(), name + \".bak\"); }", new[] { "System.IO.Path::GetFileNameWithoutExtension(string)" })]
+    [InlineData("static object M(string p) => Path.Combine(Path.GetDirectoryName(p), Path.GetExtension(p));", new[] { GetDirectoryName, "System.IO.Path::GetExtension(string)" })]
+    [InlineData("static object M(string p) => Path.GetDirectoryName(Path.GetFileName(p));", new[] { GetDirectoryName, GetFileName })]
+    [InlineData("static object M(string e) => Path.Combine(AppContext.BaseDirectory, Path.ChangeExtension(Path.GetTempFileName(), e));", new[] { "System.IO.Path::ChangeExtension(string,string)", Combine })]
+    [InlineData("static object M(string p, bool b) => Path.Combine(AppContext.BaseDirectory, b ? Path.GetFileName(p) : p);", new[] { Combine, GetFileName })]
+    public void TheResultOfAMemberWhoseCheckIsTheCharacterCheckPassesARowWhoseCheckIsThatOne(string member, string[] flagged) =>
+        Assert.Equal(flagged.Order(StringComparer.Ordinal), Flagged(member), StringComparer.Ordinal);
+
+    /// <summary>
+    /// Ticket P2-231, Git Extensions #38's <c>FileAssociatedIconProvider::CreateTempFile</c> shape: a private method whose only
+    /// call passes <c>Path.GetFileName</c> of a path no rule shows valid joins it to the temporary directory, and its
+    /// <c>Path.Combine</c> no longer fires; a <c>StreamWriter</c> of the parameter, or a call that passes the path itself, still
+    /// does. Duplicati #30's <c>IndexHtmlHandler::Process</c> shape: a <c>Path.Combine</c> of a solution callee that returns a
+    /// <c>Path.Combine</c> of a field set from a constructor's parameter passed the character check too.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M(string fileName) => Path.Combine(Path.GetTempPath(), fileName);\nstatic object Run(string fullPath) => M(Path.GetFileName(fullPath));", false)]
+    [InlineData("static object M(string fileName) => new StreamWriter(fileName);\nstatic object Run(string fullPath) => M(Path.GetFileName(fullPath));", true)]
+    [InlineData("static object M(string fileName) => Path.Combine(Path.GetTempPath(), fileName);\nstatic object Run(string fullPath) => M(Path.GetFileName(fullPath)) ?? M(fullPath);", true)]
+    [InlineData("readonly string root;\nC(string r) { root = r; }\nstring GetPath(string u) => Path.Combine(root, u);\nobject M(string u) { var path = GetPath(u); return Path.Combine(path, \"index.html\"); }", false)]
+    [InlineData("readonly string root;\nC(string r) { root = r; }\nstring GetPath(string u) => Path.Combine(root, u);\nobject M(string u) => new StreamReader(GetPath(u));", true)]
+    [InlineData("readonly string root;\nC(string r) { root = r; }\nstring GetPath(string u) => root + u;\nobject M(string u) => Path.Combine(GetPath(u), \"index.html\");", true)]
+    public void ACharacterCheckedPathIsFollowedAsAValidPathIs(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    private const string GetFileName = "System.IO.Path::GetFileName(string)";
+
+    private const string GetDirectoryName = "System.IO.Path::GetDirectoryName(string)";
+
+    private const string Combine = "System.IO.Path::Combine(string,string)";
+
+    private const string StreamReaderOfPath = "System.IO.StreamReader::.ctor(string)";
+
     private static bool Flags(string member) => Flagged(member).Length > 0;
 
     /// <summary>The members of the calls <c>M</c> makes that a row flags, in order of their names.</summary>

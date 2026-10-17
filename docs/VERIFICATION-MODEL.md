@@ -696,6 +696,13 @@ Migration-specific normalisations (applied to both sides before matching):
   of the method around it as a solution callee, adds `Path.GetRandomFileName` to the sources, reads a valid path
   followed by a string constant with no character validation rejects and no colon as one, and such a constant before
   a valid path where a `StartsWith` on a separator and an ASCII letter or digit has shown the path to have no drive.
+  Ticket P2-231 records on each path row the check its .NET Framework member makes, read from the reference source:
+  `Path.CheckInvalidPathChars` alone (control characters and `" < > |`; `Path.Combine`, `Path.GetFileName` and their
+  kin), that and `NormalizePath` without its full check (`Path.GetDirectoryName`, `Path.GetPathRoot`), or the full
+  check with a `FileIOPermission` demand (everything else). A row whose check is the first does not fire on the result
+  of one of the table's `characterValidators` (`Path.Combine`, `Path.GetFileName`, `Path.GetDirectoryName` and kin),
+  whatever its argument, read through the same rules as a valid path: on .NET Framework that result passed the same
+  check, and the validator's own row fires on its argument. A row whose check is wider still fires on it.
   Any other path that came from a caller is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`

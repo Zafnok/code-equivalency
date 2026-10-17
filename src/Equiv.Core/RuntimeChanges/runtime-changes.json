@@ -75,7 +75,24 @@
 //     change the empty string does not reach: an empty path takes the call to the same outcome on .NET Framework and .NET
 //     (SetCurrentDirectory throws ArgumentException on both; Combine joins nothing on both, as neither validates an empty
 //     part). An argument that "validPaths" shows to be a valid path or the empty string does not meet such a row's
-//     precondition.
+//     precondition. Each such row's "frameworkCheck" (P2-231) is the check its .NET Framework member makes before it does
+//     anything, read from the reference source (microsoft/referencesource, mscorlib/system/io and the member's own file):
+//       "pathCharacters": Path.CheckInvalidPathChars and nothing else, which rejects a control character and " < > |, and
+//         reads no device path (\\?\, \\.\); a blank path, a long one, a wildcard and a colon pass it. Combine, GetFileName,
+//         GetFileNameWithoutExtension (through GetFileName), GetExtension, ChangeExtension (its path, not its extension) and
+//         IsPathRooted;
+//       "limitedNormalization": that check and NormalizePath without its full check, which adds a blank path and a long one
+//         and lets wildcards and colons through. GetDirectoryName and GetPathRoot;
+//       "fullPath": NormalizePath's full check (Path.GetFullPathInternal, or FileStream.Init) and a FileIOPermission demand,
+//         or its emulation, that rejects a wildcard and a stray colon: every character "invalidPath" names. GetFullPath, the
+//         File and Directory members, and the constructors that open a FileStream (StreamReader, StreamWriter, Attachment,
+//         XmlTextWriter); AssemblyName.GetAssemblyName demands PathDiscovery on GetFullPathInternal's result; XmlReader.Create
+//         takes a relative path through GetFullPath and opens a FileStream on the resolved URI's local path.
+//         SetCurrentDirectory calls GetFullPathInternal and demands no FileIOPermission, so its own check may pass a
+//         wildcard or a colon; it is recorded as "fullPath", the wider check, which only fires on more calls.
+//     An argument that "validPaths" shows passed "pathCharacters" does not meet the precondition of a row whose check is
+//     "pathCharacters": that row's change reaches only a path its check rejects. A row with no "frameworkCheck" is read as
+//     "fullPath".
 //   "trimEntries": reads the argument named options; met by any value but StringSplitOptions.None and
 //     RemoveEmptyEntries, the only two .NET Framework accepts (P2-181).
 //   "absentFolder": reads the argument named folder; met by any Environment.SpecialFolder but System and the nine folders
@@ -156,6 +173,15 @@
 // these or the empty string itself ("" or String.Empty); a constant joined to such a value must also be empty or not white
 // space only, since joined to the empty string it is the whole path. A transform's or prefix's arguments are still read
 // as valid paths.
+// The same rules again show an argument to have passed "pathCharacters" (P2-231) when every value they read is a valid
+// path, the empty string, or the result of one of the "characterValidators", whatever their arguments: members whose own
+// check is at least "pathCharacters" and whose result is a part or a join of the paths that check read, so on .NET
+// Framework it has no control character and none of " < > |. Each is itself a path row whose changedIn is every
+// "invalidPath" row's, so wherever another runtime would return such a character, that row fires on the validator's own
+// call. Such a result is no valid path for a row whose check is wider: a "?", a "*" or a stray colon passes it.
+// ChangeExtension is not one, as it does not check its extension. A device path is the gap, as for the "validators":
+// GetFileName, GetFileNameWithoutExtension and GetExtension of a device path return its last part unread and without the
+// prefix, so a control character or one of " < > | there reaches a later "pathCharacters" check.
 //
 // "ordinalUnaffected" (P2-075), when true, marks a row for a culture-sensitive comparison: a call that passes
 // StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant argument is not flagged by it.
@@ -209,6 +235,14 @@
     ],
     "validators": [
       "System.IO.Path::GetFullPath(string)"
+    ],
+    "characterValidators": [
+      "System.IO.Path::Combine(string,",
+      "System.IO.Path::GetFileName(string)",
+      "System.IO.Path::GetFileNameWithoutExtension(string)",
+      "System.IO.Path::GetExtension(string)",
+      "System.IO.Path::GetDirectoryName(string)",
+      "System.IO.Path::GetPathRoot(string)"
     ],
     "transforms": [
       "System.IO.Path::Combine(string,",
@@ -2862,6 +2896,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "emptyPathUnchanged": true,
       "reason": "Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
@@ -2872,6 +2907,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "limitedNormalization",
       "reason": "GetDirectoryName no longer validates its argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getdirectoryname",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "" }
@@ -2881,6 +2917,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "Opening a path with characters the file system itself rejects throws IOException on .NET 10, where .NET Framework's own upfront character validation threw ArgumentException first.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamreader.-ctor",
       "witness": { "input": ["ä\"̈9aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2939,6 +2976,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "CreateDirectory no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.createdirectory",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2948,6 +2986,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "Delete no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.DirectoryNotFoundException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.delete",
       "witness": { "input": ["a\u0308\"\u03089aH", true], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.DirectoryNotFoundException" }
@@ -2957,6 +2996,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "emptyPathUnchanged": true,
       "reason": "SetCurrentDirectory no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.setcurrentdirectory",
@@ -2967,6 +3007,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "Create no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.create",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2976,6 +3017,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "Delete no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.delete",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2985,6 +3027,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "GetAttributes no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getattributes",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2994,6 +3037,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "GetLastWriteTime no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getlastwritetime",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3003,6 +3047,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "GetLastWriteTimeUtc no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getlastwritetimeutc",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3012,6 +3057,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "OpenRead no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.openread",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3021,6 +3067,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "ReadAllBytes no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readallbytes",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3030,6 +3077,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "ReadAllLines no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readalllines",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3039,6 +3087,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "ReadAllText no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readalltext",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3056,6 +3105,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "ReadLines no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readlines",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3097,6 +3147,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "reason": "ChangeExtension no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.changeextension",
       "witness": { "input": ["\u0000", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000.i" }
@@ -3106,6 +3157,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "emptyPathUnchanged": true,
       "reason": "Combine no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
@@ -3116,6 +3168,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "emptyPathUnchanged": true,
       "reason": "Combine no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
@@ -3126,6 +3179,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "reason": "GetExtension no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getextension",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "" }
@@ -3135,6 +3189,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "reason": "GetFileName no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfilename",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000" }
@@ -3144,6 +3199,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "reason": "GetFileNameWithoutExtension no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfilenamewithoutextension",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000" }
@@ -3153,6 +3209,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "GetFullPath no longer rejects invalid path characters: .NET Framework throws ArgumentException, .NET 10 returns the path joined to the current directory. The witness's modern value depends on the current directory, which it names in angle brackets.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfullpath",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "<current directory>\\a\u0308\"\u03089aH" }
@@ -3170,6 +3227,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "limitedNormalization",
       "reason": "GetPathRoot no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getpathroot",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "" }
@@ -3179,6 +3237,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "pathCharacters",
       "reason": "IsPathRooted no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.ispathrooted",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": false }
@@ -3204,6 +3263,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamwriter.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3213,6 +3273,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamwriter.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH", true], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3295,6 +3356,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.net.mail.attachment.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3312,6 +3374,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "GetAssemblyName no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.reflection.assemblyname.getassemblyname",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3399,6 +3462,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "Create no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.xml.xmlreader.create",
       "witness": { "input": ["a\u0308\"\u03089aH", null], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3408,6 +3472,7 @@
       "source": "measured",
       "changedIn": "netcoreapp1.0",
       "precondition": "invalidPath",
+      "frameworkCheck": "fullPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.xml.xmltextwriter.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH", null], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }

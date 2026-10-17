@@ -12,7 +12,8 @@ namespace Equiv.Core.RuntimeChanges;
 /// is unknown (ADR 0040 decision 2; ticket P2-054). <see cref="Precondition"/> is set on a row whose change only some
 /// arguments can reach (ticket P2-073). <see cref="OrdinalUnaffected"/> is set on a row for a culture-sensitive
 /// comparison (ticket P2-075). <see cref="EmptyPathUnchanged"/> is set on a path row the empty string does not reach (ticket
-/// P2-232). <see cref="Requires"/> is a fact about the calling method that the row needs before it
+/// P2-232), and <see cref="FrameworkCheck"/> on a path row is the check its .NET Framework member makes (ticket P2-231).
+/// <see cref="Requires"/> is a fact about the calling method that the row needs before it
 /// fires (ticket P2-114), or null when the call alone is enough.
 /// </summary>
 public sealed record RuntimeChange(string Member, string Reason, Uri Url, RuntimeChangeSource Source)
@@ -33,6 +34,12 @@ public sealed record RuntimeChange(string Member, string Reason, Uri Url, Runtim
     /// .NET Framework and .NET (ticket P2-232), so a <see cref="CallArgument.ValidPathOrEmpty"/> does not meet its precondition.
     /// </summary>
     public bool EmptyPathUnchanged { get; init; }
+
+    /// <summary>
+    /// The check the row's .NET Framework member makes of its path, on a path row that records one (ticket P2-231); null on any
+    /// other row. A path row with none is read as <see cref="PathCheck.FullPath"/>.
+    /// </summary>
+    public PathCheck? FrameworkCheck { get; init; }
 
     /// <summary>The fact about the method that calls the member without which the row does not fire, or null for none.</summary>
     public RowPrecondition? Requires { get; init; }

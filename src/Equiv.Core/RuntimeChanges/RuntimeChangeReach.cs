@@ -11,7 +11,9 @@ namespace Equiv.Core.RuntimeChanges;
 /// them, every one is a compile-time constant, and no constant meets the precondition; a call with none of them, or
 /// with one that is not a constant, can. An operand that is a <see cref="CallArgument.ValidPath"/> never meets
 /// <see cref="RuntimeChangePrecondition.InvalidPath"/>, constant or not (ticket P2-074), and nor does a
-/// <see cref="CallArgument.ValidPathOrEmpty"/> on a row the empty string does not reach (ticket P2-232). A search for a character, whose
+/// <see cref="CallArgument.ValidPathOrEmpty"/> on a row the empty string does not reach (ticket P2-232), nor a
+/// <see cref="CallArgument.ValidPathCharacters"/> on a row whose .NET Framework check is <see cref="PathCheck.PathCharacters"/>
+/// (ticket P2-231). A search for a character, whose
 /// every argument but the receiver is a <see cref="CallArgument.IsCharOrIndex"/>, never meets
 /// <see cref="RuntimeChangePrecondition.CultureSensitiveText"/>, whatever its receiver: it is ordinal on every runtime
 /// (ticket P2-181).
@@ -60,7 +62,16 @@ internal static partial class RuntimeChangeReach
     /// <paramref name="emptyPathUnchanged"/> is true (ticket P2-232): an operand that is a
     /// <see cref="CallArgument.ValidPathOrEmpty"/> then never meets <see cref="RuntimeChangePrecondition.InvalidPath"/>.
     /// </summary>
-    public static bool CanReach(RuntimeChangePrecondition precondition, ImmutableArray<CallArgument> arguments, bool emptyPathUnchanged)
+    public static bool CanReach(RuntimeChangePrecondition precondition, ImmutableArray<CallArgument> arguments, bool emptyPathUnchanged) =>
+        CanReach(precondition, arguments, emptyPathUnchanged, check: null);
+
+    /// <summary>
+    /// As the three-argument overload, for a row whose .NET Framework member makes <paramref name="check"/> of its path
+    /// (ticket P2-231), null when the row records none: when that check is <see cref="PathCheck.PathCharacters"/>, an operand
+    /// that is a <see cref="CallArgument.ValidPathCharacters"/> never meets <see cref="RuntimeChangePrecondition.InvalidPath"/>,
+    /// as the row's change reaches only a path its check rejects.
+    /// </summary>
+    public static bool CanReach(RuntimeChangePrecondition precondition, ImmutableArray<CallArgument> arguments, bool emptyPathUnchanged, PathCheck? check)
     {
         if (precondition == RuntimeChangePrecondition.CultureSensitiveText && IsCharacterSearch(arguments))
         {
@@ -68,7 +79,7 @@ internal static partial class RuntimeChangeReach
         }
 
         ImmutableArray<CallArgument> read = [.. arguments.Where(a => Reads(precondition, a))];
-        return read.IsEmpty || read.Any(a => !IsKnownValid(precondition, a, emptyPathUnchanged) && (!a.IsConstant || Meets(precondition, a.Value)));
+        return read.IsEmpty || read.Any(a => !IsKnownValid(precondition, a, emptyPathUnchanged, check) && (!a.IsConstant || Meets(precondition, a.Value)));
     }
 
     /// <summary>A call that passes something besides its receiver, and only characters, positions and counts: <c>s.IndexOf('/', 1)</c>.</summary>
@@ -78,8 +89,9 @@ internal static partial class RuntimeChangeReach
         return !passed.IsEmpty && passed.All(static a => a.IsCharOrIndex);
     }
 
-    private static bool IsKnownValid(RuntimeChangePrecondition precondition, CallArgument argument, bool emptyPathUnchanged) =>
-        precondition == RuntimeChangePrecondition.InvalidPath && (argument.ValidPath || (emptyPathUnchanged && argument.ValidPathOrEmpty));
+    private static bool IsKnownValid(RuntimeChangePrecondition precondition, CallArgument argument, bool emptyPathUnchanged, PathCheck? check) =>
+        precondition == RuntimeChangePrecondition.InvalidPath
+        && (argument.ValidPath || (emptyPathUnchanged && argument.ValidPathOrEmpty) || (check == PathCheck.PathCharacters && argument.ValidPathCharacters));
 
     private static bool Reads(RuntimeChangePrecondition precondition, CallArgument argument) => precondition switch
     {
