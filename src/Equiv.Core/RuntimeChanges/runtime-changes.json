@@ -140,6 +140,15 @@
 //     lets nothing else write such a member; a write of a value not known (a ref or out argument, a ref local or ref
 //     conditional that takes it, a compound assignment) makes it not valid. A struct's is not read: this = ... in any of
 //     its members writes every field. Each such step counts as a call toward the bound of four;
+//   - a read of a private field of a class, of a reference type, whose initializer and every write anywhere in its
+//     type's source (its partial declarations and nested types included, a getter that fills it on first use among
+//     them) are valid paths by these rules, each read in its own body, and of which there is at least one (P2-228). Only
+//     that source can name it, and before the first write it holds null, which reaches no "invalidPath" row's change:
+//     each of them checks for null first and gives the same outcome on both runtimes. A write of a value not known (as
+//     for a readonly field, and also a ref return, an address or a __makeref of it) or a name there that spells it and
+//     binds to no symbol (a dynamic member name) makes it not valid. A member of a class with a StructLayout attribute is
+//     not read, as an explicit layout can lay another field over it. Each such step counts as a call toward the bound of
+//     four;
 //   - a local variable or parameter passed by value, read after the last statement before it, in a block that encloses
 //     the read, that writes it, when that statement is a plain assignment to it or its declaration with a value that is
 //     a valid path by these rules, and nothing from there up to the read writes it again (P2-207). Every write of it in

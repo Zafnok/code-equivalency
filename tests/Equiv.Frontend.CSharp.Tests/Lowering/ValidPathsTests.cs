@@ -280,7 +280,7 @@ public sealed class ValidPathsTests
     [InlineData("static readonly string F;\nstatic C() { F = AppContext.BaseDirectory; }\nstatic object M() => new StreamReader(F);", false)]
     [InlineData("readonly string f = AppContext.BaseDirectory;\nC() { }\nC(int n) : this() { f = Path.GetTempPath(); }\nobject M() => new StreamReader(f);", false)]
     [InlineData("static readonly string A = AppContext.BaseDirectory;\nstatic readonly string B = Path.Combine(A, \"x\");\nstatic object M() => new StreamReader(B);", false)]
-    [InlineData("static string F = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(F);", true)]
+    [InlineData("internal static string F = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(F);", true)]
     [InlineData("readonly string f;\nC(string p) { f = p; }\nobject M() => new StreamReader(f);", true)]
     [InlineData("readonly string f = AppContext.BaseDirectory;\nC() { }\nC(string p) { f = p; }\nobject M() => new StreamReader(f);", true)]
     [InlineData("static readonly string F;\nstatic object M() => new StreamReader(F);", true)]
@@ -293,6 +293,50 @@ public sealed class ValidPathsTests
     [InlineData("readonly string f = AppContext.BaseDirectory;\npublic string Other { init { f = value; } }\nobject M() => new StreamReader(f);", true)]
     [InlineData("static readonly string A = B;\nstatic readonly string B = A;\nstatic object M() => new StreamReader(A);", true)]
     public void AReadonlyFieldThatOnlyHoldsValidPathsIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-228: a private field of a class whose type is a reference type is a valid path when its initializer and every
+    /// write of it anywhere in its type, a getter that fills it on first use among them, is one: nothing outside the type can
+    /// name it, and a read before the first write sees null. A write from a parameter, a <c>ref</c> to it that the type hands
+    /// out, a write by a name that binds to no symbol, a field another type can name, and a value-type field, whose default
+    /// is no path part, still fire the row.
+    /// </summary>
+    [Theory]
+    [InlineData("string f;\nvoid Fill() { f = Path.GetTempPath(); }\nobject M() => new StreamReader(f);", false)]
+    [InlineData("static string F = AppContext.BaseDirectory;\nstatic object M() => new StreamReader(F);", false)]
+    [InlineData("string cache;\nreadonly object gate = new();\nstring Dir { get { if (cache is not null) { return cache; } lock (gate) { if (cache is null) { var dir = Path.Combine(AppContext.BaseDirectory, \"x\"); cache = dir; } } return cache; } }\nobject M() => new StreamReader(Dir);", false)]
+    [InlineData("static bool ready;\nstatic string support;\nstatic void Init() { support = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), \"OpenRA\") + Path.DirectorySeparatorChar; ready = true; }\nstatic string Support { get { if (!ready) { Init(); } return support; } }\nstatic object M() => new StreamReader(Path.Combine(Support, \"settings.yaml\"));", false)]
+    [InlineData("string f;\nsealed class Nested { void Set(C c) { c.f = Path.GetTempPath(); } }\nobject M() => new StreamReader(f);", false)]
+    [InlineData("string f = AppContext.BaseDirectory;\nint Count(C other) => f.Length + this.f.Length + other?.f.Length ?? 0;\nstring Name() => nameof(f);\nobject M() => new StreamReader(f);", false)]
+    [InlineData("string f = AppContext.BaseDirectory;\nvoid Each(string[] fs) { foreach (var f in fs) { GC.KeepAlive(f); } }\nobject M() => new StreamReader(f);", false)]
+    [InlineData("string f;\nvoid Fill() { f = Path.GetTempPath(); }\nvoid Set(string p) { f = p; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f;\nC(string p) { f = p; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f;\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nvoid Append() { f += \"|\"; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nvoid Fill() { f ??= Path.GetTempPath(); }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("static void Fill(ref string s) { }\nstring f = AppContext.BaseDirectory;\nvoid Touch() { Fill(ref f); }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nvoid Swap() { f = System.Threading.Interlocked.Exchange(ref f, Path.GetTempPath()); }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nref string Slot() => ref f;\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nref string Slot() { return ref f; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nunsafe void Touch() { fixed (string* p = &f) { *p = \"a|b\"; } }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nvoid Touch() { TypedReference r = __makeref(f); __refvalue(r, string) = \"a|b\"; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("string f = AppContext.BaseDirectory;\nvoid Touch() { ((dynamic)this).f = \"a|b\"; }\nobject M() => new StreamReader(f);", true)]
+    [InlineData("internal string f = AppContext.BaseDirectory;\nobject M() => new StreamReader(f);", true)]
+    [InlineData("protected string f = AppContext.BaseDirectory;\nobject M() => new StreamReader(f);", true)]
+    [InlineData("char sep;\nvoid Init() { sep = Path.DirectorySeparatorChar; }\nobject M() => new StreamReader(AppContext.BaseDirectory + sep);", true)]
+    public void APrivateFieldThatOnlyHoldsValidPathsIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
+
+    /// <summary>
+    /// Ticket P2-228: a struct's private field is not read (<c>this = ...</c> writes every field), and nor is a field of a class
+    /// with a <c>StructLayout</c>, where an explicit layout can lay two fields over each other so that writing one writes the
+    /// other; that holds for P2-201's <c>readonly</c> field too.
+    /// </summary>
+    [Theory]
+    [InlineData("struct C\n{\nstring f;\nvoid Fill() { f = Path.GetTempPath(); }\nobject M() => new StreamReader(f);\n}\n")]
+    [InlineData("[StructLayout(LayoutKind.Explicit)]\nclass C\n{\n[FieldOffset(0)] string f;\n[FieldOffset(0)] string g;\nvoid Fill() { f = Path.GetTempPath(); g = \"a|b\"; }\nobject M() => new StreamReader(f);\n}\n")]
+    [InlineData("[StructLayout(LayoutKind.Explicit)]\nclass C\n{\n[FieldOffset(0)] readonly string f = AppContext.BaseDirectory;\n[FieldOffset(0)] string g;\nvoid Touch() { g = \"a|b\"; }\nobject M() => new StreamReader(f);\n}\n")]
+    public void AFieldAnotherWriteCanOverlayIsNotRead(string type) => Assert.Contains(
+        Calls(Source("using System;\nusing System.IO;\nusing System.Runtime.InteropServices;\n" + type)), static call => call.Callee.RuntimeChanged);
 
     /// <summary>
     /// Ticket P2-201: a get-only auto-property is a valid path when its initializer and every assignment in a constructor of
@@ -719,7 +763,7 @@ public sealed class ValidPathsTests
     [InlineData("readonly string name = \"a|b\";\nobject M() => new StreamReader(Path.Combine(AppContext.BaseDirectory, name));", true)]
     [InlineData("readonly string name = \"\";\nobject M() => new StreamReader(name);", true)]
     [InlineData("static object M(bool b) => new StreamReader(b ? \"ab:c\" : AppContext.BaseDirectory);", true)]
-    [InlineData("string name = \"data.zip\";\nobject M() => new StreamReader(Path.Combine(AppContext.BaseDirectory, name));", true)]
+    [InlineData("internal string name = \"data.zip\";\nobject M() => new StreamReader(Path.Combine(AppContext.BaseDirectory, name));", true)]
     public void AConstantThatDoesNotMeetInvalidPathIsAValidPath(string member, bool flagged) => Assert.Equal(flagged, Flags(member));
 
     /// <summary>
