@@ -25,6 +25,13 @@ public sealed record CallArgument(string Parameter, bool IsString, bool IsConsta
     public bool ValidPathOrEmpty { get; init; }
 
     /// <summary>
+    /// True when the operand is a <see cref="ValidPathOrEmpty"/>, or a path that .NET Framework's character check
+    /// (<see cref="PathCheck.PathCharacters"/>) has passed (ticket P2-231), which a row whose <see cref="RuntimeChange.FrameworkCheck"/>
+    /// is that check treats alike.
+    /// </summary>
+    public bool ValidPathCharacters { get; init; }
+
+    /// <summary>
     /// True when the operand is passed to a <c>char</c> or <c>int</c> parameter: a character to search for, or a position
     /// or a count (ticket P2-181).
     /// </summary>

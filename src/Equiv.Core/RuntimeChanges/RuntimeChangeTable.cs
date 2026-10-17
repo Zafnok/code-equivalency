@@ -111,6 +111,21 @@ public sealed class RuntimeChangeTable
     /// <summary>The members that return their argument only once .NET Framework's validation has accepted it (ticket P2-188).</summary>
     internal ImmutableArray<string> PathValidators => validPaths.Validators;
 
+    /// <summary>The members whose result .NET Framework's character check has passed, whatever their arguments (ticket P2-231).</summary>
+    internal ImmutableArray<string> CharacterValidators => validPaths.CharacterValidators;
+
+    /// <summary>
+    /// Whether the result of a call to <paramref name="member"/> has passed .NET Framework's character check
+    /// (<see cref="PathCheck.PathCharacters"/>) whatever its arguments (ticket P2-231): the member is one of the table's
+    /// <c>characterValidators</c>, whose own check is at least that one and whose result is a part or a join of the paths
+    /// it checked.
+    /// </summary>
+    public bool PassesPathCharacterCheck(CallIdentity member)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        return Lists(validPaths.CharacterValidators, member);
+    }
+
     /// <summary>A call on a valid path whose <c>startIndex</c> is the constant 0, so it returns the path's start.</summary>
     private static bool IsStartOfValidPath(ImmutableArray<CallArgument> arguments) =>
         arguments.Any(static a => string.Equals(a.Parameter, CallArgument.Receiver, StringComparison.Ordinal) && a.ValidPath)
@@ -183,7 +198,7 @@ public sealed class RuntimeChangeTable
             && !(ordinalComparison && row.OrdinalUnaffected)
             && identity.Value.StartsWith(row.Member, StringComparison.Ordinal)
             && !suppressed.Contains(row.Member, StringComparer.Ordinal)
-            && (row.Precondition is not { } precondition || RuntimeChangeReach.CanReach(precondition, arguments, row.EmptyPathUnchanged)))!;
+            && (row.Precondition is not { } precondition || RuntimeChangeReach.CanReach(precondition, arguments, row.EmptyPathUnchanged, row.FrameworkCheck)))!;
         return match is not null;
     }
 
@@ -212,12 +227,14 @@ public sealed class RuntimeChangeTable
     /// <summary>
     /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c>, <c>rows</c> and, optionally,
     /// <c>validPaths</c> (its <c>sources</c>, <c>validators</c>, <c>transforms</c>, <c>prefixes</c> and <c>guards</c>, each a
-    /// list of member prefixes, tickets P2-074 and P2-188, and its optional <c>separators</c>, a list of fields, ticket P2-232) and <c>fieldValues</c> (a field's identity to its documented
+    /// list of member prefixes, tickets P2-074 and P2-188, its optional <c>separators</c>, a list of fields, ticket P2-232, and its
+    /// optional <c>characterValidators</c>, member prefixes, ticket P2-231) and <c>fieldValues</c> (a field's identity to its documented
     /// string value; ticket P2-189). A row whose
     /// <c>source</c> is missing, or is not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), or whose
     /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
     /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c>, a <c>precondition</c>
-    /// that is not one of <see cref="RuntimeChangePrecondition"/>'s names (ticket P2-073) or a <c>requires</c> that is not
+    /// that is not one of <see cref="RuntimeChangePrecondition"/>'s names (ticket P2-073), a <c>frameworkCheck</c> that is not one
+    /// of <see cref="PathCheck"/>'s or is on a row whose precondition is not <c>invalidPath</c> (ticket P2-231), or a <c>requires</c> that is not
     /// one of <see cref="RowPrecondition"/>'s JSON names (tickets P2-114, P2-190 and P2-216).
     /// </summary>
     internal static RuntimeChangeTable Parse(Stream stream)
@@ -242,6 +259,7 @@ public sealed class RuntimeChangeTable
                 Witness = ParseWitness(element),
                 ChangedIn = ParseChangedIn(member, element),
                 Precondition = ParsePrecondition(member, element),
+                FrameworkCheck = ParseFrameworkCheck(member, element),
 
                 OrdinalUnaffected = element.TryGetProperty("ordinalUnaffected", out JsonElement ordinal) && ordinal.GetBoolean(),
                 EmptyPathUnchanged = element.TryGetProperty("emptyPathUnchanged", out JsonElement empty) && empty.GetBoolean(),
@@ -300,12 +318,15 @@ public sealed class RuntimeChangeTable
         root.TryGetProperty("validPaths", out JsonElement lists)
             ? new ValidPaths(
                 Members(lists, "sources"), Members(lists, "validators"), Members(lists, "transforms"), Members(lists, "prefixes"), Members(lists, "guards"),
-                ParseSeparators(lists))
-            : new ValidPaths([], [], [], [], [], []);
+                Optional(lists, "separators"), Optional(lists, "characterValidators"))
+            : new ValidPaths([], [], [], [], [], [], []);
 
-    /// <summary>The optional <c>separators</c> list of <c>validPaths</c> (ticket P2-232); empty when it is absent.</summary>
-    private static ImmutableArray<string> ParseSeparators(JsonElement lists) =>
-        lists.TryGetProperty("separators", out JsonElement separators) ? [.. separators.EnumerateArray().Select(static field => field.GetString()!)] : [];
+    /// <summary>
+    /// An optional list of <c>validPaths</c>: its <c>separators</c> (ticket P2-232) or its <c>characterValidators</c> (ticket
+    /// P2-231); empty when it is absent.
+    /// </summary>
+    private static ImmutableArray<string> Optional(JsonElement lists, string name) =>
+        lists.TryGetProperty(name, out JsonElement entries) ? [.. entries.EnumerateArray().Select(static entry => entry.GetString()!)] : [];
 
     private static ImmutableArray<string> Members(JsonElement lists, string name) =>
         [.. lists.GetProperty(name).EnumerateArray().Select(static member => member.GetString()!)];
@@ -334,6 +355,31 @@ public sealed class RuntimeChangeTable
             "absentFolder" => RuntimeChangePrecondition.AbsentFolder,
             "blankFormat" => RuntimeChangePrecondition.BlankFormat,
             _ => throw new InvalidDataException($"runtime-changes row '{member}' has unknown precondition '{precondition}'"),
+        };
+    }
+
+    /// <summary>
+    /// The optional <c>frameworkCheck</c> of a path row (ticket P2-231): one of <see cref="PathCheck"/>'s JSON names, on a row
+    /// whose <c>precondition</c> is <c>invalidPath</c>; anything else is rejected with <see cref="InvalidDataException"/>.
+    /// </summary>
+    private static PathCheck? ParseFrameworkCheck(string member, JsonElement element) =>
+        element.TryGetProperty("frameworkCheck", out JsonElement value) ? FrameworkCheck(member, element, value) : null;
+
+    /// <summary>The <paramref name="value"/> of a row's <c>frameworkCheck</c>, which only a row whose precondition is <c>invalidPath</c> may have.</summary>
+    private static PathCheck FrameworkCheck(string member, JsonElement element, JsonElement value)
+    {
+        if (ParsePrecondition(member, element) != RuntimeChangePrecondition.InvalidPath)
+        {
+            throw new InvalidDataException($"runtime-changes row '{member}' has a frameworkCheck but no invalidPath precondition");
+        }
+
+        string? check = value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+        return check switch
+        {
+            "pathCharacters" => PathCheck.PathCharacters,
+            "limitedNormalization" => PathCheck.LimitedNormalization,
+            "fullPath" => PathCheck.FullPath,
+            _ => throw new InvalidDataException($"runtime-changes row '{member}' has unknown frameworkCheck '{check}'"),
         };
     }
 
@@ -383,5 +429,6 @@ public sealed class RuntimeChangeTable
         ImmutableArray<string> Transforms,
         ImmutableArray<string> Prefixes,
         ImmutableArray<string> Guards,
-        ImmutableArray<string> Separators);
+        ImmutableArray<string> Separators,
+        ImmutableArray<string> CharacterValidators);
 }

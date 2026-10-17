@@ -1335,6 +1335,10 @@ They come before any other open ticket, in this order:
    joined to a valid path; #51's test-case parameter and OpenRA's #8 need a public method's callers and are recorded
    as not followed, and #55 is P2-232 (M, 1, a trailing separator, an empty string, a callee's returned parameter),
    with P2-233 (S, soundness: a guard trusted in a local function called before it).
+   P2-231 took both of its 2 off EQ006 (and 3 more Duplicati results outside the samples became Equivalent) by reading
+   the result of a member whose .NET Framework check is `Path.CheckInvalidPathChars` as valid for a row whose check is
+   that one: Git Extensions #38 is Unknown (`opaque`, `rebound-call`), and Duplicati #30 is Unknown (`abstraction`) with
+   `File.OpenRead` still flagged, a local made from a variable before its guard, P2-236 (S, 1).
 3. P2-184 (S) a call an API-equivalence entry rewrites is never closed: 9 false EQ002 on all three
    migrations. P2-184 cleared 7 of the 8 on Git Extensions and OpenRA (the eighth is P2-181's) and
    left two tickets for sample Divergents that ADR 0056's taint now reaches: P2-210 (S, a rewritten

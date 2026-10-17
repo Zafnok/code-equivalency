@@ -294,6 +294,136 @@ public sealed class ValidPathTests
         Assert.False(Parse(string.Empty).IsPathSeparator("System.IO.Path::DirectorySeparatorChar"));
     }
 
+    /// <summary>
+    /// Ticket P2-231: an operand that passed .NET Framework's character check does not reach a path row whose own check is
+    /// that one, and reaches a row whose check is wider, a row with none recorded, and every other precondition.
+    /// </summary>
+    [Fact]
+    public void AnOperandThatPassedTheCharacterCheckReachesOnlyTheRowsWhoseCheckIsWider()
+    {
+        CallArgument passed = Variable("path") with { ValidPathCharacters = true };
+
+        Assert.False(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [passed], emptyPathUnchanged: false, PathCheck.PathCharacters));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [passed], emptyPathUnchanged: false, PathCheck.LimitedNormalization));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [passed], emptyPathUnchanged: true, PathCheck.FullPath));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [passed], emptyPathUnchanged: true, check: null));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [Variable("path")], emptyPathUnchanged: false, PathCheck.PathCharacters));
+        Assert.True(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.CultureSensitiveText, [passed], emptyPathUnchanged: false, PathCheck.PathCharacters));
+        Assert.False(RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, [Valid("path")], emptyPathUnchanged: false, PathCheck.FullPath));
+    }
+
+    /// <summary>Ticket P2-231: a row's <c>frameworkCheck</c> decides whether an operand that passed the character check matches it.</summary>
+    [Fact]
+    public void ARowsFrameworkCheckDecidesWhetherAnOperandThatPassedTheCharacterCheckMatchesIt()
+    {
+        RuntimeChangeTable table = ParseRows(
+            """{ "member": "D::Join(string)", "source": "measured", "changedIn": "netcoreapp1.0", "precondition": "invalidPath", "frameworkCheck": "pathCharacters", "reason": "r", "url": "https://example.com/" },""",
+            """{ "member": "D::Root(string)", "source": "measured", "changedIn": "netcoreapp1.0", "precondition": "invalidPath", "frameworkCheck": "limitedNormalization", "reason": "r", "url": "https://example.com/" },""",
+            """{ "member": "D::Open(string)", "source": "measured", "changedIn": "netcoreapp1.0", "precondition": "invalidPath", "frameworkCheck": "fullPath", "reason": "r", "url": "https://example.com/" },""",
+            """{ "member": "D::Read(string)", "source": "measured", "changedIn": "netcoreapp1.0", "precondition": "invalidPath", "reason": "r", "url": "https://example.com/" }""");
+        RuntimeInterval interval = new(TargetRuntime.Parse("net48")!, TargetRuntime.Parse("net10.0")!);
+        ImmutableArray<CallArgument> passed = [Variable("path") with { ValidPathCharacters = true }];
+
+        Assert.Equal([PathCheck.PathCharacters, PathCheck.LimitedNormalization, PathCheck.FullPath, null], table.Rows.Select(static row => row.FrameworkCheck));
+        Assert.False(table.TryMatch(new CallIdentity("D::Join(string)"), interval, [], passed, out _));
+        Assert.True(table.TryMatch(new CallIdentity("D::Join(string)"), interval, [], [Variable("path")], out _));
+        Assert.True(table.TryMatch(new CallIdentity("D::Root(string)"), interval, [], passed, out _));
+        Assert.True(table.TryMatch(new CallIdentity("D::Open(string)"), interval, [], passed, out _));
+        Assert.True(table.TryMatch(new CallIdentity("D::Read(string)"), interval, [], passed, out _));
+    }
+
+    /// <summary>Ticket P2-231: a <c>frameworkCheck</c> that is not one of the three, or on a row that is no path row, is rejected.</summary>
+    [Theory]
+    [InlineData("\"precondition\": \"invalidPath\", \"frameworkCheck\": \"wildcards\",", "unknown frameworkCheck 'wildcards'")]
+    [InlineData("\"precondition\": \"invalidPath\", \"frameworkCheck\": 1,", "unknown frameworkCheck '1'")]
+    [InlineData("\"frameworkCheck\": \"fullPath\",", "frameworkCheck but no invalidPath precondition")]
+    [InlineData("\"precondition\": \"blankFormat\", \"frameworkCheck\": \"fullPath\",", "frameworkCheck but no invalidPath precondition")]
+    public void AFrameworkCheckThatIsNotOneOfTheThreeOrIsOnNoPathRowIsRejected(string fields, string message)
+    {
+        InvalidDataException rejected = Assert.Throws<InvalidDataException>(() => ParseRows(
+            $$"""{ "member": "D::Join(string)", "source": "measured", "changedIn": "netcoreapp1.0", {{fields}} "reason": "r", "url": "https://example.com/" }"""));
+
+        Assert.Contains(message, rejected.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-231: a character validator is matched by prefix, and a table without the list has none.</summary>
+    [Fact]
+    public void ACharacterValidatorIsMatchedByPrefix()
+    {
+        RuntimeChangeTable table = Parse(Lists.Replace("\"guards\"", "\"characterValidators\": [\"T::Join(string,\"], \"guards\"", StringComparison.Ordinal));
+
+        Assert.True(table.PassesPathCharacterCheck(new CallIdentity("T::Join(string,string)")));
+        Assert.False(table.PassesPathCharacterCheck(new CallIdentity("T::Join(string[])")));
+        Assert.False(table.PassesPathCharacterCheck(new CallIdentity("V::Full(string)")));
+        Assert.Equal(["T::Join(string,"], table.CharacterValidators);
+        Assert.False(Parse(Lists).PassesPathCharacterCheck(new CallIdentity("T::Join(string,string)")));
+        Assert.Empty(Parse(string.Empty).CharacterValidators);
+        Assert.Throws<ArgumentNullException>(() => table.PassesPathCharacterCheck(null!));
+    }
+
+    /// <summary>
+    /// Ticket P2-231, criterion 1: every path row of the shipped table records the check its .NET Framework member makes, as
+    /// the reference source reads: <c>Path.CheckInvalidPathChars</c> alone, that and <c>NormalizePath</c> without its full
+    /// check, or the full check with a <c>FileIOPermission</c> demand.
+    /// </summary>
+    [Fact]
+    public void EveryShippedPathRowRecordsItsFrameworkCheck()
+    {
+        ImmutableArray<RuntimeChange> pathRows = [.. RuntimeChangeTable.Load().Rows.Where(static row => row.Precondition == RuntimeChangePrecondition.InvalidPath)];
+
+        Assert.All(pathRows, static row => Assert.NotNull(row.FrameworkCheck));
+        Assert.Equal(
+            [
+                "System.IO.Path::ChangeExtension(string,string)",
+                "System.IO.Path::Combine(string,string)",
+                "System.IO.Path::Combine(string,string,string)",
+                "System.IO.Path::Combine(string,string,string,string)",
+                "System.IO.Path::GetExtension(string)",
+                "System.IO.Path::GetFileName(string)",
+                "System.IO.Path::GetFileNameWithoutExtension(string)",
+                "System.IO.Path::IsPathRooted(string)",
+            ],
+            Checking(pathRows, PathCheck.PathCharacters));
+        Assert.Equal(["System.IO.Path::GetDirectoryName(string)", "System.IO.Path::GetPathRoot(string)"], Checking(pathRows, PathCheck.LimitedNormalization));
+        Assert.Contains("System.IO.Path::GetFullPath(string)", Checking(pathRows, PathCheck.FullPath), StringComparer.Ordinal);
+        Assert.Contains("System.IO.StreamReader::.ctor(string)", Checking(pathRows, PathCheck.FullPath), StringComparer.Ordinal);
+        Assert.All(RuntimeChangeTable.Load().Rows.Where(static row => row.Precondition != RuntimeChangePrecondition.InvalidPath), static row => Assert.Null(row.FrameworkCheck));
+    }
+
+    /// <summary>
+    /// Ticket P2-231's soundness condition, as P2-188's for a validator: each character validator is itself a path row whose
+    /// check is at least the character check, and its change is every path row's, so wherever a pair crosses a path row's
+    /// change the validator's own call is checked on the same terms. <c>ChangeExtension</c> is none: it does not check its
+    /// extension.
+    /// </summary>
+    [Fact]
+    public void EveryCharacterValidatorIsAPathRowWithEveryPathRowsChange()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        ImmutableArray<RuntimeChange> pathRows = [.. table.Rows.Where(static row => row.Precondition == RuntimeChangePrecondition.InvalidPath)];
+
+        Assert.NotEmpty(table.CharacterValidators);
+        Assert.All(table.CharacterValidators, validator =>
+            Assert.Contains(pathRows, row => row.Member.StartsWith(validator, StringComparison.Ordinal) && row.FrameworkCheck is not null));
+        Assert.All(
+            table.Rows.Where(row => table.CharacterValidators.Any(validator => row.Member.StartsWith(validator, StringComparison.Ordinal))),
+            static row => Assert.Equal(RuntimeChangePrecondition.InvalidPath, row.Precondition));
+        Assert.True(table.PassesPathCharacterCheck(new CallIdentity("System.IO.Path::GetFileName(string)")));
+        Assert.True(table.PassesPathCharacterCheck(new CallIdentity("System.IO.Path::Combine(string,string,string)")));
+        Assert.False(table.PassesPathCharacterCheck(new CallIdentity("System.IO.Path::ChangeExtension(string,string)")));
+        Assert.False(table.PassesPathCharacterCheck(new CallIdentity("System.IO.Path::Combine(string[])")));
+        Assert.Single(pathRows.Select(static row => row.ChangedIn).Distinct());
+    }
+
+    private static string[] Checking(ImmutableArray<RuntimeChange> rows, PathCheck check) =>
+        [.. rows.Where(row => row.FrameworkCheck == check).Select(static row => row.Member).Order(StringComparer.Ordinal)];
+
+    private static RuntimeChangeTable ParseRows(params string[] rows)
+    {
+        using MemoryStream stream = new(Encoding.UTF8.GetBytes($$"""{ "coveredFrom": "netcoreapp3.0", "rows": [ {{string.Concat(rows)}} ] }"""));
+        return RuntimeChangeTable.Parse(stream);
+    }
+
     private static bool Reaches(RuntimeChangePrecondition precondition, params CallArgument[] arguments) =>
         RuntimeChangeReach.CanReach(precondition, [.. arguments]);
 

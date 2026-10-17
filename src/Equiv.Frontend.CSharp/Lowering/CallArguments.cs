@@ -23,14 +23,17 @@ internal static class CallArguments
 
     /// <summary>As the two-argument overload, with each operand <paramref name="isValidPath"/> holds of marked a <see cref="CallArgument.ValidPath"/> (ticket P2-074).</summary>
     public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath) =>
-        Operands(site, method, new PathTests(isValidPath, static _ => false));
+        Operands(site, method, new PathTests(isValidPath, static _ => false, static _ => false));
 
     /// <summary>
     /// As the three-argument overload, with each operand that is a valid path, or that <paramref name="isValidPathOrEmpty"/>
-    /// holds of, marked a <see cref="CallArgument.ValidPathOrEmpty"/> too (ticket P2-232).
+    /// holds of, marked a <see cref="CallArgument.ValidPathOrEmpty"/> too (ticket P2-232), and each that is a valid path or the
+    /// empty string, or that <paramref name="passesPathCharacters"/> holds of, marked a <see cref="CallArgument.ValidPathCharacters"/>
+    /// (ticket P2-231).
     /// </summary>
-    public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath, Func<IOperation, bool> isValidPathOrEmpty) =>
-        Operands(site, method, new PathTests(isValidPath, isValidPathOrEmpty));
+    public static ImmutableArray<CallArgument> Of(
+        IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath, Func<IOperation, bool> isValidPathOrEmpty, Func<IOperation, bool> passesPathCharacters) =>
+        Operands(site, method, new PathTests(isValidPath, isValidPathOrEmpty, passesPathCharacters));
 
     private static ImmutableArray<CallArgument> Operands(IOperation? site, IMethodSymbol method, PathTests tests) => site switch
     {
@@ -57,10 +60,12 @@ internal static class CallArguments
     private static CallArgument Operand(string parameter, ITypeSymbol type, IOperation value, PathTests tests)
     {
         bool valid = tests.IsValidPath(value);
+        bool validOrEmpty = valid || tests.IsValidPathOrEmpty(value);
         return Constant(new CallArgument(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value)
         {
             ValidPath = valid,
-            ValidPathOrEmpty = valid || tests.IsValidPathOrEmpty(value),
+            ValidPathOrEmpty = validOrEmpty,
+            ValidPathCharacters = validOrEmpty || tests.PassesPathCharacters(value),
             IsCharOrIndex = type.SpecialType is SpecialType.System_Char or SpecialType.System_Int32,
         }, value);
     }
@@ -72,6 +77,9 @@ internal static class CallArguments
             ? argument with { IsConstant = true, Value = documented }
             : argument;
 
-    /// <summary>What marks an operand a <see cref="CallArgument.ValidPath"/>, and what a <see cref="CallArgument.ValidPathOrEmpty"/>.</summary>
-    private sealed record PathTests(Func<IOperation, bool> IsValidPath, Func<IOperation, bool> IsValidPathOrEmpty);
+    /// <summary>
+    /// What marks an operand a <see cref="CallArgument.ValidPath"/>, what a <see cref="CallArgument.ValidPathOrEmpty"/>, and
+    /// what a <see cref="CallArgument.ValidPathCharacters"/>.
+    /// </summary>
+    private sealed record PathTests(Func<IOperation, bool> IsValidPath, Func<IOperation, bool> IsValidPathOrEmpty, Func<IOperation, bool> PassesPathCharacters);
 }

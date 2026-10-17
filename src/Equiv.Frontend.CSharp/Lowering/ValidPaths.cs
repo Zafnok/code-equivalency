@@ -34,13 +34,31 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// P2-208). A callee's by-value parameter holds a valid path when the call passes one and every write of it in the callee
 /// keeps it one, and a char constant, a framework directory separator or a <c>readonly</c> char field that only holds such
 /// a char joins a valid path as a string constant does, by <c>+</c> or <c>+=</c> (ticket P2-232). The same rules, with the
-/// empty string taken as a valid path, show an operand to be a valid path or the empty string (ticket P2-232). A string
+/// empty string taken as a valid path, show an operand to be a valid path or the empty string (ticket P2-232), and with the
+/// results of the members whose .NET Framework check is <c>Path.CheckInvalidPathChars</c> taken as one too, a path that
+/// check has passed (ticket P2-231). A string
 /// constant that does not meet <c>invalidPath</c> is a valid path wherever a value is read, and a <c>static readonly</c>
 /// field that the object's own field initializers already passed to the called member is one for that member's rows
 /// (ticket P2-218). Any other path from a caller is not followed.
 /// </summary>
 internal static class ValidPaths
 {
+    /// <summary>What <see cref="IsValid"/> shows a value to be (tickets P2-074, P2-232 and P2-231).</summary>
+    private enum Shown
+    {
+        /// <summary>A valid path.</summary>
+        ValidPath,
+
+        /// <summary>A valid path or the empty string, which a row marked <c>emptyPathUnchanged</c> treats alike.</summary>
+        ValidPathOrEmpty,
+
+        /// <summary>
+        /// A path .NET Framework's character check has passed: a valid path, the empty string, or the result of one of the
+        /// table's <c>characterValidators</c>, which a row whose own check is that one treats alike.
+        /// </summary>
+        PathCharacters,
+    }
+
     /// <summary>
     /// The methods the compiler calls by a name the source does not write, so that a private one can have callers no name in
     /// its type shows (ticket P2-207): a collection initializer's <c>Add</c> and an interpolated string handler's
@@ -105,8 +123,9 @@ internal static class ValidPaths
         CallArguments.Of(
             compilation.GetSemanticModel(site.Syntax.SyntaxTree).GetOperation(site.Syntax),
             method,
-            value => IsValid(value, [], orEmpty: false, compilation, depth: 0) || IsAcceptedBefore(value, method, compilation),
-            value => IsValid(value, [], orEmpty: true, compilation, depth: 0));
+            value => IsValid(value, [], Shown.ValidPath, compilation, depth: 0) || IsAcceptedBefore(value, method, compilation),
+            value => IsValid(value, [], Shown.ValidPathOrEmpty, compilation, depth: 0),
+            value => IsValid(value, [], Shown.PathCharacters, compilation, depth: 0));
 
     /// <summary>
     /// Whether <paramref name="value"/>, an argument of a call to <paramref name="method"/>, is a read of a <c>static
@@ -175,33 +194,37 @@ internal static class ValidPaths
         call == root || (call.Parent is IArgumentOperation or IInvocationOperation or IObjectCreationOperation or IConversionOperation && RunsWhenever(call.Parent, root));
 
     /// <summary>
-    /// Whether <paramref name="value"/> is a valid path, or, when <paramref name="orEmpty"/> is true, a valid path or the empty
-    /// string (ticket P2-232); <paramref name="seen"/> are the locals and the callee's parameters taken to hold such values
+    /// Whether <paramref name="value"/> is what <paramref name="shown"/> names: a valid path, a valid path or the empty string
+    /// (ticket P2-232), or a path .NET Framework's character check has passed, which a valid path, the empty string and the
+    /// result of one of the table's <c>characterValidators</c> are (ticket P2-231); <paramref name="seen"/> are the locals and
+    /// the callee's parameters taken to hold such values
     /// while their writes are followed, <paramref name="compilation"/> is the one that holds the value's syntax, and
     /// <paramref name="depth"/> is how many solution callees deep the value is.
     /// </summary>
-    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
-        (orEmpty && IsEmpty(value)) || IsValidConstant(value) || value switch
+    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth) =>
+        (shown != Shown.ValidPath && IsEmpty(value)) || IsValidConstant(value) || value switch
         {
-            IPropertyReferenceOperation property => IsValidProperty(property, seen, orEmpty, compilation, depth),
-            IFieldReferenceOperation field => StoresOnlyValidPaths(field, orEmpty, compilation, depth) || IsGuardedRead(field),
+            IPropertyReferenceOperation property => IsValidProperty(property, seen, shown, compilation, depth),
+            IFieldReferenceOperation field => StoresOnlyValidPaths(field, shown, compilation, depth) || IsGuardedRead(field),
 
-            // A transform's or a prefix's operands are read as valid paths, without what seen takes to be the empty string.
+            // A transform's or a prefix's operands are read as valid paths, without what seen takes to be the empty string or
+            // to have passed only the character check.
             IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
-                    Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, orEmpty ? [] : seen, orEmpty: false, compilation, depth)))
-                || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, call.Arguments, seen, orEmpty, compilation, depth),
+                    Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, shown == Shown.ValidPath ? seen : [], Shown.ValidPath, compilation, depth)))
+                || (shown == Shown.PathCharacters && RuntimeChangeTable.Load().PassesPathCharacterCheck(Identity(call.TargetMethod)))
+                || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, call.Arguments, seen, shown, compilation, depth),
 
             // Only an expression is a value, and a conditional expression has both branches.
             IConditionalOperation conditional =>
-                IsValid(conditional.WhenTrue, seen, orEmpty, compilation, depth) && IsValid(conditional.WhenFalse!, seen, orEmpty, compilation, depth),
+                IsValid(conditional.WhenTrue, seen, shown, compilation, depth) && IsValid(conditional.WhenFalse!, seen, shown, compilation, depth),
             // A built-in + with a string operand joins strings.
-            IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join => IsValidJoin(join, seen, orEmpty, compilation, depth),
+            IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join => IsValidJoin(join, seen, shown, compilation, depth),
 
             // A variable read as a path holds a string, and += on a string is the built-in join (ticket P2-232).
             ICompoundAssignmentOperation append =>
-                IsPathPart(append.Value, orEmpty, compilation, depth) && IsValid(append.Target, seen, orEmpty, compilation, depth),
-            ILocalReferenceOperation local => IsValidLocal(local, seen, orEmpty, compilation, depth),
-            IParameterReferenceOperation parameter => IsValidParameter(parameter, seen, orEmpty, compilation, depth),
+                IsPathPart(append.Value, shown, compilation, depth) && IsValid(append.Target, seen, shown, compilation, depth),
+            ILocalReferenceOperation local => IsValidLocal(local, seen, shown, compilation, depth),
+            IParameterReferenceOperation parameter => IsValidParameter(parameter, seen, shown, compilation, depth),
             _ => false,
         };
 
@@ -218,32 +241,32 @@ internal static class ValidPaths
     /// only ever stores valid paths. A property that overrides only the setter has no getter of its own to be a source
     /// (ticket P2-158).
     /// </summary>
-    private static bool IsValidProperty(IPropertyReferenceOperation property, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+    private static bool IsValidProperty(IPropertyReferenceOperation property, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth) =>
         (property.Property.GetMethod is { } getter
             && (RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), [])
-                || ReturnsOnlyValidPaths(getter, property.Instance, [], seen, orEmpty, compilation, depth)
+                || ReturnsOnlyValidPaths(getter, property.Instance, [], seen, shown, compilation, depth)
                 || (AutoProperty(Dispatched(getter, property.Instance)) is not null && IsGuardedRead(property))))
-        || StoresOnlyValidPaths(property, orEmpty, compilation, depth);
+        || StoresOnlyValidPaths(property, shown, compilation, depth);
 
     /// <summary>
     /// Whether the local variable read <paramref name="local"/> is a valid path, as <see cref="IsValid"/> reads it: under a
     /// guard, holding only valid paths, or read after a plain write of one.
     /// </summary>
-    private static bool IsValidLocal(ILocalReferenceOperation local, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+    private static bool IsValidLocal(ILocalReferenceOperation local, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth) =>
         IsGuarded(local.Local, local)
-        || HoldsOnlyValidPaths(local.Local, LocalValues.Root(local), seen, orEmpty, compilation, depth)
-        || (LastWrite(local.Local, local.Local.RefKind, local) is { } written && IsValid(written, seen, orEmpty, compilation, depth));
+        || HoldsOnlyValidPaths(local.Local, LocalValues.Root(local), seen, shown, compilation, depth)
+        || (LastWrite(local.Local, local.Local.RefKind, local) is { } written && IsValid(written, seen, shown, compilation, depth));
 
     /// <summary>
     /// Whether the parameter read <paramref name="parameter"/> is a valid path, as <see cref="IsValid"/> reads it: a callee's
     /// parameter the call passes one (ticket P2-232), under a guard, read after a plain write of one, or of a private method
     /// every call passes one.
     /// </summary>
-    private static bool IsValidParameter(IParameterReferenceOperation parameter, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+    private static bool IsValidParameter(IParameterReferenceOperation parameter, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth) =>
         seen.Contains(parameter.Parameter)
         || IsGuarded(parameter.Parameter, parameter)
-        || (LastWrite(parameter.Parameter, parameter.Parameter.RefKind, parameter) is { } written && IsValid(written, seen, orEmpty, compilation, depth))
-        || CallsPassOnlyValidPaths(parameter.Parameter, parameter, orEmpty, compilation, depth);
+        || (LastWrite(parameter.Parameter, parameter.Parameter.RefKind, parameter) is { } written && IsValid(written, seen, shown, compilation, depth))
+        || CallsPassOnlyValidPaths(parameter.Parameter, parameter, shown, compilation, depth);
 
     /// <summary>The empty string: a constant <c>""</c>, or <c>String.Empty</c>, a field no C# constant gives (ticket P2-232).</summary>
     private static bool IsEmpty(IOperation value) =>
@@ -340,14 +363,14 @@ internal static class ValidPaths
     /// by a name the source does not write (a collection initializer's <c>Add</c>, an interpolated string handler's
     /// <c>Append</c> methods) is not read.
     /// </summary>
-    private static bool CallsPassOnlyValidPaths(IParameterSymbol parameter, IOperation use, bool orEmpty, Compilation compilation, int depth) =>
+    private static bool CallsPassOnlyValidPaths(IParameterSymbol parameter, IOperation use, Shown shown, Compilation compilation, int depth) =>
         depth < CalleeDepth
         && parameter is { RefKind: RefKind.None, ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.Ordinary, DeclaredAccessibility: Accessibility.Private } method }
         && !ImplicitlyCalled.Contains(method.Name)
         && LocalValues.Writes(parameter, LocalValues.Root(use)).IsEmpty
         && CallsOf(method, compilation) is [_, ..] calls
         && calls.All(call => IsValid(
-            call.Arguments.First(argument => argument.Parameter!.Ordinal == parameter.Ordinal).Value, [], orEmpty, call.SemanticModel!.Compilation, depth + 1));
+            call.Arguments.First(argument => argument.Parameter!.Ordinal == parameter.Ordinal).Value, [], shown, call.SemanticModel!.Compilation, depth + 1));
 
     /// <summary>
     /// Every call of the private method <paramref name="method"/>, from the declarations of its type, which are all the
@@ -386,30 +409,30 @@ internal static class ValidPaths
     /// Whether the join <paramref name="join"/> is a valid path (ticket P2-208): a valid path followed by a constant
     /// <see cref="IsPathPart(IOperation, bool, Compilation, int)"/>, or such a constant before a valid path that <see cref="HasNoDrive"/>.
     /// </summary>
-    private static bool IsValidJoin(IBinaryOperation join, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
-        (IsPathPart(join.RightOperand, orEmpty, compilation, depth) && IsValid(join.LeftOperand, seen, orEmpty, compilation, depth))
-        || (IsPathPart(join.LeftOperand, orEmpty, compilation, depth) && IsValid(join.RightOperand, seen, orEmpty, compilation, depth) && HasNoDrive(join.RightOperand));
+    private static bool IsValidJoin(IBinaryOperation join, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth) =>
+        (IsPathPart(join.RightOperand, shown, compilation, depth) && IsValid(join.LeftOperand, seen, shown, compilation, depth))
+        || (IsPathPart(join.LeftOperand, shown, compilation, depth) && IsValid(join.RightOperand, seen, shown, compilation, depth) && HasNoDrive(join.RightOperand));
 
     /// <summary>
     /// Whether <paramref name="operand"/>, with a conversion the compiler adds unwrapped, is a constant that can be joined to
     /// a valid path and leave one (ticket P2-208): a string or a char (ticket P2-232) with no character <c>invalidPath</c>
     /// names and no colon. A read of one of the table's <c>separators</c>, or of a <c>readonly</c> field that only ever holds
     /// such a constant, read as a stored path is, is one too (ticket P2-232). Joined to the empty string, the constant is the
-    /// whole path, so for a valid path or the empty string (<paramref name="orEmpty"/>) it must also not be blank unless empty.
+    /// whole path, so where <paramref name="shown"/> takes in the empty string it must also not be blank unless empty.
     /// </summary>
-    private static bool IsPathPart(IOperation operand, bool orEmpty, Compilation compilation, int depth) =>
+    private static bool IsPathPart(IOperation operand, Shown shown, Compilation compilation, int depth) =>
         (operand is IConversionOperation { OperatorMethod: null } conversion ? conversion.Operand : operand) switch
         {
-            { ConstantValue: { HasValue: true, Value: string text } } => IsPathPart(text, orEmpty),
-            { ConstantValue: { HasValue: true, Value: char character } } => IsPathPart(new string(character, 1), orEmpty),
+            { ConstantValue: { HasValue: true, Value: string text } } => IsPathPart(text, shown),
+            { ConstantValue: { HasValue: true, Value: char character } } => IsPathPart(new string(character, 1), shown),
             IFieldReferenceOperation { Field: var field } read =>
                 RuntimeChangeTable.Load().IsPathSeparator($"{field.ContainingType.ToDisplayString()}::{field.Name}")
-                || StoresOnly(read, compilation, depth, (stored, next) => IsPathPart(stored, orEmpty, stored.SemanticModel!.Compilation, next)),
+                || StoresOnly(read, compilation, depth, (stored, next) => IsPathPart(stored, shown, stored.SemanticModel!.Compilation, next)),
             _ => false,
         };
 
-    private static bool IsPathPart(string text, bool orEmpty) =>
-        RuntimeChangeTable.JoinsValidPath(text) && (!orEmpty || text.Length == 0 || !string.IsNullOrWhiteSpace(text));
+    private static bool IsPathPart(string text, Shown shown) =>
+        RuntimeChangeTable.JoinsValidPath(text) && (shown == Shown.ValidPath || text.Length == 0 || !string.IsNullOrWhiteSpace(text));
 
     /// <summary>
     /// Whether the valid path <paramref name="value"/> has no drive, and so no colon (ticket P2-208): it reads a local
@@ -442,12 +465,12 @@ internal static class ValidPaths
     /// <see cref="CalleeDepth"/> (ticket P2-200). False for a body that returns nothing, an auto-property's getter among them.
     /// </summary>
     private static bool ReturnsOnlyValidPaths(
-        IMethodSymbol method, IOperation? receiver, ImmutableArray<IArgumentOperation> arguments, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+        IMethodSymbol method, IOperation? receiver, ImmutableArray<IArgumentOperation> arguments, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth) =>
         depth < CalleeDepth
         && CalleeBody(method, receiver, compilation) is { } body
         && ReturnedBy(body).ToImmutableArray() is [_, ..] returned
-        && Passed(body, arguments, seen, orEmpty, compilation, depth) is var passed
-        && returned.All(value => IsValid(value, passed, orEmpty, body.SemanticModel!.Compilation, depth + 1));
+        && Passed(body, arguments, seen, shown, compilation, depth) is var passed
+        && returned.All(value => IsValid(value, passed, shown, body.SemanticModel!.Compilation, depth + 1));
 
     /// <summary>
     /// The by-value parameters of the callee <paramref name="body"/> that hold valid paths wherever it reads them (ticket
@@ -457,16 +480,16 @@ internal static class ValidPaths
     /// only ever hold valid paths. A parameter with a write that does not is dropped, and the rest are read again.
     /// </summary>
     private static ImmutableHashSet<ISymbol> Passed(
-        IOperation body, ImmutableArray<IArgumentOperation> arguments, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth)
+        IOperation body, ImmutableArray<IArgumentOperation> arguments, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth)
     {
         ImmutableHashSet<ISymbol> passed =
         [
             .. arguments
-                .Where(argument => argument.Parameter is { RefKind: RefKind.None } && IsValid(argument.Value, seen, orEmpty, compilation, depth))
+                .Where(argument => argument.Parameter is { RefKind: RefKind.None } && IsValid(argument.Value, seen, shown, compilation, depth))
                 .Select(static argument => argument.Parameter!.OriginalDefinition),
         ];
         while (passed.FirstOrDefault(parameter => !LocalValues.Writes(parameter, body)
-            .All(written => written is not null && IsValid(written, passed, orEmpty, body.SemanticModel!.Compilation, depth + 1))) is { } broken)
+            .All(written => written is not null && IsValid(written, passed, shown, body.SemanticModel!.Compilation, depth + 1))) is { } broken)
         {
             passed = passed.Remove(broken);
         }
@@ -562,8 +585,8 @@ internal static class ValidPaths
     /// in the body that gives it, is a valid path while <paramref name="depth"/> is under <see cref="CalleeDepth"/>. A
     /// struct's is not read: <c>this = ...</c> in any member of a struct writes every field.
     /// </summary>
-    private static bool StoresOnlyValidPaths(IOperation reference, bool orEmpty, Compilation compilation, int depth) =>
-        StoresOnly(reference, compilation, depth, (value, next) => IsValid(value, [], orEmpty, value.SemanticModel!.Compilation, next));
+    private static bool StoresOnlyValidPaths(IOperation reference, Shown shown, Compilation compilation, int depth) =>
+        StoresOnly(reference, compilation, depth, (value, next) => IsValid(value, [], shown, value.SemanticModel!.Compilation, next));
 
     /// <summary>
     /// Whether the field or property <paramref name="reference"/> reads is <see cref="Stored"/> of a class, is given a value at
@@ -682,10 +705,10 @@ internal static class ValidPaths
     /// each assignment runs when the locals already hold what earlier ones gave them, so if every one gives a valid path
     /// from valid paths, the local only ever holds valid paths.
     /// </summary>
-    private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+    private static bool HoldsOnlyValidPaths(ILocalSymbol local, IOperation root, ImmutableHashSet<ISymbol> seen, Shown shown, Compilation compilation, int depth) =>
         seen.Contains(local)
         || (LocalValues.Initializer(local, root) is { } initial
-            && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local), orEmpty, compilation, depth)));
+            && LocalValues.Writes(local, root).Prepend(initial).All(written => written is not null && IsValid(written, seen.Add(local), shown, compilation, depth)));
 
     /// <summary>
     /// Whether a validating guard has returned true for <paramref name="symbol"/> wherever <paramref name="use"/> runs.
