@@ -308,7 +308,12 @@ conversions of one method with one receiver are equal delegates. Equal functions
 sides, so a callee handed the delegate is the same call; two evaluations of one site are also one value, which
 matches `Delegate.Equals` and conflates only reference identity, as a boxing `cast.<From>.<To>` does. A lambda whose
 capture is stored at a point reachable after the conversion is opaque again, with reason `DelegateCreation` and no
-fingerprint. A method group whose receiver is evaluated (`o.M`, which null-checks `o` and may itself run code) stays
+fingerprint. A store reached only by entering the capture's scope again is not one: a scope a loop enters afresh (its
+first block is on a cycle and every edge into it comes from outside it), a loop body or a `foreach`'s iteration
+variable, declares a new variable each time, so the next iteration stores to another one (P2-182; ADR 0024
+clarification of 2026-10-17). A delegate capturing such a local also reads its scope's activation, a 64-bit counter
+stored 0 at the start and one more at each entry, since the closures of two iterations are two delegates under
+`Delegate.Equals`. The same reading applies to a shared fragment's and a local function call's captures. A method group whose receiver is evaluated (`o.M`, which null-checks `o` and may itself run code) stays
 an `IrOpaque` with reason `DelegateCreation`, shared as any fingerprinted fragment is, and a conversion with no
 fingerprint (a capture some lambda or local function writes, a local function declared
 outside it, a struct's `this`) stays one that is not shared. A conversion that runs no code and is runtime-sensitive

@@ -805,3 +805,16 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     without changing a shared one.
   - **Measured on `gitextensions-11372`** (the ticket's Notes): of the 44 changed pairs that call
     a local function, the functions have the same text on both sides in 30.
+- 2026-10-17 (P2-182). **A store the next iteration makes to a local the loop body declares is not
+  "a local assigned after the fragment".** Decision 2 refuses a fragment that holds a lambda capturing
+  a local assigned after it, and the lowering read that as any store reachable after it, the loop's
+  back edge included. A local that a loop body declares, a `foreach`'s iteration variable among them,
+  is a new variable each time the body is entered: the compiled code allocates a new closure for it,
+  so the next iteration's store is to another variable, which the lambda never reads. So a store
+  counts only when it is reached without entering the local's scope again. A scope counts as entered
+  again only where every edge into its first block comes from outside it; one that a `goto` inside it
+  re-enters is the same instance and keeps the old reading. The same holds for a shared fragment and a
+  local function's call. A `delegate:` function, which is no call event and has no trace position to
+  tell two iterations apart, also reads its scope's activation, a counter one more at each entry: two
+  iterations' closures are two delegates under `Delegate.Equals`, since their targets differ, and the
+  counter keeps them two values. Nothing else in decision 2 changes.

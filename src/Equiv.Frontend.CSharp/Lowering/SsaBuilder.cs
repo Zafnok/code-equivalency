@@ -73,6 +73,12 @@ internal sealed class SsaBuilder
 
     public void Store(IrBlockId block, Variable variable, IrVar value) => drafts[block.Value].Steps.Add(new StoreStep(variable, value));
 
+    /// <summary>
+    /// Marks a new instance of each of <paramref name="variables"/> from this point of <paramref name="block"/>: a scope a
+    /// loop enters afresh (ticket P2-182). A store after it is to that instance, not to one a lambda before it captured.
+    /// </summary>
+    public void Renew(IrBlockId block, ImmutableArray<Variable> variables) => drafts[block.Value].Steps.Add(new RenewStep(variables));
+
     /// <summary>Stores <paramref name="value"/> to <paramref name="variable"/> before anything else in <paramref name="block"/>: an input's initial version.</summary>
     public void StoreFirst(IrBlockId block, Variable variable, IrVar value) => drafts[block.Value].Steps.Insert(0, new StoreStep(variable, value));
 
@@ -193,25 +199,34 @@ internal sealed class SsaBuilder
     /// <summary>
     /// Whether one of <paramref name="captured"/> is stored after step <paramref name="index"/> of <paramref name="draft"/>: later
     /// in the block, or anywhere in a block reachable from it, the block itself included when a loop leads back to it. A lambda
-    /// that captures such a variable sees a value its reads at creation do not determine (ADR 0024 decision 2).
+    /// that captures such a variable sees a value its reads at creation do not determine (ADR 0024 decision 2). A path that
+    /// renews the variable first (<see cref="Renew"/>) reaches only stores to another instance of it, which the lambda does not
+    /// see (ticket P2-182).
     /// </summary>
-    private bool StoredAfter(Draft draft, int index, ImmutableArray<Variable> captured)
+    private bool StoredAfter(Draft draft, int index, ImmutableArray<Variable> captured) => captured.Any(v => StoredAfter(draft, index, v));
+
+    private bool StoredAfter(Draft draft, int index, Variable variable)
     {
         HashSet<IrBlockId> reached = [];
-        Stack<IrBlockId> pending = new(Successors(draft.Terminator!));
-        while (pending.TryPop(out IrBlockId? block))
+        Stack<(Draft Draft, int From)> pending = new([(draft, index + 1)]);
+        while (pending.TryPop(out (Draft Draft, int From) next))
         {
-            if (reached.Add(block))
+            IStep? first = next.Draft.Steps.Skip(next.From).FirstOrDefault(s => (s is StoreStep store && store.Variable == variable) || (s is RenewStep renew && renew.Variables.Contains(variable)));
+            if (first is StoreStep)
             {
-                foreach (IrBlockId successor in Successors(drafts[block.Value].Terminator!))
+                return true;
+            }
+
+            if (first is null)
+            {
+                foreach (IrBlockId successor in Successors(next.Draft.Terminator!).Where(reached.Add))
                 {
-                    pending.Push(successor);
+                    pending.Push((drafts[successor.Value], 0));
                 }
             }
         }
 
-        return draft.Steps.Skip(index + 1).Concat(reached.SelectMany(b => drafts[b.Value].Steps))
-            .Any(s => s is StoreStep store && captured.Contains(store.Variable));
+        return false;
     }
 
     /// <summary>A heap pair of each of <paramref name="heap"/> at a call or shared fragment in <paramref name="block"/>.</summary>
@@ -412,6 +427,8 @@ internal sealed class SsaBuilder
     private sealed record LoadStep(Variable Variable, IrVar Temp) : IStep;
 
     private sealed record StoreStep(Variable Variable, IrVar Value) : IStep;
+
+    private sealed record RenewStep(ImmutableArray<Variable> Variables) : IStep;
 
     private sealed class Draft(IrBlockId id)
     {
