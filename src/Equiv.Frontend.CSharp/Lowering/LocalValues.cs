@@ -33,7 +33,8 @@ internal static class LocalValues
     /// What is written to <paramref name="symbol"/> under <paramref name="root"/> after its declaration: the value of each
     /// assignment, a compound assignment itself, whose operator gives the value from the one before (ticket P2-232), or null
     /// for a write whose value is not known (a <c>??=</c>, a <c>ref</c> or <c>out</c> argument, a tuple it is part of, or a
-    /// <c>ref</c> to it that a ref local or a ref conditional takes, ticket P2-201; an increment or a decrement, ticket P2-216).
+    /// <c>ref</c> to it that a ref local or a ref conditional takes, ticket P2-201; an increment or a decrement, ticket P2-216; a
+    /// <c>ref</c> return, an address or a <c>__makeref</c> of it, ticket P2-228).
     /// </summary>
     public static ImmutableArray<IOperation?> Writes(ISymbol symbol, IOperation root) =>
         [.. References(symbol, root).Select(Write).Where(static w => w.Written).Select(static w => w.Value)];
@@ -45,27 +46,35 @@ internal static class LocalValues
     public static IEnumerable<IOperation> References(ISymbol symbol, IOperation root) =>
         root.DescendantsAndSelf().Where(o => SymbolEqualityComparer.Default.Equals(Symbol(o), symbol));
 
-    private static (bool Written, IOperation? Value) Write(IOperation reference) => reference.Parent switch
+    /// <summary>
+    /// Whether the reference <paramref name="reference"/> writes what it refers to, or takes a <c>ref</c> to it, and the value
+    /// written when it is known (<see cref="Writes"/>).
+    /// </summary>
+    public static (bool Written, IOperation? Value) Write(IOperation reference) => reference.Parent switch
     {
         ISimpleAssignmentOperation assignment when assignment.Target == reference => (true, assignment.Value),
         ICompoundAssignmentOperation compound when compound.Target == reference => (true, compound),
         IAssignmentOperation assignment when assignment.Target == reference => (true, null),
         IArgumentOperation { Parameter.RefKind: not RefKind.None } or ITupleOperation => (true, null),
         IIncrementOrDecrementOperation => (true, null),
-        var parent => (TakesRef(parent), null),
+        var parent => (TakesRef(reference, parent!), null),
     };
 
     /// <summary>
-    /// Whether <paramref name="parent"/> takes a <c>ref</c> to its operand, through which it can be written (ticket P2-201):
-    /// a <c>ref</c> local's initializer, a <c>ref</c> reassignment's value or a <c>ref</c> conditional's branch.
+    /// Whether <paramref name="parent"/> takes a <c>ref</c> to its operand <paramref name="reference"/>, through which it can be
+    /// written (ticket P2-201): a <c>ref</c> local's initializer, a <c>ref</c> reassignment's value or a <c>ref</c>
+    /// conditional's branch; or, through which code the bound tree does not show can write it (ticket P2-228), a <c>ref</c>
+    /// return, an address taken (<c>&amp;f</c>) and an operation with no bound kind, such as <c>__makeref</c>.
     /// </summary>
-    private static bool TakesRef(IOperation? parent) => parent switch
+    private static bool TakesRef(IOperation reference, IOperation parent) => parent switch
     {
         // A C# variable initializer always belongs to a declarator.
         IVariableInitializerOperation initializer => ((IVariableDeclaratorOperation)initializer.Parent!).Symbol.RefKind != RefKind.None,
         ISimpleAssignmentOperation assignment => assignment.IsRef,
         IConditionalOperation conditional => conditional.IsRef,
-        _ => false,
+        IReturnOperation => reference.SemanticModel!.GetEnclosingSymbol(reference.Syntax.SpanStart) is IMethodSymbol { RefKind: not RefKind.None },
+        IAddressOfOperation => true,
+        _ => parent.Kind == OperationKind.None,
     };
 
     /// <summary>

@@ -23,8 +23,10 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// that body and in the bodies its own returned calls run, at most <see cref="CalleeDepth"/> calls deep (tickets P2-188
 /// and P2-200). A read of a <c>readonly</c> field or a get-only auto-property of a class yields one when its initializer and
 /// every write in a constructor or <c>init</c> accessor of its type is one by these rules (ticket P2-201), each a step of
-/// that depth. A read of a field or auto-property where a validating guard has passed on the same member of the same
-/// receiver, with nothing between that runs code or writes the member, is one too (ticket P2-217). A local variable or
+/// that depth, and so does a private field of a reference type whose initializer and every write anywhere in its type is
+/// one, a getter that fills it on first use among them (ticket P2-228). A read of a field or auto-property where a
+/// validating guard has passed on the same member of the same receiver, with nothing between that runs code or writes the
+/// member, is one too (ticket P2-217). A local variable or
 /// parameter read after a plain assignment of a valid path that nothing writes over is one, and so is a parameter of a
 /// private method that every call in its type passes a valid path (ticket P2-207). A local function that reads nothing of
 /// the method around it is read as a callee; a valid path followed by a constant with no character validation rejects and
@@ -376,7 +378,7 @@ internal static class ValidPaths
 
     /// <summary>The expression <paramref name="name"/> ends: the member access or member binding it is the name of, or itself.</summary>
     private static SyntaxNode Callee(SimpleNameSyntax name) =>
-        name.Parent is MemberAccessExpressionSyntax or MemberBindingExpressionSyntax ? name.Parent : name;
+        (name.Parent is MemberAccessExpressionSyntax access && access.Name == name) || name.Parent is MemberBindingExpressionSyntax ? name.Parent : name;
 
     private static CallIdentity Identity(IMethodSymbol method) => new(CallIdentityFactory.Name(method, RenameMap.Empty));
 
@@ -575,18 +577,34 @@ internal static class ValidPaths
         && written.All(value => value is not null && holds(value, depth + 1));
 
     /// <summary>
-    /// The definition of the member whose stored value <paramref name="reference"/> reads, when only its own type's
-    /// construction can write it: a <c>readonly</c> field, or a get-only auto-property (no setter, a getter with no body,
-    /// not a partial definition whose implementation has one) whose getter is the one that runs, as for a solution callee.
-    /// Null for any other read.
+    /// The definition of the member whose stored value <paramref name="reference"/> reads, when only its own type's code can
+    /// write it: a <c>readonly</c> field, or a get-only auto-property (no setter, a getter with no body, not a partial
+    /// definition whose implementation has one) whose getter is the one that runs, as for a solution callee, which only
+    /// its type's construction can write (ticket P2-201); or a private field of a reference type, which only its type's
+    /// source can name and which holds null until a write (ticket P2-228). Null for any other read, and for a member of a
+    /// type with a <c>StructLayout</c>, where an explicit layout can lay another field over it.
     /// </summary>
-    private static ISymbol? Stored(IOperation reference) => reference switch
+    private static ISymbol? Stored(IOperation reference) =>
+        Member(reference) is { } member && !Laid(member.ContainingType) ? member : null;
+
+    /// <summary>The member <see cref="Stored"/> reads, before its type's layout is looked at.</summary>
+    private static ISymbol? Member(IOperation reference) => reference switch
     {
         IFieldReferenceOperation { Field: { IsReadOnly: true } field } => field.OriginalDefinition,
+        IFieldReferenceOperation { Field: { DeclaredAccessibility: Accessibility.Private, Type.IsReferenceType: true } field } => field.OriginalDefinition,
         IPropertyReferenceOperation { Property.GetMethod: { } getter } property =>
             AutoProperty(Dispatched(getter, property.Instance)) is { SetMethod: null } auto ? auto.OriginalDefinition : null,
         _ => null,
     };
+
+    /// <summary>
+    /// Whether <paramref name="type"/> has a <c>StructLayout</c> attribute (ticket P2-228): with <c>LayoutKind.Explicit</c>, two
+    /// reference fields at one <c>FieldOffset</c> are one slot, and a write of either writes both. Any layout is left out, as
+    /// only an explicit one can overlay fields.
+    /// </summary>
+    private static bool Laid(INamedTypeSymbol type) =>
+        type.GetAttributes().Select(static attribute => attribute.AttributeClass).OfType<INamedTypeSymbol>()
+            .Any(static attribute => string.Equals(attribute.ToDisplayString(), "System.Runtime.InteropServices.StructLayoutAttribute", StringComparison.Ordinal));
 
     /// <summary>
     /// The auto-property whose getter is <paramref name="getter"/>: a getter with no body, of a property that is not a
@@ -601,18 +619,39 @@ internal static class ValidPaths
     /// <summary>
     /// Every value given to <paramref name="member"/>: its initializer's, then each write in a constructor or <c>init</c>
     /// accessor of its type, the only places the language lets a <c>readonly</c> field or a get-only auto-property be
-    /// written or passed by writable <c>ref</c>. Null for a value that is not known (<see cref="LocalValues.Writes"/>).
+    /// written or passed by writable <c>ref</c>; for a private field that is not <c>readonly</c>, each write anywhere in its
+    /// type (ticket P2-228). Null for a value that is not known (<see cref="LocalValues.Writes"/>).
     /// </summary>
     private static IEnumerable<IOperation?> Writes(ISymbol member, Compilation compilation) =>
         member.DeclaringSyntaxReferences
             .SelectMany(static declaration => declaration.GetSyntax().ChildNodes().OfType<EqualsValueClauseSyntax>())
             .Select(initializer => Operation(initializer.Value, compilation))
-            .Concat(member.ContainingType.GetMembers().OfType<IMethodSymbol>()
-                .Where(static method => method.MethodKind is MethodKind.Constructor or MethodKind.StaticConstructor || method.IsInitOnly)
-                .SelectMany(static method => method.DeclaringSyntaxReferences)
-                .Select(declaration => Body(declaration, compilation))
-                .OfType<IOperation>()
-                .SelectMany(body => LocalValues.Writes(Declared(member, body.SemanticModel!.Compilation), body)));
+            .Concat(member is IFieldSymbol { IsReadOnly: false } field
+                ? WritesInType(field, compilation)
+                : member.ContainingType.GetMembers().OfType<IMethodSymbol>()
+                    .Where(static method => method.MethodKind is MethodKind.Constructor or MethodKind.StaticConstructor || method.IsInitOnly)
+                    .SelectMany(static method => method.DeclaringSyntaxReferences)
+                    .Select(declaration => Body(declaration, compilation))
+                    .OfType<IOperation>()
+                    .SelectMany(body => LocalValues.Writes(Declared(member, body.SemanticModel!.Compilation), body)));
+
+    /// <summary>
+    /// Every write of the private field <paramref name="field"/> in the declarations of its type, nested types and partial
+    /// declarations included, which are all the source that can name it (ticket P2-228), as <see cref="LocalValues.Write"/>
+    /// gives it. Each name there that spells the field and binds to it or to no symbol is read; one that is not a read or
+    /// write of the field itself (a <c>dynamic</c> member name, which can bind to it when the program runs) is a write whose
+    /// value is not known. The field is private, so its reads are in this type and <paramref name="compilation"/> holds them.
+    /// </summary>
+    private static IEnumerable<IOperation?> WritesInType(IFieldSymbol field, Compilation compilation) =>
+        field.ContainingType.DeclaringSyntaxReferences
+            .SelectMany(static declaration => declaration.GetSyntax().DescendantNodes().OfType<SimpleNameSyntax>())
+            .Where(name => string.Equals(name.Identifier.ValueText, field.Name, StringComparison.Ordinal))
+            .Select(name => (Name: name, Model: compilation.GetSemanticModel(name.SyntaxTree)))
+            .Where(named => named.Model.GetSymbolInfo(named.Name).Symbol is not { } symbol
+                || SymbolEqualityComparer.Default.Equals(symbol.OriginalDefinition, field.OriginalDefinition))
+            .Select(static named => named.Model.GetOperation(Callee(named.Name)) is IFieldReferenceOperation reference ? LocalValues.Write(reference) : (Written: true, Value: null))
+            .Where(static write => write.Written)
+            .Select(static write => write.Value);
 
     /// <summary>
     /// <paramref name="member"/> as <paramref name="compilation"/>, the one whose source holds its declaration, declares it. A
