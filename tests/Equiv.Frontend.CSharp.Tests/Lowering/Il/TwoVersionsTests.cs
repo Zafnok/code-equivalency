@@ -170,6 +170,10 @@ public sealed class TwoVersionsTests
             "public static class C { public static unsafe int F() { delegate*<int> f = &G; return f(); } static int G() => 1; }",
             "public static class C { public static unsafe int F() { delegate*<int> f = &G; return f(); } static int G() => 1; }",
             false),
+        ["a call through a function pointer held in no local"] = (
+            "public static class C { public static unsafe int F() => ((delegate*<int>)&G)(); static int G() => 1; }",
+            "public static class C { public static unsafe int F() => ((delegate*<int>)&G)(); static int G() => 1; }",
+            false),
         ["an extern member"] = (
             "public static class C { public static int F() => G(); [System.Runtime.InteropServices.DllImport(\"x\")] static extern int G(); }",
             "public static class C { public static int F() => G(); [System.Runtime.InteropServices.DllImport(\"x\")] static extern int G(); }",

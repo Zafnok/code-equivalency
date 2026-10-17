@@ -212,8 +212,6 @@ internal sealed class TwoVersions
     {
         private readonly Lazy<FrozenSet<string>> overridable = new(() => Overridable(module.MetadataFile.Metadata));
 
-        public MetadataModule Module => module;
-
         public MetadataReader Metadata => module.MetadataFile.Metadata;
 
         /// <summary>Whether <paramref name="name"/> is the name of a virtual method of the module, which may override a framework one.</summary>

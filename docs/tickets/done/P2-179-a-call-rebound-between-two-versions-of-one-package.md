@@ -1,5 +1,5 @@
 # P2-179 A call rebound between two versions of one third-party package is decided from the two versions' code, not left Unknown
-Status: in-progress
+Status: done (PR #543)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
