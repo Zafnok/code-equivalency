@@ -97,3 +97,38 @@ Runtime-sensitive lambdas, which are their side's own function by ADR 0025.
   no counter: a fragment is a call event with its trace position (ADR 0024 decision 2), so two
   iterations' calls are already two events. Alternatives: keep the old test for them with a flag on the
   step (a second rule for one fact). Rule: 4.
+- **The census after the change (2026-10-17).** Same pair and checkouts, this branch, exit 0, 100 s, no
+  project skipped. `changedReasonSets["DelegateCreation"]` fell from 30 to 16, and changed pairs holding
+  the reason at all from 37 to 22. `changedPairsWithoutOpaque` rose from 158 to 172 of 297 (lowerable
+  share 53.2% to 57.9%). Bodies holding the reason fell from 185 legacy and 185 modern to 101 and 97.
+  Matched, congruent and changed pairs are unchanged (10,120, 9,823 and 297), as they must be: congruence
+  is decided on the body's fingerprint, which this change does not touch. Of the 17 pairs the split gave
+  to this form alone, 14 left the set; the 3 left were not classified again. One pair moved from
+  `ArrayElementReference+DelegateCreation` to `ArrayElementReference`.
+- **Criterion 3: the rerun in compare mode quick (2026-10-17).** `corpus.ps1 -Compare openra-17989 -Mode
+  quick -CompareArgs '--jobs', '4'`, which passes the pair's `tools/corpus/configs/openra-17989.json`
+  (P2-197; modern runtime `net5.0`), on this branch (`34cf82b1`), and the same command line on `main`'s
+  head (`82ba9c14`) from a scratch worktree, so the two runs differ only in this change. Both exit 1
+  (Divergent results exist). With the pair's config the full run has 225 changed pairs of 10,120, not
+  the census's 297: the narrower runtime interval leaves more bodies congruent.
+
+  | | P2-130 (`e98fd1b9`, no pair config) | `main` (`82ba9c14`) | this branch |
+  |---|---|---|---|
+  | Changed pairs | 321 | 225 | 225 |
+  | `DelegateCreation` alone | **31** (9.7%) | 20 (8.9%) | **10** (4.4%) |
+  | `DelegateCreation` in | n/a | 24 | 13 |
+  | Changed pairs without opaque | 179 | 119 | 129 |
+  | Unknown (timeout, abstraction, opaque) | 267 (114, 99, 42) | 162 (68, 50, 36) | 157 (63, 50, 36) |
+  | `delegate` among the `abstraction` Unknowns | 43 of 99 | 34 of 50 | 34 of 50 |
+
+  Between `main` and this branch exactly 5 results moved, all Unknown(timeout) to Equivalent by
+  `lockstep-induction`: `LegacyRulesImporter::ImportStructures`, `ConfirmationDialogs::ButtonPrompt` and
+  the constructors of `ModContentDiscTooltipLogic`, `ModContentLogic` and `ModContentPromptLogic`. No
+  Divergent and no other Unknown moved. Each of the five was checked by hand: its file is byte-identical
+  on the two sides, it is not congruent only because `Split('\n')` binds to `String.Split(char[])` on
+  .NET Framework and to `Split(char, StringSplitOptions)` on .NET 5, which `api-equivalences.json`
+  equates, and the lambdas in its `foreach` bodies, which kept it opaque, are now one `delegate:` function
+  on both sides. Run times (branch 296 s, `main` 233 s) are not comparable: another session's corpus run
+  shared the box during the branch's run.
+- `DelegateCreation` alone is now 10 of 225 changed pairs (4.4%), under ADR 0028's 5%, so no ticket is
+  filed for what is left.
