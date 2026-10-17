@@ -652,14 +652,17 @@ internal static class ValidPaths
     /// Whether a validating guard has returned true for <paramref name="symbol"/> wherever <paramref name="use"/> runs.
     /// Nothing may assign the symbol after its declaration, so the guard and the use read one value; the symbol is declared
     /// in the member that reads it, so every write of it is there to see. A primary constructor's parameter is not: any
-    /// member of its type can write it, and a call between the guard and the use can run that member (ticket P2-230).
+    /// member of its type can write it, and a call between the guard and the use can run that member (ticket P2-230). A
+    /// local function can be called anywhere in the block that declares it, before an early exit there too, so that block's
+    /// statements guard no use in it; a guard in the function, or around the block, still does (ticket P2-233).
     /// </summary>
     private static bool IsGuarded(ISymbol symbol, IOperation use)
     {
         IOperation root = LocalValues.Root(use);
         return symbol.DeclaringSyntaxReferences.All(declaration => declaration.GetSyntax().Ancestors().Contains(root.Syntax))
             && LocalValues.Writes(symbol, root).IsEmpty
-            && Ancestors(use).Any(step => Guards(step.Outer, step.Inner, Validates(argument => SymbolEqualityComparer.Default.Equals(LocalValues.Symbol(argument), symbol))) is not null);
+            && Ancestors(use).Any(step => step.Inner is not ILocalFunctionOperation
+                && Guards(step.Outer, step.Inner, Validates(argument => SymbolEqualityComparer.Default.Equals(LocalValues.Symbol(argument), symbol))) is not null);
     }
 
     /// <summary>A test that a call is to one of the validating guards, on an argument <paramref name="guarded"/> accepts.</summary>

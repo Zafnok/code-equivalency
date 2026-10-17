@@ -177,6 +177,24 @@ public sealed class LocalFunctionCallLoweringTests
         Assert.NotNull(Assert.Single(Opaques(Source(source, runtime: Runtimes.Between("net10.0", "net10.0")))).Fingerprint);
     }
 
+    /// <summary>
+    /// Ticket P2-233: a local function can be called anywhere in the block that declares it, so an early exit earlier in
+    /// that block does not guard its path, and its call is not shared. A guard in the function, or one around the block,
+    /// does.
+    /// </summary>
+    [Theory]
+    [InlineData("object M(string p) { var r = L(); if (!File.Exists(p)) return null; return r; object L() => new StreamReader(p); }", false)]
+    [InlineData("object M(string p) { if (!File.Exists(p)) return null; var r = L(); return r; object L() => new StreamReader(p); }", false)]
+    [InlineData("object M(string p) { var r = L(); return r; object L() { if (!File.Exists(p)) return null; return new StreamReader(p); } }", true)]
+    [InlineData("object M(string p) { if (File.Exists(p)) { var r = L(); return r; object L() => new StreamReader(p); } return null; }", true)]
+    [InlineData("object M(string p) { if (!File.Exists(p)) return null; { var r = L(); return r; object L() => new StreamReader(p); } }", true)]
+    public void AnEarlyExitBeforeALocalFunctionInItsBlockDoesNotGuardIt(string members, bool shared)
+    {
+        IrOpaque call = Assert.Single(Opaques(Source("using System.IO;\nclass C\n{\n" + members + "\n}\n")), static o => string.Equals(o.Reason, Reason, StringComparison.Ordinal));
+
+        Assert.Equal(shared, call.Fingerprint is not null);
+    }
+
     private static string Fingerprint(string members) =>
         Assert.Single(Opaques(Method(members)), static o => string.Equals(o.Reason, Reason, StringComparison.Ordinal)).Fingerprint!;
 }

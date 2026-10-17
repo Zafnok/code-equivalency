@@ -1,5 +1,5 @@
 # P2-233 Soundness bug: a guard is trusted in a local function that is called before the guard runs
-Status: todo
+Status: done (PR #534)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -51,3 +51,8 @@ Other rules' handling of local functions.
 
 ## Notes
 - Filed 2026-10-16 by P2-208 (found in passing).
+- Decision: the guard rule skips only the one step that crosses from a local function to the block declaring it, not
+  every guard above the function. Calls (and any delegate made from the function) can only be in that block, so an
+  `if` around the block, or an early exit before the block in an outer one, still runs first; only the block's own
+  early exits can come after a call. A guard before both the call and the declaration in that block is given up
+  (not read), as nothing short of reading every call site shows it runs first.
