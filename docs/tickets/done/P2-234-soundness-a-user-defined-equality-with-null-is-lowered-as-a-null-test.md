@@ -1,5 +1,5 @@
 # P2-234 Soundness bug: a user-defined `==` or `!=` with `null` is lowered as a null test, not as the operator
-Status: in-progress
+Status: done (PR #535)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
