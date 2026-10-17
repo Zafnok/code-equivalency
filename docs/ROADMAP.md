@@ -1399,6 +1399,13 @@ false positives and Unknowns that verdict counts against each, they come before 
 6. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates fresh samples as P2-212 did, and names
    the milestone after this one, once items 1 to 4 are done.
 
+Beside the list, ADR 0060 (2026-10-17) reports the 880 `runtime-rule` pairs (36.6% of changed pairs; 259 of the
+Divergent, 620 of the Unknowns) as their own result, EQ007 runtime exposure, with every exit code and every proof count
+unchanged: P2-238 (L) implements it and reruns the five large pairs, which can serve as item 6's rerun once items 1 to 4
+are done; P2-239 (M) makes a `suppressRuntimeChanges` entry, a member or `precondition:invalidPath`, an assumption the
+result names. Neither needs the other or anything on the list; the valid-path and row tickets keep their order and turn
+exposures into proofs.
+
 Ahead of the list was P2-221, an encoder bug in the refinement of a float-to-int conversion of NaN that a property
 test's random seed hit; it is done. Its one case left, P2-227 (S), a floating-point heap map holding two NaN bit
 patterns, has not been drawn by any pair or test.
