@@ -123,3 +123,20 @@ Catalogue entries for base class library pairs; P2-143's span overloads.
   (criterion 1's table), which is the result the ADR expects for two versions that behave differently.
 - The sample's legacy library has no `AssemblyInfo.cs`, so its version is 0.0.0.0: `IlLowererTests` compile all of a
   sample side's files as one compilation, where a second set of assembly attributes is an error.
+
+### Criterion 4: the rerun of `gitextensions-8522`
+- Run: this branch at `9288f41a`, compare mode quick, `--execute --jobs 4`, the same restored checkout and default
+  config as the baseline (P2-237's run at `de93b9c7`, the same command). Wall-clock 379 s (baseline 488 s), lowering
+  115 s (baseline 141 s), exit 1 (Divergent results exist, as before). The run directory is outside the repository.
+- `rebound-call` alone: 121 changed pairs of 837, before and after (the Goal's 121 of 938 was the 2026-10-13 run).
+  `rebound-call` in any reason set: 136 and 136. Unknown results with `reboundCalls`: 128 and 128, of them
+  Unknown (`opaque`) 112 and 112 (the Goal's 108 was the 2026-10-13 run). Results with `reboundCallsProved`: 0.
+- No result changed its rule id: EQ001 12,909, EQ002 24, EQ003 557, EQ004 15, EQ005 192, EQ006 121 on both runs, each
+  procedure with the same rule. So no result that was Divergent became Equivalent, with or without a proved pair.
+- Why nothing moved: criterion 1's table. Every third-party pair on this pair of versions is refused by rule 2 (other
+  type arguments, a virtual or abstract callee, another signature) before any IL is compared, and the
+  FluentAssertions, NSubstitute and ExCSS bodies differ as well. That is ADR 0061's expected result for two library
+  versions whose code changed: those calls are honestly Unknown.
+- No follow-up ticket is filed for the 121. Of them, 90 are held by third-party pairs whose library code changed or
+  has no body (criterion 1). Proving them would mean proving different code equal, which the rule refuses by design.
+  The rest are P2-137's base class library and solution pairs, which their own tickets own.
