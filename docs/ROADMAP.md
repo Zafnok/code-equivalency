@@ -1410,10 +1410,16 @@ Ahead of the list was P2-221, an encoder bug in the refinement of a float-to-int
 test's random seed hit; it is done. Its one case left, P2-227 (S), a floating-point heap map holding two NaN bit
 patterns, has not been drawn by any pair or test.
 
-P2-237 (M, filed 2026-10-17) comes before the remaining one-to-two-result precision tickets in items 2 to 4: it runs the
-three migrations with `--execute` on a .NET 5 runtime installed for the runs only, and replays P2-212's 57 results that
-are a real difference by hand trace but were never executed, which move the migrations' precision row (2.2%, 1 of 46;
-about 56% if they confirm) more than all of those tickets together.
+P2-237 (M, filed 2026-10-17) came before the remaining one-to-two-result precision tickets in items 2 to 4: it ran the
+three migrations with `--execute` on a .NET 5 runtime and re-adjudicated P2-212's 90 undetermined results by execution.
+Done 2026-10-17 (`docs/runs/2026-10-17-precision-execute-verdict.md`): 16 confirmed, 1 false positive, 71 still
+undetermined, 2 no longer Divergent; the migrations' precision row is 35.4% (17 of 48), from 2.2%. Most of what is left
+undetermined no driver can call, and what it found about execution itself is next, before items 2 to 4, in this order:
+P2-240 (M, a driver deploys no implementation of a package compiled against its reference assembly, so a replay can
+report a difference the solution would not show), P2-241 (S, `probe` reads no pair config: 8 of OpenRA's sampled rows),
+P2-242 (M, no driver calls a constructor or builds or compares a struct). Beside them, P2-243 (S, the one new false
+positive: a test asserting its own runtime's `FileSystemWatcher.Filter` default) joins item 4, and P2-244 (S) measures
+why the three runs took 25% to 34% longer than P2-212's.
 
 Not on it: P2-191's one false positive is congruent since P2-197's config, so it has nothing counted against it. 620 of
 the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture
