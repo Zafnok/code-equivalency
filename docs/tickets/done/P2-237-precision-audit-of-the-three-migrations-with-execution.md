@@ -1,5 +1,5 @@
 # P2-237 Precision audit with execution: the three migration pairs in `full --execute`, P2-212's undetermined results re-adjudicated by replay
-Status: in-progress
+Status: done (PR #540)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-212
