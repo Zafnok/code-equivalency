@@ -186,7 +186,25 @@ public sealed class TwoVersionsTests
             "public class S { public static int G() => 1; } public static class C { public static int F() => S.G(); }",
             "public struct S { public static int G() => 1; } public static class C { public static int F() => S.G(); }",
             false),
-        ["more member pairs than the bound"] = (Chain(TwoVersions.Bound + 1), Chain(TwoVersions.Bound + 1), false),
+        ["as many member pairs as the bound"] = (Chain(TwoVersions.Bound - 2), Chain(TwoVersions.Bound - 2), true),
+        ["one member pair more than the bound"] = (Chain(TwoVersions.Bound - 1), Chain(TwoVersions.Bound - 1), false),
+        ["a type parameter of the method for one of its type"] = (
+            "public static class Box<T> { public static System.Type Get<U>() => typeof(T); } public static class C { public static System.Type F() => Box<int>.Get<int>(); }",
+            "public static class Box<T> { public static System.Type Get<U>() => typeof(U); } public static class C { public static System.Type F() => Box<int>.Get<int>(); }",
+            false),
+        ["another array rank"] = (
+            "public static class C { public static System.Type F() => typeof(int[]); }",
+            "public static class C { public static System.Type F() => typeof(int[,]); }",
+            false),
+        ["a parameter by reference"] = ("public static class C { public static int F(ref int x) => 1; }", "public static class C { public static int F(int x) => 1; }", false),
+        ["locals not initialised"] = (
+            "public static class C { public static object F(string s) { object o = s; return o; } }",
+            "public static class C { [System.Runtime.CompilerServices.SkipLocalsInit] public static object F(string s) { object o = s; return o; } }",
+            false),
+        ["a framework interface member a version implements explicitly"] = (
+            "public static class C { public static void F(System.IDisposable d) => d.Dispose(); }",
+            "public static class C { public static void F(System.IDisposable d) => d.Dispose(); } public class D : System.IDisposable { void System.IDisposable.Dispose() { } }",
+            false),
         ["a virtual callee"] = ("public class C { public virtual int F() => 1; }", "public class C { public virtual int F() => 1; }", false),
         ["a callee that became virtual"] = ("public class C { public int F() => 1; }", "public class C { public virtual int F() => 1; }", false),
     }.ToFrozenDictionary(StringComparer.Ordinal);
