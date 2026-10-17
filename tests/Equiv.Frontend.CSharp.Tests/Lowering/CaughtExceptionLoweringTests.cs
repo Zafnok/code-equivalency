@@ -124,13 +124,46 @@ public sealed class CaughtExceptionLoweringTests
                 .Select(static o => o.Reason),
             StringComparer.Ordinal);
 
-    /// <summary>Acceptance criterion 2, the size guard: every use but <c>e.Message</c> in the handler leaves the exception opaque.</summary>
+    /// <summary>
+    /// Ticket P2-180: the inner exception of a new exception names a value too. The constructor is handed the cell as the
+    /// call that threw left it, and the new exception is thrown by its type.
+    /// </summary>
+    [Fact]
+    public void TheInnerExceptionOfANewExceptionIsWhatTheCallThatThrewLeft()
+    {
+        IrProcedure procedure = Method(N + "static string M() { try { N(); return \"\"; } catch (Exception e) { throw new InvalidOperationException(\"\", e); } }");
+
+        Assert.Empty(Opaques(procedure));
+        IrCall constructor = Assert.Single(Calls(procedure), static c => c.Callee.Value.Contains(".ctor", StringComparison.Ordinal));
+        Assert.Equal(2, constructor.Args.Length);
+        Constructors constructors = new(throws: "N");
+        IrRun run = IrInterpreter.Run(procedure, new IrInputs([Empty()]), constructors, IrGen.StepBudget);
+        Assert.Equal(new IrThrew("System.InvalidOperationException"), run.Outcome);
+        Assert.Equal([Thrown], constructors.Inner);
+    }
+
+    /// <summary>
+    /// Ticket P2-180: a variable read as an inner exception and as <c>e.Message</c>, and one of a clause of another type, name
+    /// a value.
+    /// </summary>
+    [Theory]
+    [InlineData("catch (Exception e) { throw new InvalidOperationException(e.Message, e); }")]
+    [InlineData("catch (InvalidOperationException e) { throw new ArgumentException(\"\", e); }")]
+    [InlineData("catch (Exception e) { throw new Exception(\"\", e); }")]
+    public void AnInnerExceptionNamesAValue(string clause) =>
+        Assert.Empty(Opaques(Method(N + "static string M() { try { N(); return \"\"; } " + clause + " }")).Select(static o => o.Reason));
+
+    /// <summary>Acceptance criterion 2, the size guard: every use but <c>e.Message</c> and the inner exception of a <c>throw new</c> in the handler leaves the exception opaque.</summary>
     [Theory]
     [InlineData("catch (Exception e) { return e.ToString(); }")]
     [InlineData("catch (Exception e) { return e.StackTrace; }")]
     [InlineData("catch (Exception e) { return e.Message + e.StackTrace; }")]
     [InlineData("catch (Exception e) { Log(e); return \"\"; }")]
-    [InlineData("catch (Exception e) { throw new InvalidOperationException(\"\", e); }")]
+    [InlineData("catch (Exception e) { return new Tuple<Exception>(e).Item1.Message; }")]
+    [InlineData("catch (Exception e) { Exception wrapped = new InvalidOperationException(\"\", e); Log(wrapped); return \"\"; }")]
+    [InlineData("catch (Exception e) { throw new InvalidOperationException(\"\", (Exception)(object)e); }")]
+    [InlineData("catch (Exception e) { Func<Exception> f = () => new InvalidOperationException(\"\", e); return f().Message; }")]
+    [InlineData("catch (Exception e) when (new InvalidOperationException(\"\", e).Message.Length > 0) { return \"\"; }")]
     [InlineData("catch (Exception e) { Func<string> f = () => e.Message; return f(); }")]
     [InlineData("catch (Exception e) { return Local(); string Local() => e.Message; }")]
     [InlineData("catch (Exception e) when (e.Message.Length > 0) { return \"\"; }")]
@@ -168,6 +201,27 @@ public sealed class CaughtExceptionLoweringTests
             }
 
             return new(resultType is null ? null : Text, threw) { Heap = [threw ? Empty().Write(Token, Thrown) : Empty()] };
+        }
+    }
+
+    /// <summary>
+    /// The callee named <paramref name="throws"/> throws and leaves <see cref="Thrown"/> in the cell; every other call
+    /// completes and clears the cell, and a constructor records the last argument it is handed, the inner exception.
+    /// </summary>
+    private sealed class Constructors(string throws) : ICallOracle
+    {
+        public List<IrValue> Inner { get; } = [];
+
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
+        {
+            bool threw = callee.Value.Contains($"::{throws}(", StringComparison.Ordinal);
+            if (resultType is IrSort sort)
+            {
+                Inner.Add(arguments[^1]);
+                return new(new IrSortValue(sort.Name, 9), threw) { Heap = [Empty()] };
+            }
+
+            return new(Value: null, threw) { Heap = [threw ? Empty().Write(Token, Thrown) : Empty()] };
         }
     }
 }

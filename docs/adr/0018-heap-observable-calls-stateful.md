@@ -77,6 +77,15 @@ silent false Equivalent.
 - Once P1-005, P1-006 and M3-007 have landed, ADR 0015's two gaps are closed.
 
 ## Clarifications
+- 2026-10-17 (P2-180). The exception a call left in `thrown.System.Exception` may also be handed on as the
+  inner exception of a `throw new T(..., e)`, not only read for its `Message`: it is then an argument of the
+  constructor call, compared as any argument is, so two sides that wrap the exception after the same calls
+  are equal and a side that wraps another exception, or none, is not. Its stack trace, which depends on
+  where it was thrown, leaves the body only inside the exception thrown, which is observed by its type
+  (VERIFICATION-MODEL section 1), or reaches an enclosing clause of the same body, which the same rule
+  governs again. Any other use (an argument of a call, which a logger is, `ToString`, a new exception that
+  is not thrown at once) can read the stack trace while the body runs, and stays `CaughtException`. No IR
+  node, sort or `threw` edge changes.
 - 2026-10-11 (P2-140). The exception a call throws is part of what the call leaves, so it is a
   function of what the Decision names: callee, arguments, the heap at the call and the call's
   position. The frontend holds it in one more by-ref map, `thrown.System.Exception` (a cell of the

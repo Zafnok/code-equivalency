@@ -8,10 +8,12 @@ namespace Equiv.Frontend.CSharp.Lowering;
 
 /// <summary>
 /// Which <c>catch</c> clauses of a graph name an exception that is a value (ticket P2-140): those whose variable the body
-/// only ever reads as <c>e.Message</c>, outside a <c>when</c> filter, a lambda and a local function. <c>Message</c> does
-/// not depend on where the exception was thrown; a stack trace does, and anything else that is handed the object can
-/// read one, so every other use leaves the clause's exception opaque with reason <c>CaughtException</c>. A variable that
-/// is never read names a value too.
+/// only ever reads as <c>e.Message</c> or hands to the constructor of a new exception it throws at once, as its inner
+/// exception (ticket P2-180), outside a <c>when</c> filter, a lambda and a local function. <c>Message</c> does not depend on
+/// where the exception was thrown; a stack trace does, and an inner exception's leaves the body only inside the exception
+/// thrown, which is observed by its type. Anything else that is handed the object can read its stack trace, so every
+/// other use leaves the clause's exception opaque with reason <c>CaughtException</c>. A variable that is never read names
+/// a value too.
 /// </summary>
 internal static class CaughtExceptions
 {
@@ -28,7 +30,7 @@ internal static class CaughtExceptions
             {
                 // C# reads a caught exception in one place: the assignment to the clause's variable that starts the clause.
                 ILocalSymbol local = ((ILocalReferenceOperation)((ISimpleAssignmentOperation)caught.Parent!).Target).Local;
-                if (reads[local].All(IsMessage))
+                if (reads[local].All(IsValueUse))
                 {
                     named[Clause(block)] = caught;
                 }
@@ -48,10 +50,13 @@ internal static class CaughtExceptions
         return region.Kind == ControlFlowRegionKind.Filter ? region.EnclosingRegion! : region;
     }
 
-    /// <summary>Whether <paramref name="read"/> is the receiver of <c>.Message</c>, evaluated where the handler runs.</summary>
-    private static bool IsMessage(ILocalReferenceOperation read)
+    /// <summary>
+    /// Whether <paramref name="read"/> is the receiver of <c>.Message</c> or the argument of a new exception's constructor,
+    /// evaluated where the handler runs.
+    /// </summary>
+    private static bool IsValueUse(ILocalReferenceOperation read)
     {
-        if (read.Parent is not IPropertyReferenceOperation { Property.Name: nameof(Exception.Message) })
+        if (read.Parent is not IPropertyReferenceOperation { Property.Name: nameof(Exception.Message) } && !IsInnerException(read))
         {
             return false;
         }
@@ -67,4 +72,16 @@ internal static class CaughtExceptions
 
         return true;
     }
+
+    /// <summary>
+    /// Whether <paramref name="read"/> is an argument of the constructor of a new exception that is thrown at once,
+    /// <c>throw new T(..., e)</c>, which is how C# makes it the inner exception of what is thrown (ticket P2-180). Each of
+    /// the two may sit behind the implicit conversion to the type it is used as: the parameter's, and <c>System.Exception</c>.
+    /// </summary>
+    private static bool IsInnerException(ILocalReferenceOperation read) =>
+        Converted(read).Parent is IArgumentOperation { Parent: IObjectCreationOperation creation } && Converted(creation).Parent is IThrowOperation;
+
+    /// <summary><paramref name="operation"/>, or the implicit conversion around it.</summary>
+    private static IOperation Converted(IOperation operation) =>
+        operation.Parent is IConversionOperation { IsImplicit: true } conversion ? conversion : operation;
 }

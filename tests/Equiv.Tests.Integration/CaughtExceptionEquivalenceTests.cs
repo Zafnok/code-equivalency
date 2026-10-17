@@ -65,6 +65,31 @@ public sealed class CaughtExceptionEquivalenceTests
     public void AnotherExceptionIsNotEquivalent(string legacy, string modern) =>
         Assert.IsNotType<Equivalent>(Verify(legacy, modern));
 
+    /// <summary>Ticket P2-180: two sides that hand the exception the same call threw to the same new exception are Equivalent.</summary>
+    [Theory]
+    [InlineData(
+        "static string M() { try { N(); return \"\"; } catch (Exception e) { throw new InvalidOperationException(\"failed\", e); } }",
+        "static string M() { string r = \"\"; try { N(); } catch (Exception failed) { throw new InvalidOperationException(\"failed\", failed); } return r; }")]
+    [InlineData(
+        "static void M() { try { N(); K(); } catch (InvalidOperationException e) { throw new ArgumentException(e.Message, e); } }",
+        "static void M() { try { N(); K(); } catch (InvalidOperationException e) { string m = e.Message; throw new ArgumentException(m, e); } }")]
+    public void TheSameInnerExceptionIsEquivalent(string legacy, string modern) =>
+        Assert.IsType<Equivalent>(Verify(legacy, modern));
+
+    /// <summary>
+    /// Ticket P2-180: two sides that differ in what they do with the exception. One hands on the exception <c>K</c> threw and
+    /// the other the one <c>N</c> threw; one hands it on and the other hands on none.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "static void M() { try { N(); } catch (Exception e) { try { K(); } catch (Exception f) { throw new InvalidOperationException(\"\", f); } } }",
+        "static void M() { try { N(); } catch (Exception e) { try { K(); } catch (Exception) { throw new InvalidOperationException(\"\", e); } } }")]
+    [InlineData(
+        "static void M() { try { N(); } catch (Exception e) { throw new InvalidOperationException(\"failed\", e); } }",
+        "static void M() { try { N(); } catch (Exception) { throw new InvalidOperationException(\"failed\", null); } }")]
+    public void AnotherInnerExceptionIsDivergent(string legacy, string modern) =>
+        Assert.IsType<Divergent>(Verify(legacy, modern));
+
     private static Verdict Verify(string legacy, string modern) =>
         new Z3Backend().Verify(Lower($"class C {{ {Helpers}{legacy} }}", isLegacy: true), Lower($"class C {{ {Helpers}{modern} }}", isLegacy: false), Options);
 
