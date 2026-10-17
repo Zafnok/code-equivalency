@@ -131,16 +131,17 @@ internal static class IlAstReader
     {
         ArgumentNullException.ThrowIfNull(assembly);
         ArgumentNullException.ThrowIfNull(compilation);
-        return ReferenceAssemblies.IsReferenceAssembly(assembly)
-            ? null
-            : SymbolEqualityComparer.Default.Equals(assembly, compilation.Assembly)
-            ? Modules.GetValue(compilation, Emit)?.TypeSystem.MainModule
-            : compilation.GetMetadataReference(assembly) switch
+        return (ReferenceAssemblies.IsReferenceAssembly(assembly), SymbolEqualityComparer.Default.Equals(assembly, compilation.Assembly)) switch
+        {
+            (true, _) => null,
+            (_, true) => Modules.GetValue(compilation, Emit)?.TypeSystem.MainModule,
+            _ => compilation.GetMetadataReference(assembly) switch
             {
                 CompilationReference project => Modules.GetValue(project.Compilation, Emit)?.TypeSystem.MainModule,
                 PortableExecutableReference { FilePath: { } path } => FromFile(path, compilation),
                 _ => null,
-            };
+            },
+        };
     }
 
     /// <summary>The module at <paramref name="path"/>, with <paramref name="compilation"/>'s references, read once per compilation.</summary>

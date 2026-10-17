@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -164,49 +165,6 @@ internal sealed class TwoVersions
             ? IdStringProvider.FindEntity(method.OriginalDefinition.GetDocumentationCommentId()!, new SimpleTypeResolveContext(module)) as IlMethod
             : null;
 
-    /// <summary>
-    /// A type's name as both builds spell it, whatever assembly holds it: a type parameter by its owner and position, a
-    /// constructed type by its definition and arguments, a type the runtime defines (<c>native int</c>) by its own name. A type
-    /// that did not resolve, and any other kind (a pointer, a function pointer, a modified type), gets a name no other type
-    /// has, so it is never the same as anything.
-    /// </summary>
-    private static string Name(IlType type) => type switch
-    {
-        { Kind: IlTypeKind.Unknown } => $"?{Guid.NewGuid():N}",
-        IlSpecialType special => special.ReflectionName,
-        ITypeParameter parameter => (parameter.OwnerType == SymbolKind.Method ? "!!" : "!") + parameter.Index,
-        ParameterizedType generic => $"{Name(generic.GenericType)}<{string.Join(',', generic.TypeArguments.Select(Name))}>",
-        ArrayType array => $"{Name(array.ElementType)}[{new string(',', array.Dimensions - 1)}]",
-        ByReferenceType reference => Name(reference.ElementType) + "&",
-        ITypeDefinition definition => definition.ReflectionName,
-        _ => $"?{Guid.NewGuid():N}",
-    };
-
-    /// <summary>The type definitions <paramref name="type"/> is built from, in the order <see cref="Name"/> spells them.</summary>
-    private static IEnumerable<ITypeDefinition> Definitions(IlType type) => type switch
-    {
-        ParameterizedType generic => [.. Definitions(generic.GenericType), .. generic.TypeArguments.SelectMany(Definitions)],
-        TypeWithElementType element => Definitions(element.ElementType),
-        ITypeDefinition definition => [definition],
-        _ => [],
-    };
-
-    /// <summary>A member a call may dispatch away from: virtual, abstract or an override, sealed or not.</summary>
-    private static bool Virtual(IMember member) => member.IsVirtual | member.IsAbstract | member.IsOverride; // NOSONAR: one test of three flags
-
-    /// <summary>A framework module: a reference assembly the project compiled against, which the runtime replaces.</summary>
-    private static bool Framework(MetadataModule module) =>
-        module.GetAssemblyAttributes().Any(static a => string.Equals(a.AttributeType.FullName, ReferenceAssemblyAttribute, StringComparison.Ordinal));
-
-    private static Guid Build(MetadataModule module) => module.MetadataFile.Metadata.GetGuid(module.MetadataFile.Metadata.GetModuleDefinition().Mvid);
-
-    /// <summary>Whether a runtime-changes row names <paramref name="member"/>, any overload of it, or its type, at any runtime.</summary>
-    private static bool RuntimeChanged(IMember member)
-    {
-        string name = $"{member.DeclaringTypeDefinition!.ReflectionName.Replace('+', '.')}::{member.Name}(";
-        return Rows.Any(row => name.StartsWith(row, StringComparison.Ordinal));
-    }
-
     /// <summary>One side of a comparison: the module the rebound callee is read from, and the names of its virtual methods.</summary>
     private sealed class Side(MetadataModule module)
     {
@@ -227,7 +185,7 @@ internal sealed class TwoVersions
         }
 
         public bool HasInitialData(IField field) =>
-            (Metadata.GetFieldDefinition((FieldDefinitionHandle)field.MetadataToken).Attributes & FieldAttributes.HasFieldRVA) == FieldAttributes.HasFieldRVA;
+            Metadata.GetFieldDefinition((FieldDefinitionHandle)field.MetadataToken).Attributes.HasFlag(FieldAttributes.HasFieldRVA);
 
         public TypeAttributes Attributes(ITypeDefinition type) => Metadata.GetTypeDefinition((TypeDefinitionHandle)type.MetadataToken).Attributes;
 
@@ -251,7 +209,7 @@ internal sealed class TwoVersions
         private static FrozenSet<string> Overridable(MetadataReader metadata) =>
             metadata.MethodDefinitions
                 .Select(metadata.GetMethodDefinition)
-                .Where(static m => (m.Attributes & MethodAttributes.Virtual) == MethodAttributes.Virtual)
+                .Where(static m => m.Attributes.HasFlag(MethodAttributes.Virtual))
                 .Select(m => metadata.GetString(m.Name).Split('.')[^1])
                 .ToFrozenSet(StringComparer.Ordinal);
     }
@@ -434,5 +392,48 @@ internal sealed class TwoVersions
         /// <summary>A module other than the assembly: a framework one on both sides, or the same build.</summary>
         private static bool Outside(MetadataModule l, MetadataModule m) =>
             (Framework(l) & Framework(m)) || Build(l) == Build(m); // NOSONAR: both sides are always asked, one branch for the pair
+
+        /// <summary>
+        /// A type's name as both builds spell it, whatever assembly holds it: a type parameter by its owner and position, a
+        /// constructed type by its definition and arguments, a type the runtime defines (<c>native int</c>) by its own name. A type
+        /// that did not resolve, and any other kind (a pointer, a function pointer, a modified type), gets a name no other type
+        /// has, so it is never the same as anything.
+        /// </summary>
+        private static string Name(IlType type) => type switch
+        {
+            { Kind: IlTypeKind.Unknown } => $"?{Guid.NewGuid():N}",
+            IlSpecialType special => special.ReflectionName,
+            ITypeParameter parameter => (parameter.OwnerType == SymbolKind.Method ? "!!" : "!") + parameter.Index.ToString(CultureInfo.InvariantCulture),
+            ParameterizedType generic => $"{Name(generic.GenericType)}<{string.Join(',', generic.TypeArguments.Select(Name))}>",
+            ArrayType array => $"{Name(array.ElementType)}[{new string(',', array.Dimensions - 1)}]",
+            ByReferenceType reference => Name(reference.ElementType) + "&",
+            ITypeDefinition definition => definition.ReflectionName,
+            _ => $"?{Guid.NewGuid():N}",
+        };
+
+        /// <summary>The type definitions <paramref name="type"/> is built from, in the order <see cref="Name"/> spells them.</summary>
+        private static IEnumerable<ITypeDefinition> Definitions(IlType type) => type switch
+        {
+            ParameterizedType generic => [.. Definitions(generic.GenericType), .. generic.TypeArguments.SelectMany(Definitions)],
+            TypeWithElementType element => Definitions(element.ElementType),
+            ITypeDefinition definition => [definition],
+            _ => [],
+        };
+
+        /// <summary>A member a call may dispatch away from: virtual, abstract or an override, sealed or not.</summary>
+        private static bool Virtual(IMember member) => member.IsVirtual | member.IsAbstract | member.IsOverride; // NOSONAR: one test of three flags
+
+        /// <summary>A framework module: a reference assembly the project compiled against, which the runtime replaces.</summary>
+        private static bool Framework(MetadataModule module) =>
+            module.GetAssemblyAttributes().Any(static a => string.Equals(a.AttributeType.FullName, ReferenceAssemblyAttribute, StringComparison.Ordinal));
+
+        private static Guid Build(MetadataModule module) => module.MetadataFile.Metadata.GetGuid(module.MetadataFile.Metadata.GetModuleDefinition().Mvid);
+
+        /// <summary>Whether a runtime-changes row names <paramref name="member"/>, any overload of it, or its type, at any runtime.</summary>
+        private static bool RuntimeChanged(IMember member)
+        {
+            string name = $"{member.DeclaringTypeDefinition!.ReflectionName.Replace('+', '.')}::{member.Name}(";
+            return Rows.Any(row => name.StartsWith(row, StringComparison.Ordinal));
+        }
     }
 }
