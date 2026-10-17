@@ -1,5 +1,5 @@
 # P2-237 Precision audit with execution: the three migration pairs in `full --execute`, P2-212's undetermined results re-adjudicated by replay
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-212
@@ -83,3 +83,29 @@ Fixing anything a run finds. A README edit to a row whose value did not change.
   not a security risk to keep installed; hence install from Microsoft only, runtime only, uninstall at the end.
 - Last recorded wall-clock at `--jobs 4` without `--execute` (P2-212, 2026-10-15): 363 s, 447 s and 217 s. Replay adds
   a build and a run of each Divergent on both sides. Never stop a run in progress.
+- 2026-10-17, done at equiv `de93b9c7`: 488 s, 563 s and 272 s, each exit 1 with no crash
+  (`docs/runs/2026-10-17-precision-execute-verdict.md`). The `execute` phase was 1 to 9 s; the rest of the extra time
+  is in `lower` and `verify` on all three pairs, OpenRA's identical results included (P2-244).
+- Installed `dotnet-runtime-5.0.17-win-x64.exe` (SHA512 matched the download page, Authenticode valid). The uninstall's
+  elevation prompt was cancelled and the user then said to keep .NET 5.0.17 installed (criterion 8's exception).
+- `compare --execute` needs only `Microsoft.NETCore.App` 5.0: a replay driver never runs on
+  `Microsoft.WindowsDesktop.App` (`ReplayDriverFactory` writes `desktop: false`), so no desktop runtime was asked for.
+- Replay alone decided almost nothing: every EQ002 replay is `not-constructible` (the divergence is in the call trace,
+  a private member, a receiver with no public parameterless constructor), and of 260 EQ006, 10 `reproduced`, 10
+  `not-applicable`. The rest of the execution was `equiv mcp --execute`'s `probe` (M5-002), driven over stdio by a
+  scratch script, 41 calls, each reloading both solutions (one to three minutes).
+- Decision: an EQ002 shown differing by `probe` is confirmed, as by a replay: `probe` builds its drivers through the
+  same factory (`IReplayDriverFactory.Probe`). One EQ002 was confirmed that way.
+- Decision: the migration precision row takes the sampled results still Divergent at the run's commit, 35.4% (17 of 48);
+  the as-drawn figure, 27.0% (17 of 63), is printed beside it as the like-for-like with P2-212.
+- Decision: "the 57" is the 58 appendix rows whose obstacle is only "a real difference by hand trace, not executed" (15
+  EQ002, 43 EQ006): P2-212's text counts 8 ICU/NLS rows where its appendix has 7, and the Goal's 18/39 split also counted
+  three Duplicati EQ002 that depend on the environment, the hardware or the host OS. All 90 are adjudicated either way.
+- Decision: a `probe` that differs for a reason other than the claimed one confirms nothing (Duplicati's
+  `WindowsPowerSupplyState::GetSource()`, P2-240); a private constructor run through a public method whose body is that
+  call is confirmed by it (`TempFile::.ctor(string)`); Duplicati's POSIX-only `SystemIOLinux` members are confirmed on
+  the pair's detected runtimes, where they were run directly.
+- Filed P2-240 to P2-244 (the verdict's findings table). No replay was `not-reproduced`, so criterion 5 filed nothing.
+- Surprise: P2-047's one replay confirmation, `EasyHook.LocalHook::Release()`, is `not-constructible` at this commit
+  (its model now differs only in the call trace); its classification stands.
+- Housekeeping seen, not changed: `docs/tickets/done/P2-193-*` and `P2-217-*` still say `Status: in-progress`.
