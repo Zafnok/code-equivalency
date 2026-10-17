@@ -102,6 +102,12 @@ public sealed class RuntimeChangeTable
     /// </summary>
     public static bool JoinsValidPath(string text) => RuntimeChangeReach.IsPathPart(text);
 
+    /// <summary>
+    /// Whether the constant <paramref name="text"/> is a valid path (ticket P2-218): it does not meet
+    /// <see cref="RuntimeChangePrecondition.InvalidPath"/>, as a constant argument is read.
+    /// </summary>
+    public static bool IsValidPathConstant(string text) => !RuntimeChangeReach.IsSuspectPath(text);
+
     /// <summary>The members that return their argument only once .NET Framework's validation has accepted it (ticket P2-188).</summary>
     internal ImmutableArray<string> PathValidators => validPaths.Validators;
 

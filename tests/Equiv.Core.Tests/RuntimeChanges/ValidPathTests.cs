@@ -145,6 +145,23 @@ public sealed class ValidPathTests
         Assert.True(RuntimeChangeTable.Load().YieldsValidPath(new CallIdentity(member), []));
 
     /// <summary>
+    /// Ticket P2-218: a string constant is a valid path exactly when it does not meet <c>invalidPath</c>, as a constant
+    /// argument is read.
+    /// </summary>
+    [Theory]
+    [InlineData("data.zip", true)]
+    [InlineData("C:\\data", true)]
+    [InlineData("", false)]
+    [InlineData(" ", false)]
+    [InlineData("a|b", false)]
+    [InlineData("ab:c", false)]
+    public void AConstantIsAValidPathWhenItDoesNotMeetInvalidPath(string text, bool valid)
+    {
+        Assert.Equal(valid, RuntimeChangeTable.IsValidPathConstant(text));
+        Assert.Equal(!valid, Reaches(RuntimeChangePrecondition.InvalidPath, Constant("path", text)));
+    }
+
+    /// <summary>
     /// Ticket P2-208: a constant joins a valid path when it has no character validation rejects and no colon, whatever its
     /// length.
     /// </summary>

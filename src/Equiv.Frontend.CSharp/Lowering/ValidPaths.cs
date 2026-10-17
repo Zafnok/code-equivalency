@@ -32,8 +32,10 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// P2-208). A callee's by-value parameter holds a valid path when the call passes one and every write of it in the callee
 /// keeps it one, and a char constant, a framework directory separator or a <c>readonly</c> char field that only holds such
 /// a char joins a valid path as a string constant does, by <c>+</c> or <c>+=</c> (ticket P2-232). The same rules, with the
-/// empty string taken as a valid path, show an operand to be a valid path or the empty string (ticket P2-232). Any other
-/// path from a caller is not followed.
+/// empty string taken as a valid path, show an operand to be a valid path or the empty string (ticket P2-232). A string
+/// constant that does not meet <c>invalidPath</c> is a valid path wherever a value is read, and a <c>static readonly</c>
+/// field that the object's own field initializers already passed to the called member is one for that member's rows
+/// (ticket P2-218). Any other path from a caller is not followed.
 /// </summary>
 internal static class ValidPaths
 {
@@ -101,8 +103,74 @@ internal static class ValidPaths
         CallArguments.Of(
             compilation.GetSemanticModel(site.Syntax.SyntaxTree).GetOperation(site.Syntax),
             method,
-            value => IsValid(value, [], orEmpty: false, compilation, depth: 0),
+            value => IsValid(value, [], orEmpty: false, compilation, depth: 0) || IsAcceptedBefore(value, method, compilation),
             value => IsValid(value, [], orEmpty: true, compilation, depth: 0));
+
+    /// <summary>
+    /// Whether <paramref name="value"/>, an argument of a call to <paramref name="method"/>, is a read of a <c>static
+    /// readonly</c> field that an instance field or property initializer of the class the call runs on, or of a base class,
+    /// has already passed to <paramref name="method"/> as the same parameter, where nothing in the initializer can skip that
+    /// call (ticket P2-218). Every object of the class ran those initializers in full before any of its instance members
+    /// could run, and the field has held one value since its type was initialized; on .NET Framework the earlier call
+    /// returned only if the member's validation accepted the value, so the value cannot reach that member's change. Only the
+    /// call's own rows read this: it says nothing of the value as a path for any other member.
+    /// </summary>
+    private static bool IsAcceptedBefore(IOperation value, IMethodSymbol method, Compilation compilation) =>
+        value is IFieldReferenceOperation { Field: { IsStatic: true, IsReadOnly: true } field, Parent: IArgumentOperation { Parameter: { } parameter } }
+        && RunningInstance(value) is { } type
+        && Initializers(type, compilation).Any(initializer => initializer.DescendantsAndSelf().OfType<IInvocationOperation>().Any(earlier =>
+            SymbolEqualityComparer.Default.Equals(earlier.TargetMethod, method)
+            && earlier.Arguments.Any(argument => argument.Parameter!.Ordinal == parameter.Ordinal
+                && argument.Value is IFieldReferenceOperation passed
+                && SymbolEqualityComparer.Default.Equals(passed.Field, field))
+            && RunsWhenever(earlier, initializer)));
+
+    /// <summary>
+    /// The class whose constructed object the code around <paramref name="value"/> runs on: the containing type of the instance
+    /// method, accessor or constructor body it is in, the lambdas and local functions there included. Null for a static
+    /// member, a struct (whose default value runs no initializer), a field or property initializer (a class's own run before
+    /// its base class's), and a constructor initializer (<c>: base(...)</c> and <c>: this(...)</c> run before the base
+    /// class's).
+    /// </summary>
+    private static INamedTypeSymbol? RunningInstance(IOperation value)
+    {
+        if (value.Syntax.Ancestors().Any(static node => node is ConstructorInitializerSyntax))
+        {
+            return null;
+        }
+
+        ISymbol? symbol = value.SemanticModel!.GetEnclosingSymbol(value.Syntax.SpanStart);
+        while (symbol is IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction })
+        {
+            symbol = symbol.ContainingSymbol;
+        }
+
+        return symbol is IMethodSymbol { IsStatic: false } member && member.ContainingType.TypeKind == TypeKind.Class ? member.ContainingType : null;
+    }
+
+    /// <summary>The instance field and property initializers of <paramref name="type"/> and of each of its base classes.</summary>
+    private static IEnumerable<IOperation> Initializers(INamedTypeSymbol type, Compilation compilation)
+    {
+        for (INamedTypeSymbol? declaring = type; declaring is not null; declaring = declaring.BaseType)
+        {
+            foreach (IOperation initializer in declaring.GetMembers()
+                .Where(static member => !member.IsStatic && member.Kind is SymbolKind.Field or SymbolKind.Property)
+                .SelectMany(static member => member.DeclaringSyntaxReferences)
+                .SelectMany(static declaration => declaration.GetSyntax().ChildNodes().OfType<EqualsValueClauseSyntax>())
+                .Select(clause => Operation(clause.Value, compilation))
+                .OfType<IOperation>())
+            {
+                yield return initializer;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="call"/> runs whenever <paramref name="root"/> does: every operation from it up to the root is a
+    /// call, an object creation, an argument or a conversion, each of which runs all of its operands.
+    /// </summary>
+    private static bool RunsWhenever(IOperation call, IOperation root) =>
+        call == root || (call.Parent is IArgumentOperation or IInvocationOperation or IObjectCreationOperation or IConversionOperation && RunsWhenever(call.Parent, root));
 
     /// <summary>
     /// Whether <paramref name="value"/> is a valid path, or, when <paramref name="orEmpty"/> is true, a valid path or the empty
@@ -110,29 +178,37 @@ internal static class ValidPaths
     /// while their writes are followed, <paramref name="compilation"/> is the one that holds the value's syntax, and
     /// <paramref name="depth"/> is how many solution callees deep the value is.
     /// </summary>
-    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) => (orEmpty && IsEmpty(value)) || value switch
-    {
-        IPropertyReferenceOperation property => IsValidProperty(property, seen, orEmpty, compilation, depth),
-        IFieldReferenceOperation field => StoresOnlyValidPaths(field, orEmpty, compilation, depth) || IsGuardedRead(field),
+    private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen, bool orEmpty, Compilation compilation, int depth) =>
+        (orEmpty && IsEmpty(value)) || IsValidConstant(value) || value switch
+        {
+            IPropertyReferenceOperation property => IsValidProperty(property, seen, orEmpty, compilation, depth),
+            IFieldReferenceOperation field => StoresOnlyValidPaths(field, orEmpty, compilation, depth) || IsGuardedRead(field),
 
-        // A transform's or a prefix's operands are read as valid paths, without what seen takes to be the empty string.
-        IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
-                Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, orEmpty ? [] : seen, orEmpty: false, compilation, depth)))
-            || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, call.Arguments, seen, orEmpty, compilation, depth),
+            // A transform's or a prefix's operands are read as valid paths, without what seen takes to be the empty string.
+            IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
+                    Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, orEmpty ? [] : seen, orEmpty: false, compilation, depth)))
+                || ReturnsOnlyValidPaths(call.TargetMethod, call.Instance, call.Arguments, seen, orEmpty, compilation, depth),
 
-        // Only an expression is a value, and a conditional expression has both branches.
-        IConditionalOperation conditional =>
-            IsValid(conditional.WhenTrue, seen, orEmpty, compilation, depth) && IsValid(conditional.WhenFalse!, seen, orEmpty, compilation, depth),
-        // A built-in + with a string operand joins strings.
-        IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join => IsValidJoin(join, seen, orEmpty, compilation, depth),
+            // Only an expression is a value, and a conditional expression has both branches.
+            IConditionalOperation conditional =>
+                IsValid(conditional.WhenTrue, seen, orEmpty, compilation, depth) && IsValid(conditional.WhenFalse!, seen, orEmpty, compilation, depth),
+            // A built-in + with a string operand joins strings.
+            IBinaryOperation { OperatorKind: BinaryOperatorKind.Add, OperatorMethod: null } join => IsValidJoin(join, seen, orEmpty, compilation, depth),
 
-        // A variable read as a path holds a string, and += on a string is the built-in join (ticket P2-232).
-        ICompoundAssignmentOperation append =>
-            IsPathPart(append.Value, orEmpty, compilation, depth) && IsValid(append.Target, seen, orEmpty, compilation, depth),
-        ILocalReferenceOperation local => IsValidLocal(local, seen, orEmpty, compilation, depth),
-        IParameterReferenceOperation parameter => IsValidParameter(parameter, seen, orEmpty, compilation, depth),
-        _ => false,
-    };
+            // A variable read as a path holds a string, and += on a string is the built-in join (ticket P2-232).
+            ICompoundAssignmentOperation append =>
+                IsPathPart(append.Value, orEmpty, compilation, depth) && IsValid(append.Target, seen, orEmpty, compilation, depth),
+            ILocalReferenceOperation local => IsValidLocal(local, seen, orEmpty, compilation, depth),
+            IParameterReferenceOperation parameter => IsValidParameter(parameter, seen, orEmpty, compilation, depth),
+            _ => false,
+        };
+
+    /// <summary>
+    /// A string constant that does not meet <c>invalidPath</c> (ticket P2-218): .NET Framework's validation accepts it, and a
+    /// row reads it so when it is a call's own argument.
+    /// </summary>
+    private static bool IsValidConstant(IOperation value) =>
+        value.ConstantValue is { HasValue: true, Value: string text } && RuntimeChangeTable.IsValidPathConstant(text);
 
     /// <summary>
     /// Whether the property read <paramref name="property"/> is a valid path, as <see cref="IsValid"/> reads it: its getter
