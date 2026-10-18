@@ -14,7 +14,7 @@ Describe 'corpus.ps1 -Metrics' {
         $header = '== Unknown (EQ003) by unknownReason, and by scope within it'
         $at = [Array]::IndexOf($out, $header)
         if ($at -lt 0) { throw "no '$header' line:`n$($out -join "`n")" }
-        $actual = $out[($at + 1)..($out.Count - 1)]
+        $actual = $out[($at + 1)..($at + 7)]
         $expected = @(
             '  abstraction 3'
             '    whole 2'
@@ -23,6 +23,21 @@ Describe 'corpus.ps1 -Metrics' {
             '    n/a 1'
             '  timeout 1'
             '    whole 1'
+        )
+        $diff = Compare-Object -ReferenceObject $expected -DifferenceObject $actual -SyncWindow 0
+        if ($diff) { throw "output differs:`n$($actual -join "`n")" }
+    }
+
+    # Ticket P2-238: runtime exposures, those with a witness and the others by unknownReason.
+    It 'Metrics_Splits_RuntimeExposures_By_Witness_Then_UnknownReason' {
+        $out = @(& $script:Corpus -Metrics $script:Sarif 6>&1 | ForEach-Object { [string]$_ })
+        $header = '== runtime exposure (EQ007): witnessed, and the others by unknownReason'
+        $at = [Array]::IndexOf($out, $header)
+        if ($at -lt 0) { throw "no '$header' line:`n$($out -join "`n")" }
+        $actual = $out[($at + 1)..($out.Count - 1)]
+        $expected = @(
+            '  witnessed 1'
+            '  not witnessed, opaque 2'
         )
         $diff = Compare-Object -ReferenceObject $expected -DifferenceObject $actual -SyncWindow 0
         if ($diff) { throw "output differs:`n$($actual -join "`n")" }
