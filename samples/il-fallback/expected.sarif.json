@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -113,7 +120,7 @@
             }
           ],
           "baselineState": "new",
-          "rank": 20.002,
+          "rank": 16.002,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -185,7 +192,7 @@
             }
           ],
           "baselineState": "new",
-          "rank": 20.002,
+          "rank": 16.002,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -322,7 +329,7 @@
           {
             "group": "opaque:Binary",
             "ruleId": "EQ003",
-            "rank": 20.002,
+            "rank": 16.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.IlFallback.Nullables::Add(int?,int)"
@@ -331,7 +338,7 @@
           {
             "group": "opaque:Conversion",
             "ruleId": "EQ003",
-            "rank": 20.002,
+            "rank": 16.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.IlFallback.Nullables::Wrap(int)"

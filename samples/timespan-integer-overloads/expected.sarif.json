@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -364,7 +371,7 @@
             "resultFingerprint/v1": "07aebc23648fac01b4af9499bc85a259c7def27e8f1b98ff247a15ab291827f8"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs() old(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 1))) new(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 2)))",
             "ladderTrace": [
@@ -460,7 +467,7 @@
             }
           ],
           "baselineState": "new",
-          "rank": 20.006,
+          "rank": 16.006,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -554,7 +561,7 @@
             }
           ],
           "baselineState": "new",
-          "rank": 20.006,
+          "rank": 16.006,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -648,7 +655,7 @@
             }
           ],
           "baselineState": "new",
-          "rank": 20.006,
+          "rank": 16.006,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -808,7 +815,7 @@
           {
             "group": "proofMethod:none",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Backoff()"
@@ -817,7 +824,7 @@
           {
             "group": "opaque:rebound-call",
             "ruleId": "EQ003",
-            "rank": 20.006,
+            "rank": 16.006,
             "count": 3,
             "identities": [
               "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::TooLong()",

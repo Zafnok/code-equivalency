@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -145,7 +152,7 @@
             "resultFingerprint/v1": "25e0be6418201f96d1ddcd8385763449cfe395afa0a84f0fbd27e5696ea878fa"
           },
           "baselineState": "new",
-          "rank": 60.004,
+          "rank": 64.004,
           "properties": {
             "model": "inputs(f64 1.6415323581137547E+299, f64 7.98336123813888E+292) old(returned f64 1.6415331564498785E+299 outs() trace()) new(returned f64 1.6415315597776309E+299 outs() trace())",
             "proofMethod": "bounded+refined",
@@ -210,7 +217,7 @@
             "resultFingerprint/v1": "fe313e1dd6dfa707c571d943fe7f09d13b6ccb0054cef91cc471aaaafb73dda4"
           },
           "baselineState": "new",
-          "rank": 60.004,
+          "rank": 64.004,
           "properties": {
             "model": "inputs(f64 -3.9999999981373575, f64 3.999999996274714, f64 5.590190643722794E-09) old(returned f64 3.727547270848676E-09 outs() trace()) new(returned f64 3.727547159826372E-09 outs() trace())",
             "proofMethod": "bounded+refined",
@@ -549,7 +556,7 @@
           {
             "group": "proofMethod:none",
             "ruleId": "EQ002",
-            "rank": 60.004,
+            "rank": 64.004,
             "count": 2,
             "identities": [
               "Equiv.Samples.FloatArithmetic.Arithmetic::Combine(double,double)",

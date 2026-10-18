@@ -24,8 +24,8 @@ calls can is not, and a runtime rule keeps it out of congruence.
 | `Calls.Cache()` | Equivalent | `congruence` |
 | `Calls.Slash(string)` | Equivalent | `congruence` |
 | `Calls.Fields(string)` | Equivalent | `congruence` |
-| `Calls.Under(string)` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.Find(string, string)` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.FieldsBy(string, StringSplitOptions)` | Divergent (EQ006, a runtime-changed API) | none |
+| `Calls.Under(string)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.Find(string, string)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.FieldsBy(string, StringSplitOptions)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
 
 Exit code: 1 (a new Divergent result).

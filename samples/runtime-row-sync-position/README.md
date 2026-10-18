@@ -20,5 +20,5 @@ Exit code: 0 (no Divergent or Unknown result).
 
 `async-variant/` is the pair with `s.ReadAsync(b, 0, b.Length).GetAwaiter().GetResult()` in place of `Read`.
 The method now issues an asynchronous operation on the stream before it reads `Position`, so the row fires and
-the method is Divergent (EQ006). The integration test `RuntimeRowSyncPosition_AnAsyncReadKeepsTheRow` runs that
+the method is a runtime exposure with a witness (EQ007, ADR 0060). The integration test `RuntimeRowSyncPosition_AnAsyncReadKeepsTheRow` runs that
 pair; it has no snapshot.

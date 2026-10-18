@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -136,7 +143,7 @@
             "resultFingerprint/v1": "6ca8cd4f447cfed0d1dc23b8e002693c6753c64aa2f41df7fd8f932d780424a5"
           },
           "baselineState": "new",
-          "rank": 60.004,
+          "rank": 64.004,
           "properties": {
             "model": "inputs(sort \"System.IAsyncDisposable\" 0, bv32 2147483646, map<sort \"System.IAsyncDisposable\", bool> [] default bool false) old(returned bv32 2147483647 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 2147483648 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))",
             "ladderTrace": [
@@ -239,7 +246,7 @@
             "resultFingerprint/v1": "b154073df7957687a1c74276d2a74589e0fabd8bf4ee5f3caa6a7902dfd96779"
           },
           "baselineState": "new",
-          "rank": 60.004,
+          "rank": 64.004,
           "properties": {
             "model": "inputs(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, map<sort \"System.Collections.Generic.IAsyncEnumerable`1\", bool> [] default bool false, map<sort \"System.Collections.Generic.IAsyncEnumerator`1\", bool> [] default bool false) old(returned bv32 4160749569 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 4160749567 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))",
             "agreesWhen": {
@@ -405,7 +412,7 @@
           {
             "group": "proofMethod:none",
             "ruleId": "EQ002",
-            "rank": 60.004,
+            "rank": 64.004,
             "count": 2,
             "identities": [
               "Equiv.Samples.AsyncDisposal.Journal::CloseAsync(System.IAsyncDisposable,int)",

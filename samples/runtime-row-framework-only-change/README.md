@@ -21,5 +21,5 @@ Exit code: 0 (no Divergent or Unknown result).
 ## The same file from .NET Framework 4.8
 
 `net48/legacy/` is an old-style .NET Framework 4.8 project that compiles `legacy/Text.cs` itself. Against
-`modern/` the pair crosses both change points, so both methods are Divergent (EQ006). The integration test
+`modern/` the pair crosses both change points, so both methods are runtime exposures with a witness (EQ007, ADR 0060). The integration test
 `RuntimeRowFrameworkOnlyChange_FromNet48KeepsBothRows` runs that pair; it has no snapshot.

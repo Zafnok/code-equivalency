@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -274,7 +281,7 @@
             "resultFingerprint/v1": "570def1c9bafd03221f7d41603158b0a94e1d00fec75acaee2d91a0ae134afb0"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(bv16 0, sort \"System.String\" 1, sort \"System.String\" 2, map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 5, bv32 1 -> sort \"System.String\" 6] default sort \"System.String\" 4] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3, map<sort \"string[]\", sort \"System.ReadOnlySpan`1\"> [sort \"string[]\" 0 -> sort \"System.ReadOnlySpan`1\" 1] default sort \"System.ReadOnlySpan`1\" 0, map<sort \"string[]\", bv32> [] default bv32 0, map<bv32, sort \"string[]\"> [bv32 0 -> sort \"string[]\" 0] default sort \"string[]\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 7 outs(map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 2 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 10] default sort \"System.String\" 9] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 8, map<sort \"string[]\", bv32> [sort \"string[]\" 0 -> bv32 2] default bv32 0) trace(\"System.String::Join(char,System.ReadOnlySpan<string>)\"(bv16 0, sort \"System.ReadOnlySpan`1\" 1) heap(\"array.string__\" map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 1, bv32 1 -> sort \"System.String\" 2] default sort \"System.String\" 0] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3))) new(threw \"System.Exception\" outs(map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 2 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 14] default sort \"System.String\" 13] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 12, map<sort \"string[]\", bv32> [sort \"string[]\" 0 -> bv32 2] default bv32 0) trace(\"System.String::Join(char,System.ReadOnlySpan<string>)\"(bv16 0, sort \"System.ReadOnlySpan`1\" 1) heap(\"array.string__\" map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 2, bv32 1 -> sort \"System.String\" 1] default sort \"System.String\" 0] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3)))",
             "ladderTrace": [
@@ -462,7 +469,7 @@
           {
             "group": "proofMethod:none",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.ParamsSpanOverloads.Texts::RowSwapped(char,string,string)"

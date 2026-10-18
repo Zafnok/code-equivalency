@@ -470,20 +470,20 @@ public sealed partial class SamplesEndToEndTests
 
     /// <summary>
     /// Ticket P2-073 criteria 2 and 3: the same calls with a constant that can reach the change (the pattern
-    /// <c>(?i)[a-z]</c>, the path literal <c>a|b</c>), or with an argument that is no constant, stay EQ006.
+    /// <c>(?i)[a-z]</c>, the path literal <c>a|b</c>), or with an argument that is no constant, stay flagged: each body is
+    /// unedited, so each is a runtime exposure with a witness (ticket P2-238), naming the row.
     /// </summary>
     [Theory]
-    [InlineData("Calls::Letters(", "regex")]
-    [InlineData("Calls::Piped(", "invalid path characters")]
-    [InlineData("Calls::SplitBy(", "regex")]
-    [InlineData("Calls::Under(", "invalid path characters")]
-    public void RuntimeRowConstantArgs_AConstantThatCanReachTheChangeOrAVariableStaysDivergent(string method, string reason)
+    [InlineData("Calls::Letters(", "System.Text.RegularExpressions.Regex::")]
+    [InlineData("Calls::Piped(", "System.IO.Path::Combine(string,string)")]
+    [InlineData("Calls::SplitBy(", "System.Text.RegularExpressions.Regex::")]
+    [InlineData("Calls::Under(", "System.IO.Path::Combine(string,string)")]
+    public void RuntimeRowConstantArgs_AConstantThatCanReachTheChangeOrAVariableStaysDivergent(string method, string rule)
     {
         Result result = Single("runtime-row-constant-args", method);
 
-        Assert.Equal("EQ006", result.RuleId);
-        Assert.Contains("between net48 and net10.0", result.Message.Text, StringComparison.Ordinal);
-        Assert.Contains(reason, result.Message.Text, StringComparison.Ordinal);
+        AssertWitnessedExposure(result, "net48 and net10.0");
+        Assert.Equal(rule, result.GetProperty<List<Dictionary<string, string>>>("runtimeExposure")[0]["rule"]);
     }
 
     /// <summary>
@@ -507,14 +507,17 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
     }
 
-    /// <summary>Ticket P2-074 criterion 2: a parameter passed straight to <c>Path.Combine</c> stays EQ006, the only one in the sample.</summary>
+    /// <summary>
+    /// Ticket P2-074 criterion 2: a parameter passed straight to <c>Path.Combine</c> stays flagged, the only result in the
+    /// sample with a witness: a runtime exposure, since the body is unedited (ticket P2-238).
+    /// </summary>
     [Fact]
     public void RuntimeRowValidPathSource_AParameterPassedStraightThroughStaysDivergent()
     {
-        Result result = Assert.Single(RunSample("runtime-row-valid-path-source").Log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ006", StringComparison.Ordinal));
+        Result result = Assert.Single(RunSample("runtime-row-valid-path-source").Log.Runs[0].Results, static r => r.TryGetProperty("model", out string? _));
 
         Assert.Contains("Paths::Under(", result.Message.Text, StringComparison.Ordinal);
-        Assert.Contains("invalid path characters", result.Message.Text, StringComparison.Ordinal);
+        AssertWitnessedExposure(result, "net48 and net10.0");
     }
 
     /// <summary>
@@ -524,7 +527,7 @@ public sealed partial class SamplesEndToEndTests
     [Fact]
     public void RuntimeRowValidPathSource_TheValidatorsOwnCallIsNotEquivalent()
     {
-        Result full = Single("runtime-row-valid-path-source", "Paths::Full(string) is ");
+        Result full = Single("runtime-row-valid-path-source", "Paths::Full(string): ");
         Result create = Single("runtime-row-valid-path-source", "Paths::Create(");
 
         Assert.NotEqual("EQ001", full.RuleId, StringComparer.Ordinal);
@@ -547,14 +550,17 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
     }
 
-    /// <summary>Ticket P2-217: a call between the guard and the use that writes the field leaves the row firing, the only EQ006 in the sample.</summary>
+    /// <summary>
+    /// Ticket P2-217: a call between the guard and the use that writes the field leaves the row firing, the only flagged
+    /// result in the sample: a runtime exposure with a witness, since the body is unedited (ticket P2-238).
+    /// </summary>
     [Fact]
     public void RuntimeRowGuardedMember_ACallBetweenThatWritesTheFieldStaysDivergent()
     {
-        Result result = Assert.Single(RunSample("runtime-row-guarded-member").Log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ006", StringComparison.Ordinal));
+        Result result = Assert.Single(RunSample("runtime-row-guarded-member").Log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ007", StringComparison.Ordinal));
 
         Assert.Contains("Scratch::Move(string)", result.Message.Text, StringComparison.Ordinal);
-        Assert.Contains("invalid path characters", result.Message.Text, StringComparison.Ordinal);
+        AssertWitnessedExposure(result, "net48 and net10.0");
     }
 
     /// <summary>
@@ -576,8 +582,8 @@ public sealed partial class SamplesEndToEndTests
 
     /// <summary>
     /// Ticket P2-181's soundness test: the same three calls with a parameter in place of the constant can reach their rows'
-    /// change, so none of the three bodies is Equivalent. Each is EQ006, and its <c>notCongruent</c> names the callee the
-    /// runtime rule applies to.
+    /// change, so none of the three bodies is Equivalent. Each is a witnessed runtime exposure (EQ007, ticket P2-238), and its
+    /// <c>notCongruent</c> names the callee the runtime rule applies to.
     /// </summary>
     [Theory]
     [InlineData("Calls::Under(", "System.IO.Path::Combine(string,string)")]
@@ -587,8 +593,7 @@ public sealed partial class SamplesEndToEndTests
     {
         Result result = Single("runtime-row-unreachable-change", method);
 
-        Assert.Equal("EQ006", result.RuleId);
-        Assert.Contains("between net48 and net10.0", result.Message.Text, StringComparison.Ordinal);
+        AssertWitnessedExposure(result, "net48 and net10.0");
         FingerprintDifference notCongruent = result.GetProperty<FingerprintDifference>("notCongruent");
         Assert.Equal(new FingerprintDifference(FingerprintDifference.RuntimeRule, rule), notCongruent);
     }
@@ -613,7 +618,8 @@ public sealed partial class SamplesEndToEndTests
 
     /// <summary>
     /// Ticket P2-216's soundness test: the same four calls where the change is reachable (a process passed in, bytes that end
-    /// mid-sequence, an index passed in, a comparison with 10) stay EQ006, and <c>notCongruent</c> names the row's callee.
+    /// mid-sequence, an index passed in, a comparison with 10) stay flagged, as witnessed runtime exposures (EQ007, ticket
+    /// P2-238), and <c>notCongruent</c> names the row's callee.
     /// </summary>
     [Theory]
     [InlineData("Calls::ProcessFile(", "System.Diagnostics.Process::get_StartInfo()")]
@@ -624,8 +630,7 @@ public sealed partial class SamplesEndToEndTests
     {
         Result result = Single("runtime-row-call-cannot-reach", method);
 
-        Assert.Equal("EQ006", result.RuleId);
-        Assert.Contains("between net48 and net10.0", result.Message.Text, StringComparison.Ordinal);
+        AssertWitnessedExposure(result, "net48 and net10.0");
         FingerprintDifference notCongruent = result.GetProperty<FingerprintDifference>("notCongruent");
         Assert.Equal(new FingerprintDifference(FingerprintDifference.RuntimeRule, rule), notCongruent);
     }
@@ -633,7 +638,8 @@ public sealed partial class SamplesEndToEndTests
     /// <summary>
     /// Ticket P2-220: a set of a static field through reflection under <c>IsMono</c>, a getter that tests
     /// <c>Type.GetType("Mono.Runtime") != null</c>, runs on neither .NET Framework 4.8 nor .NET 10 and is Equivalent by
-    /// congruence; the same set under <c>Is64Bit</c> can run on both and stays EQ006, its <c>notCongruent</c> naming the row.
+    /// congruence; the same set under <c>Is64Bit</c> can run on both and stays flagged, a witnessed runtime exposure (EQ007,
+    /// ticket P2-238), its <c>notCongruent</c> naming the row.
     /// </summary>
     [Fact]
     public void RuntimeRowCallCannotReach_ASetOnlyMonoRunsIsCongruentAndOneA64BitProcessRunsIsNot()
@@ -643,7 +649,7 @@ public sealed partial class SamplesEndToEndTests
 
         Assert.Equal("EQ001", mono.RuleId);
         Assert.Equal("congruence", mono.GetProperty<string>("proofMethod"));
-        Assert.Equal("EQ006", wide.RuleId);
+        AssertWitnessedExposure(wide, "net48 and net10.0");
         FingerprintDifference notCongruent = wide.GetProperty<FingerprintDifference>("notCongruent");
         Assert.Equal(new FingerprintDifference(FingerprintDifference.RuntimeRule, "System.Reflection.FieldInfo::SetValue(object,object)"), notCongruent);
     }
@@ -737,6 +743,20 @@ public sealed partial class SamplesEndToEndTests
     {
         Assert.Equal("EQ001", result.RuleId);
         Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>
+    /// An unedited body a runtime change reaches, with a witness (ADR 0060; ticket P2-238): EQ007 with a model, whose
+    /// message names <paramref name="interval"/>, and whose first <c>runtimeExposure</c> rule is the row
+    /// <c>notCongruent</c>'s first rule matched.
+    /// </summary>
+    private static void AssertWitnessedExposure(Result result, string interval)
+    {
+        Assert.Equal("EQ007", result.RuleId);
+        Assert.True(result.TryGetProperty("model", out string? _));
+        Assert.Contains($"unedited body; the runtime change between {interval} reaches it through ", result.Message.Text, StringComparison.Ordinal);
+        string first = result.GetProperty<FingerprintDifference>("notCongruent").Identity.Split(", ")[0];
+        Assert.StartsWith(result.GetProperty<List<Dictionary<string, string>>>("runtimeExposure")[0]["rule"], first, StringComparison.Ordinal);
     }
 
     /// <summary>An unedited import a runtime rule reaches (ADR 0060): EQ007, still <c>opaque</c>, naming <paramref name="rule"/>.</summary>
@@ -870,8 +890,7 @@ public sealed partial class SamplesEndToEndTests
         Result name = Single("version-bump", "::Name(");
         Result format = Single("version-bump", "::Format(");
 
-        Assert.Equal("EQ006", name.RuleId);
-        Assert.Contains("diverges via a runtime-changed API between net8.0 and net10.0 (", name.Message.Text, StringComparison.Ordinal);
+        AssertWitnessedExposure(name, "net8.0 and net10.0");
         Assert.Contains("/compatibility/core-libraries/9.0/", name.GetProperty<string>("helpUri"), StringComparison.Ordinal);
         Assert.Equal("EQ001", format.RuleId);
         Assert.Equal("congruence", format.GetProperty<string>("proofMethod"));
@@ -894,7 +913,7 @@ public sealed partial class SamplesEndToEndTests
 
     /// <summary>
     /// Ticket P2-113 criterion 3: the same file with the legacy project on .NET Framework 4.8 crosses both change
-    /// points, so both methods stay EQ006.
+    /// points, so both methods stay flagged: unedited, so witnessed runtime exposures (EQ007, ticket P2-238).
     /// </summary>
     [Fact]
     public void RuntimeRowFrameworkOnlyChange_FromNet48KeepsBothRows()
@@ -910,8 +929,7 @@ public sealed partial class SamplesEndToEndTests
             Assert.Equal(ExitCodes.Divergent, exitCode);
             Result[] results = [.. SarifLog.Load(outPath).Runs[0].Results];
             Assert.Equal(2, results.Length);
-            Assert.All(results, static r => Assert.Equal("EQ006", r.RuleId));
-            Assert.All(results, static r => Assert.Contains("between net48 and net9.0 (", r.Message.Text, StringComparison.Ordinal));
+            Assert.All(results, static r => AssertWitnessedExposure(r, "net48 and net9.0"));
         }
         finally
         {
@@ -951,7 +969,10 @@ public sealed partial class SamplesEndToEndTests
         });
     }
 
-    /// <summary>Ticket P2-114 criterion 2: the same method with <c>ReadAsync</c> in place of <c>Read</c> stays EQ006.</summary>
+    /// <summary>
+    /// Ticket P2-114 criterion 2: the same method with <c>ReadAsync</c> in place of <c>Read</c> keeps the row: a witnessed
+    /// runtime exposure (EQ007, ticket P2-238), exit 1 as the EQ006 it was.
+    /// </summary>
     [Fact]
     public void RuntimeRowSyncPosition_AnAsyncReadKeepsTheRow()
     {
@@ -965,8 +986,7 @@ public sealed partial class SamplesEndToEndTests
 
             Assert.Equal(ExitCodes.Divergent, exitCode);
             Result result = Assert.Single(SarifLog.Load(outPath).Runs[0].Results);
-            Assert.Equal("EQ006", result.RuleId);
-            Assert.Contains("between net5.0 and net6.0 (", result.Message.Text, StringComparison.Ordinal);
+            AssertWitnessedExposure(result, "net5.0 and net6.0");
         }
         finally
         {
@@ -987,7 +1007,10 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
     }
 
-    /// <summary>Ticket P2-163 criterion 2: the same method assigning <c>null</c> through the indexer is EQ006 under the null-argument change.</summary>
+    /// <summary>
+    /// Ticket P2-163 criterion 2: the same method assigning <c>null</c> through the indexer is flagged under the null-argument
+    /// change: a witnessed runtime exposure (EQ007, ticket P2-238), exit 1 as the EQ006 it was.
+    /// </summary>
     [Fact]
     public void RuntimeRowIndexerGetter_ANullAssignmentThroughTheIndexerIsEQ006()
     {
@@ -1001,8 +1024,7 @@ public sealed partial class SamplesEndToEndTests
 
             Assert.Equal(ExitCodes.Divergent, exitCode);
             Result result = Assert.Single(SarifLog.Load(outPath).Runs[0].Results);
-            Assert.Equal("EQ006", result.RuleId);
-            Assert.Contains("between net5.0 and net6.0 (Assigning a null node throws ArgumentNullException", result.Message.Text, StringComparison.Ordinal);
+            AssertWitnessedExposure(result, "net5.0 and net6.0");
         }
         finally
         {
@@ -1013,7 +1035,7 @@ public sealed partial class SamplesEndToEndTests
     /// <summary>
     /// Ticket P2-075 criterion 1: <c>s.IndexOf("x.exe", StringComparison.OrdinalIgnoreCase)</c> on a .NET Framework 4.8 to .NET 10
     /// pair is Equivalent, because the ICU row does not apply to an ordinal comparison; the same call with
-    /// <c>CurrentCultureIgnoreCase</c> stays EQ006.
+    /// <c>CurrentCultureIgnoreCase</c> stays flagged: a witnessed runtime exposure (EQ007, ticket P2-238).
     /// </summary>
     [Fact]
     public void RuntimeRowUnaffectedOverload_AnOrdinalComparisonIsEquivalentAndACultureOneStaysEQ006()
@@ -1023,7 +1045,7 @@ public sealed partial class SamplesEndToEndTests
 
         Assert.Equal("EQ001", ordinal.RuleId);
         Assert.Equal("congruence", ordinal.GetProperty<string>("proofMethod"));
-        Assert.Equal("EQ006", culture.RuleId);
+        AssertWitnessedExposure(culture, "net48 and net10.0");
         Assert.Equal(2, RunSample("runtime-row-unaffected-overload").Log.Runs[0].Results.Count);
     }
 
@@ -1548,7 +1570,7 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal("quick", (string)quick.GetProperty<Newtonsoft.Json.Linq.JObject>("mode")["name"]!);
         Assert.Equal(thorough.Count, quick.Results.Count);
         Assert.All(
-            quick.Results.Where(static r => r.RuleId is "EQ001" or "EQ002" or "EQ006"),
+            quick.Results.Where(static r => r.RuleId is "EQ001" or "EQ002" or "EQ006" || (r.RuleId is "EQ007" && r.TryGetProperty("model", out string? _))),
             r => Assert.Equal(r.RuleId, thorough[r.PartialFingerprints["procedureIdentity/v1"]]));
         Assert.All(quick.Results, static r => Assert.False(r.TryGetProperty("decidedBy", out string? _)));
     }

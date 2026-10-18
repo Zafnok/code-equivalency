@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -94,7 +101,7 @@
             "resultFingerprint/v1": "558adf4a1026996816d205c3304bb1fe5cf50a0909dbf43530fb581272c11a6d"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(bv32 0, bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 0 outs() trace()) new(returned bv32 0 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0)))",
             "ladderTrace": [
@@ -151,7 +158,7 @@
             "resultFingerprint/v1": "fb53457e468aa71ba659545a66bed6f57dbb30866e2e901d139453a43dc12321"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 5 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0))) new(returned bv32 5 outs() trace())",
             "ladderTrace": [
@@ -334,7 +341,7 @@
           {
             "group": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.CleanupExtractMethod.Invoice::Shipping(int)"
@@ -343,7 +350,7 @@
           {
             "group": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.CleanupExtractMethod.Invoice::Total(int,int)"

@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -94,7 +101,7 @@
             "resultFingerprint/v1": "24a7f59f463f9a36955f9398138e2fa16f2ca9e20ddc8d2c56c2badfe3fdd5ae"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790627 outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) trace(\"System.String::ToUpper()\"(sort \"System.String\" 522790625), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790626)))",
             "agreesWhen": {
@@ -156,7 +163,7 @@
             "resultFingerprint/v1": "1c0c13fcb911014db1d61b125e9c738a8b5cf712636fa60812c20cd662596df9"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 1762305696, map<sort \"System.String\", bool> [] default bool true) old(returned sort \"System.String\" 844380939 outs() trace()) new(threw \"System.NullReferenceException\" outs() trace())",
             "agreesWhen": {
@@ -298,7 +305,7 @@
           {
             "group": "calls:System.String::Concat(string,string)|System.String::ToUpper()",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.AddedNullGuard.Greeter::Greet(string)"
@@ -307,7 +314,7 @@
           {
             "group": "proofMethod:none",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.AddedNullGuard.Greeter::Shout(string)"

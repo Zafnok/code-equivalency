@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -131,7 +138,7 @@
             "resultFingerprint/v1": "3161d0a517b1e63a211640a4e93fbef0cddd0b7816d78bc769e35807d03f19af"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 765964251, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 765964251 outs() trace(\"Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)\"(sort \"System.String\" 765964251))) new(returned sort \"System.String\" 765964251 outs() trace(\"System.String::IsNullOrWhiteSpace(string)\"(sort \"System.String\" 765964251)))",
             "ladderTrace": [
@@ -322,7 +329,7 @@
           {
             "group": "calls:Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)|System.String::IsNullOrWhiteSpace(string)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.ForwarderToBcl.Names::Trimmed(string)"

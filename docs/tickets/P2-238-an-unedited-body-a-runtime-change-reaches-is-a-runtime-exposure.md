@@ -57,3 +57,23 @@ kin) stay as they are.
 
 ## Notes
 - Filed 2026-10-17 with ADR 0060, from P2-212's "Per pair" section.
+- Decision: the mapping lives in the reporter (`VerdictRule.Describe(VerificationResult, ...)`, a `ResultRule`), read
+  from the result's `notCongruent`; nothing in `Equiv.Verify.*` or the frontend changed, so the size guard held. Every
+  pass keeps `notCongruent`, so quick, thorough and the IL pass map alike.
+- Decision: an exposure's rules are resolved for `runtimeExposure` as follows. A callee, field or event is looked up in
+  the table inside the pair's interval with no arguments, as the frontend's flag was, and named by the row's `member`;
+  `extern:<id>` by its `marshalling` entry; `float-to-integer` has `changedIn` net9.0 and the .NET 9 JIT
+  breaking-change page; `x87` has no `changedIn`, since it turns on the platform and can apply on one .NET Framework
+  version (VERIFICATION-MODEL section 3), and the C# specification's types page, which says floating point may run at a
+  higher precision; `extern` has neither, since no page lists the interop changes it stands for (ADR 0054 decision 4).
+  A rule nothing resolves is listed by its name alone. A key is left out when it has no value.
+- Decision: `helpUri` is the row the witness's call matched, else the first rule that has a page. An exposure the real
+  runtimes showed keeps `runtimeExposure` as EQ006, so a reviewer still reads that its body is unedited.
+- Decision: messages are `<identity>: unedited body; the runtime change between <older> and <newer> reaches it through
+  <rule> (<url>), ...`, then `. Witness: <model>`, `. Whether it reaches the outcome is unknown (<reason>): <detail>`
+  (plus a line-scoped Unknown's claim), or `, and the real runtimes show it: <model or observation>` on an EQ006.
+- Decision: six tiers in SARIF's 0 to 100 need a narrower tier: `16 x (6 - tier) + min(count, 7999) / 500`. Tiers 1 and
+  6 keep their ranks; EQ002 moves from 60 to 64, EQ006 from 40 to 48, a line-scoped EQ003 from 20 to 16, EQ007 is 32.
+- Decision: `equiv mcp`'s summary counts EQ007 as `Runtime exposure n` after Unknown, so its Divergent and Unknown
+  counts keep meaning EQ002 + EQ006 and EQ003; `corpus.ps1 -Metrics` prints the EQ007 split (witnessed, and the rest by
+  `unknownReason`), which the SUMMARY template asks for.

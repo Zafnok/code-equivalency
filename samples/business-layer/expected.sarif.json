@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -749,7 +756,7 @@
             }
           ],
           "baselineState": "new",
-          "rank": 20.002,
+          "rank": 16.002,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -1010,7 +1017,7 @@
             "resultFingerprint/v1": "51967f2e7dc5d254d54bd5c225b5d9d47911205e60d235553dbb1cdd7ebd4b2e"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(sort \"System.Decimal\" 0) old(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int)\"(sort \"System.Decimal\" 0, bv32 2))) new(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int,System.MidpointRounding)\"(sort \"System.Decimal\" 0, bv32 2, sort \"System.MidpointRounding\" 873244445)))",
             "ladderTrace": [
@@ -1362,7 +1369,7 @@
           {
             "group": "calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.BusinessLayer.OrderService::RoundTotal(decimal)"
@@ -1371,7 +1378,7 @@
           {
             "group": "opaque:InterpolatedString",
             "ruleId": "EQ003",
-            "rank": 20.002,
+            "rank": 16.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.BusinessLayer.OrderService::Describe(Equiv.Samples.BusinessLayer.Order)"

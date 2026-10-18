@@ -63,16 +63,22 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
       },
       "results": [
         {
-          "ruleId": "EQ006",
-          "level": "error",
+          "ruleId": "EQ007",
           "message": {
-            "text": "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader) diverges via a runtime-changed API between net8.0 and net10.0 (Malformed encoded bytes decode to U+FFFD on .NET. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader): inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(returned sort \"System.String\" 0 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))"
+            "text": "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader): unedited body; the runtime change between net8.0 and net10.0 reaches it through System.IO.BinaryReader::ReadString( (https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader). Witness: inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(returned sort \"System.String\" 0 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))"
           },
           "locations": [
             {
@@ -94,7 +100,7 @@
             "resultFingerprint/v1": "2bf7b722ec5b1a3b86c9c17b0fbee04882cd513a91541e7aff48a86c0a6c3c2f"
           },
           "baselineState": "new",
-          "rank": 40.002,
+          "rank": 32.002,
           "properties": {
             "model": "inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(returned sort \"System.String\" 0 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))",
             "ladderTrace": [
@@ -105,6 +111,13 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader",
+            "runtimeExposure": [
+              {
+                "rule": "System.IO.BinaryReader::ReadString(",
+                "changedIn": "net9.0",
+                "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader"
+              }
+            ],
             "notCongruent": {
               "component": "runtime-rule",
               "identity": "System.IO.BinaryReader::ReadString()"
@@ -251,8 +264,8 @@
         "reviewList": [
           {
             "group": "runtime-change:System.IO.BinaryReader::ReadString(",
-            "ruleId": "EQ006",
-            "rank": 40.002,
+            "ruleId": "EQ007",
+            "rank": 32.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader)"

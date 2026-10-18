@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -131,10 +138,9 @@
           }
         },
         {
-          "ruleId": "EQ006",
-          "level": "error",
+          "ruleId": "EQ007",
           "message": {
-            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Letters(string) diverges via a runtime-changed API between net48 and net10.0 (Case-insensitive character ranges and other pattern details are interpreted differently by the .NET regex engine, so matches can differ. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges): inputs(sort \"System.String\" 1285608098, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097)))"
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Letters(string): unedited body; the runtime change between net48 and net10.0 reaches it through System.Text.RegularExpressions.Regex:: (https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges). Witness: inputs(sort \"System.String\" 1285608098, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097)))"
           },
           "locations": [
             {
@@ -156,7 +162,7 @@
             "resultFingerprint/v1": "a089a1e3963be535fa07fac2c6aca6ed48ccb6234c6e16b0214b02af96df69e5"
           },
           "baselineState": "new",
-          "rank": 40.004,
+          "rank": 32.004,
           "properties": {
             "model": "inputs(sort \"System.String\" 1285608098, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097)))",
             "ladderTrace": [
@@ -167,6 +173,14 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
+            "runtimeExposure": [
+              {
+                "rule": "System.Text.RegularExpressions.Regex::",
+                "changedIn": "net7.0",
+                "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
+                "precondition": "caseInsensitivePattern"
+              }
+            ],
             "notCongruent": {
               "component": "runtime-rule",
               "identity": "System.Text.RegularExpressions.Regex::Split(string,string)"
@@ -175,10 +189,9 @@
           }
         },
         {
-          "ruleId": "EQ006",
-          "level": "error",
+          "ruleId": "EQ007",
           "message": {
-            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Piped() diverges via a runtime-changed API between net48 and net10.0 (Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged. https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine): inputs() old(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915))) new(returned sort \"System.String\" 692878809 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915)))"
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Piped(): unedited body; the runtime change between net48 and net10.0 reaches it through System.IO.Path::Combine(string,string) (https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine). Witness: inputs() old(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915))) new(returned sort \"System.String\" 692878809 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915)))"
           },
           "locations": [
             {
@@ -200,7 +213,7 @@
             "resultFingerprint/v1": "d75b2555edace88f649441b988889cd99ae1244c3d268d1ec199c28ceacfde75"
           },
           "baselineState": "new",
-          "rank": 40.004,
+          "rank": 32.004,
           "properties": {
             "model": "inputs() old(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915))) new(returned sort \"System.String\" 692878809 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915)))",
             "ladderTrace": [
@@ -211,6 +224,14 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+            "runtimeExposure": [
+              {
+                "rule": "System.IO.Path::Combine(string,string)",
+                "changedIn": "netcoreapp1.0",
+                "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+                "precondition": "invalidPath"
+              }
+            ],
             "notCongruent": {
               "component": "runtime-rule",
               "identity": "System.IO.Path::Combine(string,string)"
@@ -219,10 +240,9 @@
           }
         },
         {
-          "ruleId": "EQ006",
-          "level": "error",
+          "ruleId": "EQ007",
           "message": {
-            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::SplitBy(string,string) diverges via a runtime-changed API between net48 and net10.0 (Case-insensitive character ranges and other pattern details are interpreted differently by the .NET regex engine, so matches can differ. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges): inputs(sort \"System.String\" 0, sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1)))"
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::SplitBy(string,string): unedited body; the runtime change between net48 and net10.0 reaches it through System.Text.RegularExpressions.Regex:: (https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges). Witness: inputs(sort \"System.String\" 0, sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1)))"
           },
           "locations": [
             {
@@ -244,7 +264,7 @@
             "resultFingerprint/v1": "3929bb0a1a1e7733d8b7f2df19c93c8c7eca71975c7f2ef25c80e5f61d2f43cc"
           },
           "baselineState": "new",
-          "rank": 40.004,
+          "rank": 32.004,
           "properties": {
             "model": "inputs(sort \"System.String\" 0, sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1)))",
             "ladderTrace": [
@@ -255,6 +275,14 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
+            "runtimeExposure": [
+              {
+                "rule": "System.Text.RegularExpressions.Regex::",
+                "changedIn": "net7.0",
+                "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
+                "precondition": "caseInsensitivePattern"
+              }
+            ],
             "notCongruent": {
               "component": "runtime-rule",
               "identity": "System.Text.RegularExpressions.Regex::Split(string,string)"
@@ -263,10 +291,9 @@
           }
         },
         {
-          "ruleId": "EQ006",
-          "level": "error",
+          "ruleId": "EQ007",
           "message": {
-            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Under(string) diverges via a runtime-changed API between net48 and net10.0 (Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged. https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine): inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))"
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Under(string): unedited body; the runtime change between net48 and net10.0 reaches it through System.IO.Path::Combine(string,string) (https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine). Witness: inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))"
           },
           "locations": [
             {
@@ -288,7 +315,7 @@
             "resultFingerprint/v1": "6aeea0c9eaf5ecdc5f5c87c80ba71bbed342a0c9ed91d2b538a292debb122d79"
           },
           "baselineState": "new",
-          "rank": 40.004,
+          "rank": 32.004,
           "properties": {
             "model": "inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))",
             "ladderTrace": [
@@ -299,6 +326,14 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+            "runtimeExposure": [
+              {
+                "rule": "System.IO.Path::Combine(string,string)",
+                "changedIn": "netcoreapp1.0",
+                "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+                "precondition": "invalidPath"
+              }
+            ],
             "notCongruent": {
               "component": "runtime-rule",
               "identity": "System.IO.Path::Combine(string,string)"
@@ -414,8 +449,8 @@
         "reviewList": [
           {
             "group": "runtime-change:System.IO.Path::Combine(string,string)",
-            "ruleId": "EQ006",
-            "rank": 40.004,
+            "ruleId": "EQ007",
+            "rank": 32.004,
             "count": 2,
             "identities": [
               "Equiv.Samples.RuntimeRowConstantArgs.Calls::Piped()",
@@ -424,8 +459,8 @@
           },
           {
             "group": "runtime-change:System.Text.RegularExpressions.Regex::",
-            "ruleId": "EQ006",
-            "rank": 40.004,
+            "ruleId": "EQ007",
+            "rank": 32.004,
             "count": 2,
             "identities": [
               "Equiv.Samples.RuntimeRowConstantArgs.Calls::Letters(string)",

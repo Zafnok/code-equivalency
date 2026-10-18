@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -202,7 +209,7 @@
             "resultFingerprint/v1": "64b545275a66720ad0b5d4880d9c0d1c63975798bf6b32948d9ae35df5b38c4d"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(threw \"System.Exception\" outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981852) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))",
             "ladderTrace": [
@@ -407,7 +414,7 @@
           {
             "group": "calls:Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)|System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.CalleeReplacement.Culture::Leave()"
