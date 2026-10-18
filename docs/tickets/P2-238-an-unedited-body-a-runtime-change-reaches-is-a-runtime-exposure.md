@@ -78,7 +78,7 @@ kin) stay as they are.
   counts keep meaning EQ002 + EQ006 and EQ003; `corpus.ps1 -Metrics` prints the EQ007 split (witnessed, and the rest by
   `unknownReason`), which the SUMMARY template asks for.
 - Decision: the rerun read the checkouts P2-212 fetched and restored (its worktree's `.corpus/`), copying only
-  `pair.json`, with each pair's committed config; the five ran one after the other at `ccee1fe1` from one Release build,
+  `pair.json`, with each pair's committed config; the five ran one after the other at `b0f56ff8` (built as `ccee1fe1`, the same `src/` before a rebase over a docs-only commit) from one Release build,
   22:57 to 23:25. Every run exits 1, as P2-212's and P2-237's did.
 - Criterion 7, per pair (projected by ADR 0060 from P2-212, then measured; witnessed / not, EQ006, EQ002, Unknown):
   8522 124/351, 13, 23, 205 then 111/331, 10, 24, 206; 9860 0/6, 0, 6, 200 then 0/6, 0, 5, 198; Jellyfin 0/10, 0, 1, 48

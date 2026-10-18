@@ -2,8 +2,8 @@
 
 `gitextensions-8522` (.NET Framework 4.8 to .NET 5), `gitextensions-9860` (net5.0 to net6.0), `jellyfin-13023` (net8.0
 to net9.0), `duplicati-3124` (.NET Framework to .NET 5, first step) and `openra-17989` (Mono/net472 plus .NET 5), each
-run in `full` mode, compare mode quick (`compare`'s default, ADR 0052), `--jobs 4`, at equiv `ccee1fe1` (`main` at
-`830831cf` plus ADR 0060's EQ007, this ticket), one after the other from one Release build, with each pair's committed
+run in `full` mode, compare mode quick (`compare`'s default, ADR 0052), `--jobs 4`, at equiv `b0f56ff8` (`main` at
+`84573e38` plus ADR 0060's EQ007, this ticket; built as `ccee1fe1`, the same `src/` before a rebase over a docs-only commit), one after the other from one Release build, with each pair's committed
 config. Per-pair detail is in `docs/runs/2026-10-17-full-<slug>/SUMMARY.md`.
 
 The runs read the checkouts P2-212 fetched and restored (its worktree's `.corpus/`, unchanged since); only `pair.json`
@@ -74,7 +74,7 @@ undetermined. Two splits:
 - **As drawn**: each result's rule in P2-212's own SARIF, found by its fingerprint (`resultFingerprint/v1`, which no rule
   id enters), relabelled as `VerdictRule` does now; P2-212's classification.
 - **Now**: the same procedure in these runs, by identity, with P2-237's classification where it re-adjudicated the
-  result and P2-212's otherwise. A result that is no longer flagged at `ccee1fe1` (18 are Equivalent) is left out, as
+  result and P2-212's otherwise. A result that is no longer flagged at `b0f56ff8` (18 are Equivalent) is left out, as
   P2-237's "still Divergent" column leaves them out.
 
 | Pair | Rule | As drawn: confirmed | false positive | undetermined | Now: confirmed | false positive | undetermined |
