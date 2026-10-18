@@ -20,5 +20,5 @@ Exit code: 0 (no Divergent or Unknown result).
 ## The same method assigning null through the indexer
 
 `null-assignment/` is the pair with `t.Nodes[0] = null;` before the read. The setter runs, so the row fires and the
-method is Divergent (EQ006) under the null-argument change. The integration test
+method is a runtime exposure with a witness (EQ007, ADR 0060) under the null-argument change. The integration test
 `RuntimeRowIndexerGetter_ANullAssignmentThroughTheIndexerIsEQ006` runs that pair; it has no snapshot.

@@ -14,7 +14,7 @@ apply. Both methods are byte-identical on the two sides.
 
 | Procedure | Verdict | Rule |
 |---|---|---|
-| `Codec.Name(BinaryReader)` | Divergent (runtime-changed API, between net8.0 and net10.0) | EQ006 |
+| `Codec.Name(BinaryReader)` | Runtime exposure with a witness (unedited, a runtime-changed API between net8.0 and net10.0; exits as a Divergent) | EQ007 |
 | `Codec.Format(double)` | Equivalent (`proofMethod: congruence`) | EQ001 |
 
 Exit code: 1 (a new Divergent result).

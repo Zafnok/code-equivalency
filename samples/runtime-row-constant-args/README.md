@@ -20,9 +20,9 @@ reach the change the row documents.
 |---|---|---|
 | `Calls.Words(string)` | Equivalent | `congruence` |
 | `Calls.Cache()` | Equivalent | `congruence` |
-| `Calls.Letters(string)` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.Piped()` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.SplitBy(string, string)` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.Under(string)` | Divergent (EQ006, a runtime-changed API) | none |
+| `Calls.Letters(string)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.Piped()` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.SplitBy(string, string)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.Under(string)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
 
 Exit code: 1 (a new Divergent result).

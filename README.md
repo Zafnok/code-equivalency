@@ -76,7 +76,8 @@ flowchart LR
   invariants.
 - **Reports one verdict per pair** in SARIF 2.1.0: `Equivalent`, `Divergent` with a concrete
   counterexample, `Unknown` with a reason and a scope, `Added` or `Removed`. Known behaviour
-  changes between runtimes are reported as their own rule (EQ006).
+  changes between runtimes are reported as their own rule (EQ006), and a body nobody edited that one reaches
+  as a runtime exposure (EQ007).
 - **Ranks what to review**, grouping the Divergent and Unknown results by cause, most certain
   first.
 - **Supports baselines**, so CI fails only on new findings.
@@ -97,16 +98,17 @@ Every number is measured on public code, and every row says when. The runs are i
 <!-- scoreboard:begin (edit only through .claude/skills/equiv-scoreboard) -->
 | Over 5 large real pairs, 58,477 matched procedure pairs | Today | Measured |
 |---|---|---|
-| Proved Equivalent | 97.3% (56,900 of 58,477) | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
+| Proved Equivalent | 97.3% (56,920 of 58,477) | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
 | Equivalent by congruence (no solver) | 96.0% (56,120 of 58,477) | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
-| Changed pairs the solver proves | 33.1% (780 of 2,357) | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
-| Unknown | 2.2% of pairs (1,273), 54.0% of changed pairs. Opaque construct 573, abstraction 346, solver budget 319, unaligned loop 31, recursion 4 | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
-| Divergent | 0.5% of pairs (304), 12.9% of changed pairs | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
-| Divergent precision (a Divergent is a real behaviour change) | Migrations 35.4% (17 of 48). Upgrades 85.7% (6 of 7). Cleanups: none left to decide (2 Divergent, both one build-generated commit constant that differs between any two commits) | [2026-10-13](docs/runs/2026-10-13-cleanup-verdict.md), [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
-| Left for a reviewer (Unknown and Divergent) | 2.7% of pairs (1,577) | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
+| Changed pairs the solver proves | 33.9% (800 of 2,357) | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
+| Unknown | 1.1% of pairs (658), 27.9% of changed pairs. Opaque construct 416, abstraction 91, solver budget 129, unaligned loop 18, recursion 4 | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
+| Divergent | 0.1% of pairs (68), 2.9% of changed pairs | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
+| Runtime exposure (an unedited body a runtime change reaches) | 1.4% of pairs (831), 35.3% of changed pairs. 235 with a witness input, 596 without. Of the sampled migration exposures, 15 confirmed and 15 false positive | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
+| Divergent precision (a Divergent is a real behaviour change) | Migrations 11.1% (2 of 18). Upgrades 85.7% (6 of 7). Cleanups: none left to decide (2 Divergent, both one build-generated commit constant that differs between any two commits) | [2026-10-13](docs/runs/2026-10-13-cleanup-verdict.md), [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md), [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
+| Left for a reviewer (Unknown, Divergent and runtime exposure) | 2.7% of pairs (1,557) | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
 | Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. No open soundness ticket | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
 | Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
-| Run time, one large pair | mean 6 min (3 min to 9 min), four pairs at a time | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
+| Run time, one large pair | mean 6 min (3 min to 10 min), four pairs at a time | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
 | Repeatability | 99.94% (13,734 of 13,742 results equal between two runs) | [2026-10-02](docs/runs/2026-10-02-pair-time.md) |
 <!-- scoreboard:end -->
 
@@ -117,20 +119,22 @@ Every number is measured on public code, and every row says when. The runs are i
 | Analysed lines per side | 187,000 | 189,000 | 156,000 | 69,000 | 131,000 | |
 | Matched procedure pairs | 13,592 | 14,073 | 14,398 | 6,294 | 10,120 | 58,477 |
 | Equivalent by congruence (both bodies lower to the same IR and no runtime change applies; no solver) | 93.8% | 96.2% | 99.2% | 89.8% | 97.8% | **96.0%** |
-| Equivalent by the solver | 1.1% (154) | 2.3% (321) | 0.4% (63) | 3.4% (213) | 0.3% (29) | **1.3%** |
-| Divergent | 1.1% (145) | under 0.1% (6) | under 0.1% (1) | 1.9% (118) | 0.3% (34) | **0.5%** |
-| Unknown | 4.0% (538) | 1.5% (206) | 0.4% (58) | 4.9% (309) | 1.6% (162) | **2.2%** |
-| Wall-clock | 8 min | 5 min | 3 min | 9 min | 5 min | **mean 6 min** |
+| Equivalent by the solver | 1.1% (155) | 2.3% (324) | 0.4% (63) | 3.6% (224) | 0.3% (34) | **1.4%** |
+| Divergent | 0.3% (34) | under 0.1% (5) | under 0.1% (1) | 0.4% (27) | under 0.1% (1) | **0.1%** |
+| Runtime exposure (unedited body; EQ007) | 3.3% (442) | under 0.1% (6) | under 0.1% (10) | 3.5% (221) | 1.5% (152) | **1.4%** |
+| Unknown | 1.5% (206) | 1.4% (198) | 0.3% (48) | 2.7% (168) | 0.4% (38) | **1.1%** |
+| Wall-clock | 6 min | 5 min | 3 min | 10 min | 4 min | **mean 6 min** |
 
 So a reviewer is spared about 97% of the procedures and is handed the rest, grouped by cause.
 
 **The changed pairs are where the work is left.** Of the 2,357 pairs that are not congruent, the
-solver proves 780 (33.1%) Equivalent: 18.4%, 60.2%, 51.6%, 33.3% and 12.9% on the five runs. 54.0% are
-Unknown and 12.9% are Divergent. Most changed pairs on the two upgrades are in files the pull request did not
+solver proves 800 (33.9%) Equivalent: 18.5%, 60.8%, 51.6%, 35.0% and 15.1% on the five runs. 27.9% are
+Unknown, 2.9% are Divergent, and 35.3% are runtime exposures: a body nobody edited that a documented runtime change
+reaches, 235 of them with an input on which it decides the outcome. Most changed pairs on the two upgrades are in files the pull request did not
 touch: a runtime rule or a rebound call took them out of congruence.
 
-The Unknowns of the five runs by reason: opaque construct 573, abstraction 346, solver budget
-319, unaligned loop 31, recursion 4.
+The Unknowns of the five runs by reason: opaque construct 416, abstraction 91, solver budget
+129, unaligned loop 18, recursion 4.
 
 Other pairs, for range:
 
@@ -148,9 +152,9 @@ and 1h10m, and before the fix that removed non-solver time from a pair the first
 
 | Run | Analysed lines per side | Changed pairs | Wall-clock |
 |---|---|---|---|
-| Git Extensions, 4.8 to .NET 5 | 187,000 | 837 | 8 min (verify 288 s, lowering 141 s) |
-| Duplicati, 4.7.1 to .NET 5 | 69,000 | 640 | 9 min (verify 469 s, lowering 48 s) |
-| OpenRA, 4.7.2 to .NET 5 | 131,000 | 225 | 5 min (verify 159 s, lowering 96 s) |
+| Git Extensions, 4.8 to .NET 5 | 187,000 | 837 | 6 min (verify 190 s, lowering 110 s) |
+| Duplicati, 4.7.1 to .NET 5 | 69,000 | 640 | 10 min (verify 536 s, lowering 48 s) |
+| OpenRA, 4.7.2 to .NET 5 | 131,000 | 225 | 4 min (verify 168 s, lowering 79 s) |
 | Jellyfin, .NET 8 to .NET 9 | 156,000 | 122 | 3 min |
 | Git Extensions, .NET 5 to .NET 6 | 189,000 | 533 | 5 min |
 | Git Extensions cleanup, collection expressions (24 pairs at a time) | 195,000 | 319 | 4 min |
@@ -168,11 +172,11 @@ The rest cannot yet:
 
 | What is needed | Today |
 |---|---|
-| A Divergent is usually a real behaviour change | Of those audited and decided: 6 of 7 on the upgrades (85.7%), where the fixes for both causes of the last audit removed 8 of its 9 false positives; 17 of 48 on the three migrations (35.4%), where running the sampled results on both real runtimes confirmed 16 that a hand trace could not decide, and whose 31 false ones each have a ticket; and none left to decide on cleanups, where the three pull requests now report 2 Divergent, from 52, both one build-generated commit constant. On the migrations, 71 of the 119 sampled that are still Divergent are undetermined, most because no test driver can call them yet. |
-| The solver decides most changed pairs | 33.1% proved on the five large runs, 58.3% on cleanups |
+| A Divergent is usually a real behaviour change | Of those audited and decided: 6 of 7 on the upgrades (85.7%), where the fixes for both causes of the last audit removed 8 of its 9 false positives; 2 of 18 on the three migrations (11.1%), counting EQ002 and EQ006 only, whose 16 false ones each have a ticket. Running the sampled results on both real runtimes confirmed 16 that a hand trace could not decide, and 15 of them are runtime exposures, bodies nobody edited that a runtime change reaches, which are now reported apart (15 confirmed, 15 false); and none left to decide on cleanups, where the three pull requests now report 2 Divergent, from 52, both one build-generated commit constant. On the migrations, 71 of the 119 sampled that are still flagged are undetermined, most because no test driver can call them yet. |
+| The solver decides most changed pairs | 33.9% proved on the five large runs, 58.3% on cleanups |
 | Every large pair completes | Five of five. The five runs in the table above have no crashed pair |
 | The same run gives the same results | 13,734 of 13,742 results agree between two runs |
-| A run fits in a CI job | 3 to 9 minutes for a large pair, four pairs at a time in the default mode |
+| A run fits in a CI job | 3 to 10 minutes for a large pair, four pairs at a time in the default mode |
 
 In short: the sound half (congruence, no false Equivalent on seeded or real changes) is done, and
 the precise half (few false Divergents, few Unknowns on changed code) is early.
@@ -332,13 +336,16 @@ equiv: +00:00:06 verify done in 00:00:00.124; eta@25%=00:00:00.000 eta@50%=00:00
 | Exit code | Meaning |
 |---|---|
 | 0 | No new `Divergent` results (and no new `Unknown` when `--fail-on unknown`) |
-| 1 | At least one `Divergent` result that is `new` relative to `--baseline` |
-| 2 | `--fail-on unknown` and at least one new `Unknown` result |
+| 1 | At least one `Divergent` result that is `new` relative to `--baseline`: EQ002, EQ006, or an EQ007 runtime exposure with a witness (`properties.model`) |
+| 2 | `--fail-on unknown` and at least one new `Unknown` result: EQ003, or an EQ007 without a witness |
 | 3 | Usage error: bad arguments, missing or unparseable file, no frontend for the paths |
 | 4 | A C# project was skipped because it failed to load (the SARIF lists it and is still written), or a side had no C# project that loaded (no SARIF). Outranks 1 and 2. A modern project that loads but does not compile is not skipped: its methods that do not bind are `Unknown` results with reason `unbound`, the rest are compared, and the exit code is 0, 1 or 2 as the verdicts say |
 | 5 | At least one pair's lowering or verification crashed (the SARIF lists it as a tool-execution notification and is still written), or any other unhandled internal error. Outranks 1, 2 and 4 |
 
-Output is always SARIF 2.1.0 (rules EQ001 to EQ006); the exact meaning of each verdict
+An EQ007 is an unedited body a runtime change reaches (ADR 0060): it exits as the Divergent or Unknown it is, so
+relabelling it changes no exit code, but a baseline written before EQ007 existed shows each such result as `new` once.
+
+Output is always SARIF 2.1.0 (rules EQ001 to EQ007); the exact meaning of each verdict
 and of `baselineState` is in [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md).
 
 A real `Divergent` result, from `equiv compare --legacy samples/added-branch/legacy/*.sln
@@ -401,7 +408,7 @@ has two read-only tools that write no file:
 
 - `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
   `bound`, `timeoutMs`, `ilFallback` (`--il-fallback`) and `mode` (`--mode`). The result is a short summary (`Equivalent n, Divergent n, Unknown n,
-  skipped projects n, exit code k`, then the review list's lines), then the SARIF log `equiv compare` would write, as JSON text.
+  Runtime exposure n, skipped projects n, exit code k`, then the review list's lines), then the SARIF log `equiv compare` would write, as JSON text.
 - `lower_only`: `legacy`, `modern` and optionally `config` and `ilFallback`; the same as `equiv compare --lower-only`.
 
 An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#

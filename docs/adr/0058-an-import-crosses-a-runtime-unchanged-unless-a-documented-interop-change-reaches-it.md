@@ -1,7 +1,8 @@
 # ADR 0058: A `[DllImport]` that crosses a runtime is compared as on one runtime, unless an interop change documented between the two runtimes reaches its declaration
 
 Status: accepted (2026-10-14). Supersedes ADR 0054 decision 4 for `[DllImport]` functions on a pair that crosses
-only .NET (Core) runtimes the runtime-changes table covers; keeps it everywhere else.
+only .NET (Core) runtimes the runtime-changes table covers; keeps it everywhere else. Decision 4 superseded in part by
+0060 (what a reached unedited import is reported as: a runtime exposure, EQ007, not Unknown `no-body`).
 
 ## Context
 ADR 0054 decision 4 gives an `extern` method no fingerprint on a pair whose runtimes differ, so every matched one is

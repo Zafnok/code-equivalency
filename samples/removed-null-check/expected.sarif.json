@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -94,7 +101,7 @@
             "resultFingerprint/v1": "b01f12d252048647699b7c59a20ed089d764904e659263f6595978db51d38af9"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.ArgumentNullException\" outs() trace(\"System.ArgumentNullException::.ctor(string)\"(sort \"System.String\" 221887975))) new(threw \"System.NullReferenceException\" outs() trace())",
             "agreesWhen": {
@@ -239,7 +246,7 @@
           {
             "group": "calls:System.ArgumentNullException::.ctor(string)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.RemovedNullCheck.Greeter::Greet(string)"

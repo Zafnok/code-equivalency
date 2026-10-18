@@ -34,11 +34,11 @@ call cannot is congruent; one whose call can is not, and a runtime rule keeps it
 | `Calls.IsVistaOrNewer()` | Equivalent | `congruence` |
 | `Calls.RelativeUrisOnMono()` | Equivalent, assuming `get_IsMono()` equivalent | `congruence` |
 | `Calls.get_Is64Bit()` | Equivalent | `congruence` |
-| `Calls.ProcessFile(Process)` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.Truncated()` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.ShowImage(TreeNode, int)` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.IsWindows10OrNewer()` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.RelativeUrisOn64Bit()` | Divergent (EQ006, a runtime-changed API) | none |
-| `Calls.get_IsMono()` | Divergent (EQ006, a runtime-changed API) | none |
+| `Calls.ProcessFile(Process)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.Truncated()` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.ShowImage(TreeNode, int)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.IsWindows10OrNewer()` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.RelativeUrisOn64Bit()` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Calls.get_IsMono()` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
 
 Exit code: 1 (a new Divergent result).

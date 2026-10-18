@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using System.Linq;
 
+using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
@@ -14,10 +16,40 @@ namespace Equiv.Core.Reporting;
 /// counterexample's call trace contains a call flagged by <see cref="RuntimeChangeTable"/> (ticket
 /// M2-006) is EQ006 instead of EQ002, and <see cref="RuntimeChange"/> carries the reason and url
 /// the SARIF writer renders; every other kind's <see cref="RuntimeChange"/> is null. The row is one that applies inside
-/// the pair's runtime interval, as the frontend's flag was (ADR 0040 decision 2; ticket P2-055).
+/// the pair's runtime interval, as the frontend's flag was (ADR 0040 decision 2; ticket P2-055). A result whose pair is a
+/// runtime exposure, its texts equal and only a runtime rule keeping it out of congruence, is EQ007 where it would be
+/// EQ006 or EQ003, and EQ006 once the real runtimes show the difference (ADR 0060 decisions 2 and 4; ticket P2-238).
 /// </summary>
 internal static class VerdictRule
 {
+    /// <summary>The rule id of a Divergent whose counterexample calls a runtime-changed member.</summary>
+    internal const string RuntimeChangeRule = "EQ006";
+
+    /// <summary>The rule id of a runtime exposure (ADR 0060 decision 3).</summary>
+    internal const string RuntimeExposureRule = "EQ007";
+
+    private const string UnknownRule = "EQ003";
+
+    /// <summary>
+    /// <paramref name="result"/>'s rule (ADR 0060 decision 2): its verdict's, unless its pair is a runtime exposure. Then
+    /// an EQ006, a witnessed exposure, and an EQ003, an unwitnessed one, are EQ007; a witnessed one whose replay reproduced
+    /// it stays EQ006, and an observed Divergent is EQ006 too, its row the first rule's. EQ001 and EQ002 are unchanged.
+    /// </summary>
+    public static ResultRule Describe(VerificationResult result, RuntimeInterval runtimes)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = Describe(result.Verdict, runtimes);
+        ImmutableArray<ExposureRule> exposure = ExposureRule.Of(result.NotCongruent, runtimes);
+        return (exposure.IsEmpty, ruleId, result) switch
+        {
+            (true, _, _) => new ResultRule(ruleId, level, kind, runtimeChange, []),
+            (_, RuntimeChangeRule, { Replay.Status: ReplayStatus.Reproduced }) => new ResultRule(ruleId, level, kind, runtimeChange, exposure),
+            (_, RuntimeChangeRule or UnknownRule, _) => new ResultRule(RuntimeExposureRule, FailureLevel.Warning, ResultKind.Fail, runtimeChange, exposure),
+            (_, _, { Verdict: Divergent { Observed: not null } }) => new ResultRule(RuntimeChangeRule, FailureLevel.Error, ResultKind.Fail, RuntimeChange: null, exposure),
+            _ => new ResultRule(ruleId, level, kind, runtimeChange, []),
+        };
+    }
+
     /// <summary>
     /// <see cref="Verdict"/> is a closed hierarchy (private protected constructor) with five
     /// members; the final arm covers <see cref="Removed"/>, the only one not named above,

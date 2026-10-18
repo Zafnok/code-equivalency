@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -178,7 +185,7 @@
             "resultFingerprint/v1": "2a9458309162be15fad639f0cdebe9811867425ddadf6e3c84280f3274801a0b"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 671913017, sort \"System.String\" 671913017, map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 671913017 outs() trace(\"System.String::Format(string,object,object)\"(sort \"System.String\" 157356947, sort \"System.Object\" 0, sort \"System.Object\" 0))) new(returned sort \"System.String\" 671913017 outs() trace(\"System.String::Concat(string,string)\"(sort \"System.String\" 671913017, sort \"System.String\" 671913017), \"System.String::Concat(string,string)\"(sort \"System.String\" 671913017, sort \"System.String\" 671913017)))",
             "ladderTrace": [
@@ -571,7 +578,7 @@
           {
             "group": "calls:System.String::Concat(string,string)|System.String::Format(string,object,object)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)"

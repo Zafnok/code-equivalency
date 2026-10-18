@@ -26,7 +26,7 @@ Exit code: 0 (Unknown does not fail the run without `--fail-on unknown`).
 ## The same files from .NET Core 3.1
 
 `netcoreapp3.1/legacy/` compiles `legacy/Native.cs` and `legacy/Changed.cs` for .NET Core 3.1. Against
-`modern/` the pair crosses .NET 5, where `suffixProbing` reaches `MessageBox`, so it is Unknown, `no-body`;
+`modern/` the pair crosses .NET 5, where `suffixProbing` reaches `MessageBox`, so it is a runtime exposure without a witness (EQ007, `opaque`, ADR 0060);
 `Ticks` is still congruent. The integration test `ExternImportRuntime_FromNetCore31TheSuffixProbingReachesOnlyTheInexactImport`
 runs that pair; it has no snapshot.
 
@@ -34,5 +34,6 @@ runs that pair; it has no snapshot.
 
 `net48/legacy/` is an old-style .NET Framework 4.8 project that compiles the same two files. No page lists the
 interop changes at the .NET Framework boundary, so ADR 0054 decision 4 stands there and every import is
-Unknown, `no-body`. The integration test `ExternImportRuntime_FromNet48EveryImportStaysUnknown` runs that pair;
+not congruent: the two unedited ones are runtime exposures without a witness (EQ007, ADR 0060) and the edited one is Unknown,
+`no-body`. The integration test `ExternImportRuntime_FromNet48EveryImportStaysUnknown` runs that pair;
 it has no snapshot.

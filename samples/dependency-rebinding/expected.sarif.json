@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -129,7 +136,7 @@
             }
           ],
           "baselineState": "new",
-          "rank": 20.002,
+          "rank": 16.002,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -188,7 +195,7 @@
             "resultFingerprint/v1": "f1562d8b62bc1b3824542d10eb9ce72b0b095b4e7efd0bdd4e50b373543ff4f5"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0, sort \"System.String\" 0, map<sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFs\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFile\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\" 0, sort \"System.String\" 0))) new(returned bool false outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFile\" 0, sort \"System.String\" 0)))",
             "agreesWhen": {
@@ -404,7 +411,7 @@
           {
             "group": "calls:Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)|Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.DependencyRebinding.Probe::Clear(Equiv.Samples.DependencyRebinding.Files.IFs,string)"
@@ -413,7 +420,7 @@
           {
             "group": "opaque:rebound-call",
             "ruleId": "EQ003",
-            "rank": 20.002,
+            "rank": 16.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.DependencyRebinding.Probe::Has(Equiv.Samples.DependencyRebinding.Files.IFs,string)"

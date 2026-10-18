@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -131,10 +138,9 @@
           }
         },
         {
-          "ruleId": "EQ006",
-          "level": "error",
+          "ruleId": "EQ007",
           "message": {
-            "text": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Under(string) diverges via a runtime-changed API between net48 and net10.0 (Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged. https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine): inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))"
+            "text": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Under(string): unedited body; the runtime change between net48 and net10.0 reaches it through System.IO.Path::Combine(string,string) (https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine). Witness: inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))"
           },
           "locations": [
             {
@@ -156,7 +162,7 @@
             "resultFingerprint/v1": "20fc35796059cfa759065790d55c49b1970089365bc31ba767f9889ef79620b1"
           },
           "baselineState": "new",
-          "rank": 40.002,
+          "rank": 32.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))",
             "ladderTrace": [
@@ -167,6 +173,14 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+            "runtimeExposure": [
+              {
+                "rule": "System.IO.Path::Combine(string,string)",
+                "changedIn": "netcoreapp1.0",
+                "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+                "precondition": "invalidPath"
+              }
+            ],
             "notCongruent": {
               "component": "runtime-rule",
               "identity": "System.IO.Path::Combine(string,string)"
@@ -175,11 +189,9 @@
           }
         },
         {
-          "ruleId": "EQ003",
-          "kind": "open",
-          "level": "none",
+          "ruleId": "EQ007",
           "message": {
-            "text": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string) is unknown (Abstraction): the divergence depends on get:System.String::get_Length(), System.String::get_Chars(int), System.String::Substring(int,int)"
+            "text": "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string): unedited body; the runtime change between net48 and net10.0 reaches it through System.IO.Path::GetFullPath(string) (https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfullpath). Whether it reaches the outcome is unknown (Abstraction): the divergence depends on get:System.String::get_Length(), System.String::get_Chars(int), System.String::Substring(int,int)"
           },
           "locations": [
             {
@@ -201,7 +213,7 @@
             "resultFingerprint/v1": "bb31c28ff68deca5e4d1731cd9b0bb78d681e01646d7d3cd1e45ff805ff11864"
           },
           "baselineState": "new",
-          "rank": 0.002,
+          "rank": 32.002,
           "properties": {
             "unknownReason": "abstraction",
             "scope": "method",
@@ -248,11 +260,20 @@
                 "detail": "a divergence within 3 iterations depends on an abstraction"
               }
             ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfullpath",
+            "runtimeExposure": [
+              {
+                "rule": "System.IO.Path::GetFullPath(string)",
+                "changedIn": "netcoreapp1.0",
+                "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfullpath",
+                "precondition": "invalidPath"
+              }
+            ],
             "notCongruent": {
               "component": "runtime-rule",
               "identity": "System.IO.Path::GetFullPath(string)"
             },
-            "reviewGroup": "abstraction"
+            "reviewGroup": "runtime-change:System.IO.Path::GetFullPath(string)"
           }
         },
         {
@@ -476,17 +497,17 @@
         "reviewList": [
           {
             "group": "runtime-change:System.IO.Path::Combine(string,string)",
-            "ruleId": "EQ006",
-            "rank": 40.002,
+            "ruleId": "EQ007",
+            "rank": 32.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.RuntimeRowValidPathSource.Paths::Under(string)"
             ]
           },
           {
-            "group": "abstraction",
-            "ruleId": "EQ003",
-            "rank": 0.002,
+            "group": "runtime-change:System.IO.Path::GetFullPath(string)",
+            "ruleId": "EQ007",
+            "rank": 32.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.RuntimeRowValidPathSource.Paths::Full(string)"

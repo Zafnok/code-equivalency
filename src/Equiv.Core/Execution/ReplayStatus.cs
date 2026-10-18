@@ -16,8 +16,8 @@ public enum ReplayStatus
     NotConstructible,
 
     /// <summary>
-    /// The two runtimes agree on the model's inputs, and the Divergent is EQ006: it claims a runtime-changed member differs,
-    /// which one call with the model's inputs need not show (ticket P2-038). Not a soundness finding.
+    /// The two runtimes agree on the model's inputs, and the Divergent is EQ006 or a witnessed EQ007: it claims a
+    /// runtime-changed member differs, which one call with the model's inputs need not show (ticket P2-038). Not a soundness finding.
     /// </summary>
     NotApplicable,
 }

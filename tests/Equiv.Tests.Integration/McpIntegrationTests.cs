@@ -37,7 +37,7 @@ public sealed class McpIntegrationTests
 
         // The verdict counts, then the review list's lines as `equiv compare` prints them (ticket P2-064).
         Assert.Matches(
-            @"^Equivalent \d+, Divergent \d+, Unknown \d+, skipped projects \d+, exit code \d+\nreview list: \d+ groups for \d+ flagged results(\n  EQ00[236] count=\d+ rank=\d+\.\d+ \S[^\n]*)*$",
+            @"^Equivalent \d+, Divergent \d+, Unknown \d+, Runtime exposure \d+, skipped projects \d+, exit code \d+\nreview list: \d+ groups for \d+ flagged results(\n  EQ00[2367] count=\d+ rank=\d+\.\d+ \S[^\n]*)*$",
             summary);
     }
 

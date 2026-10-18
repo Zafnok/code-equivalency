@@ -1,5 +1,5 @@
 # P2-238 An unedited body a runtime change reaches is reported as a runtime exposure (EQ007)
-Status: todo
+Status: done (PR #545)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-212
@@ -57,3 +57,40 @@ kin) stay as they are.
 
 ## Notes
 - Filed 2026-10-17 with ADR 0060, from P2-212's "Per pair" section.
+- Decision: the mapping lives in the reporter (`VerdictRule.Describe(VerificationResult, ...)`, a `ResultRule`), read
+  from the result's `notCongruent`; nothing in `Equiv.Verify.*` or the frontend changed, so the size guard held. Every
+  pass keeps `notCongruent`, so quick, thorough and the IL pass map alike.
+- Decision: an exposure's rules are resolved for `runtimeExposure` as follows. A callee, field or event is looked up in
+  the table inside the pair's interval with no arguments, as the frontend's flag was, and named by the row's `member`;
+  `extern:<id>` by its `marshalling` entry; `float-to-integer` has `changedIn` net9.0 and the .NET 9 JIT
+  breaking-change page; `x87` has no `changedIn`, since it turns on the platform and can apply on one .NET Framework
+  version (VERIFICATION-MODEL section 3), and the C# specification's types page, which says floating point may run at a
+  higher precision; `extern` has neither, since no page lists the interop changes it stands for (ADR 0054 decision 4).
+  A rule nothing resolves is listed by its name alone. A key is left out when it has no value.
+- Decision: `helpUri` is the row the witness's call matched, else the first rule that has a page. An exposure the real
+  runtimes showed keeps `runtimeExposure` as EQ006, so a reviewer still reads that its body is unedited.
+- Decision: messages are `<identity>: unedited body; the runtime change between <older> and <newer> reaches it through
+  <rule> (<url>), ...`, then `. Witness: <model>`, `. Whether it reaches the outcome is unknown (<reason>): <detail>`
+  (plus a line-scoped Unknown's claim), or `, and the real runtimes show it: <model or observation>` on an EQ006.
+- Decision: six tiers in SARIF's 0 to 100 need a narrower tier: `16 x (6 - tier) + min(count, 7999) / 500`. Tiers 1 and
+  6 keep their ranks; EQ002 moves from 60 to 64, EQ006 from 40 to 48, a line-scoped EQ003 from 20 to 16, EQ007 is 32.
+- Decision: `equiv mcp`'s summary counts EQ007 as `Runtime exposure n` after Unknown, so its Divergent and Unknown
+  counts keep meaning EQ002 + EQ006 and EQ003; `corpus.ps1 -Metrics` prints the EQ007 split (witnessed, and the rest by
+  `unknownReason`), which the SUMMARY template asks for.
+- Decision: the rerun read the checkouts P2-212 fetched and restored (its worktree's `.corpus/`), copying only
+  `pair.json`, with each pair's committed config; the five ran one after the other at `b0f56ff8` (built as `ccee1fe1`, the same `src/` before a rebase over a docs-only commit) from one Release build,
+  22:57 to 23:25. Every run exits 1, as P2-212's and P2-237's did.
+- Criterion 7, per pair (projected by ADR 0060 from P2-212, then measured; witnessed / not, EQ006, EQ002, Unknown):
+  8522 124/351, 13, 23, 205 then 111/331, 10, 24, 206; 9860 0/6, 0, 6, 200 then 0/6, 0, 5, 198; Jellyfin 0/10, 0, 1, 48
+  then the same; Duplicati 102/134, 15, 23, 182 then 91/130, 14, 13, 168; OpenRA 33/119, 1, 0, 43 then 33/119, 1, 0, 38.
+  All five: 259/620, 29, 53, 678 then 235/596, 25, 43, 658. The relabelling is exact: each migration's `runtime-rule`
+  split at P2-237's `de93b9c7` is its EQ007 split here, one for one. The differences are commits merged after P2-212:
+  the path and row tickets took 33 and 15 pairs out of the class on 8522 and Duplicati, P2-211 cleared 9860's ToPatch,
+  P2-180 and P2-182 lowered Duplicati's and OpenRA's largest opaque forms. No `runtime-rule` pair is EQ002 anywhere.
+- Criterion 7, P2-212's sample re-split (`docs/runs/2026-10-17-runtime-exposure-verdict.md`): 83 of its 90 sampled EQ006
+  are exposures. Migration Divergent precision over EQ002 and EQ006 only is 4.2% (1 of 24) on P2-212's classification
+  and 11.1% (2 of 18) with P2-237's execution, over the results still flagged here; the exposures' own count is 0
+  confirmed and 22 false positive, then 15 and 15. The scoreboard takes the second, as P2-237 did for its row.
+- Scoreboard: the Runtime exposure row is added (1.4% of pairs, 831; 235 witnessed); Proved Equivalent, solver,
+  Unknown, Divergent, Divergent precision, Left for a reviewer and Run time are rewritten; Equivalent by congruence did
+  not move. Duplicati's 613 s widens the run-time range to 10 min; P2-244 already owns the slowdown, so no new ticket.

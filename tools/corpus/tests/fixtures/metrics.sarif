@@ -10,7 +10,10 @@
         { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Sprocket.Rest()" }, "properties": { "unknownReason": "timeout", "scope": "whole", "notCongruent": { "component": "callee", "identity": "Contoso.Widgets.Gear::Mesh()" } } },
         { "ruleId": "EQ003", "message": { "text": "Timeout: Contoso.Widgets.Cog.Mesh()" } },
         { "ruleId": "EQ001", "message": { "text": "Equivalent: Contoso.Widgets.Cog.Slip()" }, "properties": { "scope": "whole" } },
-        { "ruleId": "EQ001", "message": { "text": "Equivalent: Contoso.Widgets.Cog.Grip()" }, "properties": { "scope": "whole", "notCongruent": { "component": "constant", "identity": "Contoso.Widgets.Cog::Teeth" } } }
+        { "ruleId": "EQ001", "message": { "text": "Equivalent: Contoso.Widgets.Cog.Grip()" }, "properties": { "scope": "whole", "notCongruent": { "component": "constant", "identity": "Contoso.Widgets.Cog::Teeth" } } },
+        { "ruleId": "EQ007", "message": { "text": "Contoso.Widgets.Axle.Bore(string): unedited body" }, "properties": { "model": "inputs()" } },
+        { "ruleId": "EQ007", "message": { "text": "Contoso.Widgets.Axle.Seat(string): unedited body" }, "properties": { "unknownReason": "opaque" } },
+        { "ruleId": "EQ007", "message": { "text": "Contoso.Widgets.Axle.Pin(string): unedited body" }, "properties": { "unknownReason": "opaque" } }
       ]
     }
   ]

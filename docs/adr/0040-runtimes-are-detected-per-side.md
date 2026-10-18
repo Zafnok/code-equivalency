@@ -2,7 +2,8 @@
 
 Status: accepted (2026-09-28). Supersedes in part ADR 0024 (what makes a body runtime-sensitive),
 ADR 0025 (which pure functions are side-specific) and ADR 0035 (which runtimes execution uses), and
-extends ADR 0028 decision 3 with a fourth kind of pair.
+extends ADR 0028 decision 3 with a fourth kind of pair. Decision 2 superseded in part by 0060 (a pair a runtime rule alone
+keeps out of congruence is a runtime exposure, EQ007, not EQ006 or EQ003).
 
 ## Context
 `equiv` assumes that `--legacy` runs on .NET Framework 4.8 and `--modern` on .NET 10, and nothing

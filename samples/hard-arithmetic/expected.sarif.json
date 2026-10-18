@@ -63,6 +63,13 @@
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
             }
           ]
         }
@@ -142,7 +149,7 @@
             "resultFingerprint/v1": "8b69e797fa646ed504fb51f821fabb7d9d637c967bc64e86459293269daa6b6b"
           },
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 64.002,
           "properties": {
             "model": "inputs(bool false, bv64 2, bv64 144308702155898912, bv64 18014398511579139, bv64 1) old(returned bv64 1009457227582406752 outs() trace()) new(returned bv64 4758105783579705632 outs() trace())",
             "agreesWhen": {
@@ -274,7 +281,7 @@
           {
             "group": "proofMethod:none",
             "ruleId": "EQ002",
-            "rank": 60.002,
+            "rank": 64.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.HardArithmetic.Crate::Weight(bool,long,long,long,long)"

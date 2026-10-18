@@ -78,7 +78,8 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   when only the bounded rung succeeded.
 - Uninterpreted calls: same identity on both sides means the same uninterpreted
   function (the mutual-summary assumption from SymDiff), except members listed in the
-  runtime-changes table, which are Divergent (EQ006). Mapped identities via config and the
+  runtime-changes table, which are Divergent (EQ006), or a runtime exposure (EQ007) in a body nobody edited
+  (ADR 0060). Mapped identities via config and the
   `api-equivalences.json` catalogue (ADR 0020). The functions also take the heap at the call
   and the call's position in the trace, because callees are stateful (ADR 0018). A verdict
   that relies on a matched callee pair names it in the SARIF (ADR 0019). When that pair is not
@@ -176,7 +177,7 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   has two read-only tools that call `CompareCommand.Run`, the pipeline `equiv compare` runs, with an
   in-memory sink, so nothing is written to disk. `compare` takes `legacy`, `modern`, and optionally
   `config`, `baseline`, `bound`, `timeoutMs` (these two override the config's values and must be
-  positive), `ilFallback` (`--il-fallback`) and `mode` (`--mode`; any value but `thorough` or `quick` is a tool error); it returns a short summary (`Equivalent n, Divergent n, Unknown n, skipped projects n,
+  positive), `ilFallback` (`--il-fallback`) and `mode` (`--mode`; any value but `thorough` or `quick` is a tool error); it returns a short summary (`Equivalent n, Divergent n, Unknown n, Runtime exposure n, skipped projects n,
   exit code k`, then the review list's lines; ticket P2-064), then the SARIF log as JSON text. `lower_only` takes `legacy`, `modern`, `config` and `ilFallback` and
   is `compare --lower-only`. An input error that `compare` maps to exit 3, or to exit 4 with no SARIF log,
   is a tool error (`isError: true`) with the message `equiv compare` prints on stderr. stdout carries
@@ -196,7 +197,9 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   Java is a new project, not a refactor.
 - Exit codes: 0 all equivalent (or all results match baseline), 1 divergence, 2 unknown
   present and `--fail-on unknown`, 3 usage or unsupported input, 4 load failure, 5 internal
-  error: at least one pair could not be verified, or any other unhandled exception.
+  error: at least one pair could not be verified, or any other unhandled exception. The exit code reads the
+  verdict, not the rule id: a runtime exposure (EQ007, ADR 0060 decision 5) with a witness counts as a divergence, one
+  without as an unknown.
 - Load failure is contained to the project (ADR 0029). A C# project that fails to load, or has
   unresolved references, and any project that is not C#, is skipped. It is reported as a
   tool-execution notification, and its procedures are listed in `run.properties.unverified`. The run

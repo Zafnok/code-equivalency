@@ -1,0 +1,112 @@
+﻿{
+  $schema: https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json,
+  version: 2.1.0,
+  runs: [
+    {
+      tool: {
+        driver: {
+          name: Equiv,
+          rules: [
+            {
+              id: EQ001,
+              name: Equivalent,
+              shortDescription: {
+                text: The two procedures are observably equivalent.
+              },
+              defaultConfiguration: {
+                level: none
+              }
+            },
+            {
+              id: EQ002,
+              name: Divergent,
+              shortDescription: {
+                text: The two procedures disagree on some observable.
+              },
+              defaultConfiguration: {
+                level: error
+              }
+            },
+            {
+              id: EQ003,
+              name: Unknown,
+              shortDescription: {
+                text: Equivalence could not be decided for this procedure pair.
+              }
+            },
+            {
+              id: EQ004,
+              name: Added,
+              shortDescription: {
+                text: The procedure is present on the modern side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            },
+            {
+              id: EQ005,
+              name: Removed,
+              shortDescription: {
+                text: The procedure is present on the legacy side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            },
+            {
+              id: EQ006,
+              name: RuntimeChangedDivergence,
+              shortDescription: {
+                text: The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes.
+              },
+              defaultConfiguration: {
+                level: error
+              }
+            },
+            {
+              id: EQ007,
+              name: RuntimeExposure,
+              shortDescription: {
+                text: An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree.
+              }
+            }
+          ]
+        }
+      },
+      results: [
+        {
+          ruleId: EQ007,
+          message: {
+            text: N.Paths::Join(string): unedited body; the runtime change between net48 and net5.0 reaches it through System.IO.Path::Combine(string,string) (https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine). Whether it reaches the outcome is unknown (Timeout): solver gave up after 5000ms
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: N.Paths::Join(string),
+            resultFingerprint/v1: 15f8da79e1bc7527912e55674555a4384574118b9834c0f85ad3276868f90401
+          },
+          baselineState: new,
+          rank: 32.002,
+          properties: {
+            unknownReason: timeout,
+            scope: method,
+            helpUri: https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine,
+            runtimeExposure: [
+              {
+                rule: System.IO.Path::Combine(string,string),
+                changedIn: netcoreapp1.0,
+                url: https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine,
+                precondition: invalidPath
+              }
+            ],
+            notCongruent: {
+              component: runtime-rule,
+              identity: System.IO.Path::Combine(string,string)
+            },
+            reviewGroup: runtime-change:System.IO.Path::Combine(string,string)
+          }
+        }
+      ],
+      columnKind: utf16CodeUnits
+    }
+  ]
+}

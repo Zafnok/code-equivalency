@@ -15,7 +15,7 @@ table's header.
 - `Full` passes its parameter to `Path.GetFullPath` and returns the result, or its start without a
   trailing separator (ticket P2-188). The parameter still reaches the `GetFullPath` row, so `Full`
   is not Equivalent; the solver's divergence also depends on the string members it abstracts, so it
-  is Unknown rather than EQ006.
+  is Unknown rather than witnessed; its body is unedited, so it is a runtime exposure without a witness (EQ007).
 - `Create` passes `Full(p)` to `Directory.CreateDirectory`. `GetFullPath` is a validator: .NET
   Framework throws for a path its validation rejects instead of returning one, so every value `Full`
   returns is a valid path, and the `CreateDirectory` row does not fire. The verdict assumes `Full`'s
@@ -27,8 +27,8 @@ table's header.
 |---|---|---|
 | `Paths.BaseDir()` | Equivalent | `congruence` |
 | `Paths.Load(string)` | Equivalent | `congruence` |
-| `Paths.Under(string)` | Divergent (EQ006, a runtime-changed API) | none |
-| `Paths.Full(string)` | Unknown (`abstraction`) | none |
+| `Paths.Under(string)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
+| `Paths.Full(string)` | Runtime exposure without a witness (EQ007, `unknownReason: abstraction`) | none |
 | `Paths.Create(string)` | Equivalent, assuming `Full` | `congruence` |
 
 Exit code: 1 (a new Divergent result).

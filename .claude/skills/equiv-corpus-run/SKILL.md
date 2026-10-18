@@ -293,7 +293,10 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
   ones as `id old -> new`, up to 15 (`-Packages`)
 
 ## Verdicts (full and seeded only)
-- By rule: EQ001 <n>, EQ002 <n>, EQ003 <n>, EQ004 <n>, EQ005 <n>, EQ006 <n>
+- By rule: EQ001 <n>, EQ002 <n>, EQ003 <n>, EQ004 <n>, EQ005 <n>, EQ006 <n>, EQ007 <n> (witnessed <n>, not <n>)
+- Runtime exposures (EQ007, ADR 0060): an unedited body a runtime change reaches. Witnessed ones carry
+  `properties.model` and count as Divergent for the exit code; the others carry `unknownReason` and count as Unknown.
+  Divergent is EQ002 + EQ006 alone, and Unknown EQ003 alone, so the three never overlap.
 - By proofMethod: ...
 - Unknown by scope: line <n>, method <n>. Line-scoped Unknown share: <%>
 - Top Unknown reasons: ...
@@ -307,7 +310,7 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
   entry whose `identity` starts `delegate:` is a lambda or method group (ticket P2-067) and its kind is
   `delegate`, never its fingerprint; any other entry's kind is its `identity`, an `IrPure` operator name.
   Kinds only, never `candidateCounterexample` values.
-- Review list: <groups> groups for <flagged> flagged results (EQ002 + EQ003 + EQ006), from
+- Review list: <groups> groups for <flagged> flagged results (EQ002 + EQ003 + EQ006 + EQ007), from
   `run.properties.reviewList`; flagged results as a share of matched pairs: <%>. Then the top five
   groups by `count`, each as `<ruleId> <group>: <count>` (ticket P2-064).
 

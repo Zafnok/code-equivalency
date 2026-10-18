@@ -21,7 +21,7 @@ again at the call.
 | `Scratch..ctor(string,string)` | Equivalent | `congruence` |
 | `Scratch.TearDown()` | Equivalent | `congruence` |
 | `Scratch.Dispose()` | Equivalent | `congruence` |
-| `Scratch.Move(string)` | Divergent (EQ006, a runtime-changed API) | none |
+| `Scratch.Move(string)` | Runtime exposure with a witness (EQ007: unedited body; exits as a Divergent) | none |
 | `Scratch.Retarget(string)` | Equivalent | `congruence` |
 
 Exit code: 1 (a new Divergent result).

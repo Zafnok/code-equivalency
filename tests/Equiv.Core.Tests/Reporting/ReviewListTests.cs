@@ -5,6 +5,7 @@ using CsCheck;
 
 using Equiv.Core.Execution;
 using Equiv.Core.Ir;
+using Equiv.Core.Matching;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 
@@ -15,7 +16,7 @@ using Xunit;
 namespace Equiv.Core.Tests.Reporting;
 
 /// <summary>
-/// Ticket P2-064: every flagged result (EQ002, EQ003, EQ006) gets a <c>reviewGroup</c> and a <c>rank</c>, the run lists the
+/// Ticket P2-064: every flagged result (EQ002, EQ003, EQ006, and EQ007 from ticket P2-238) gets a <c>reviewGroup</c> and a <c>rank</c>, the run lists the
 /// groups in <c>reviewList</c>, and <see cref="ReviewList.Lines"/> reads the stdout lines back from the run.
 /// </summary>
 public sealed class ReviewListTests
@@ -45,8 +46,28 @@ public sealed class ReviewListTests
         Assert.All(run.Results, static r => Assert.Equal("EQ006", r.RuleId));
         Assert.Equal([HashCodeGroup, IndexOfGroup, HashCodeGroup], run.Results.Select(Group), StringComparer.Ordinal);
         Assert.Equal(
-            [new Entry(HashCodeGroup, "EQ006", 40.004, 2, ["A", "C"]), new Entry(IndexOfGroup, "EQ006", 40.002, 1, ["B"])],
+            [new Entry(HashCodeGroup, "EQ006", 48.004, 2, ["A", "C"]), new Entry(IndexOfGroup, "EQ006", 48.002, 1, ["B"])],
             List(run));
+    }
+
+    /// <summary>
+    /// Ticket P2-238 criterion 5 (ADR 0060 decision 5): an exposure is grouped as an EQ006 is, by the row its witness's call
+    /// matched, and an unwitnessed one by its first rule; the run's list counts both.
+    /// </summary>
+    [Fact]
+    public void Eq007_groups_by_runtime_changed_member()
+    {
+        Run run = Write(
+            Exposed(Result("A", Diverges([Flagged(HashCodeCall)], [])), HashCodeCall),
+            Exposed(Result("B", new Unknown(UnknownReason.Timeout, "slow")), HashCodeCall),
+            Exposed(Result("C", Opaque("no-body")), "extern"));
+
+        Assert.All(run.Results, static r => Assert.Equal("EQ007", r.RuleId));
+        Assert.Equal([HashCodeGroup, HashCodeGroup, "runtime-change:extern"], run.Results.Select(Group), StringComparer.Ordinal);
+        Assert.Equal(
+            [new Entry(HashCodeGroup, "EQ007", 32.004, 2, ["A", "B"]), new Entry("runtime-change:extern", "EQ007", 32.002, 1, ["C"])],
+            List(run));
+        Assert.Equal(["review list: 2 groups for 3 flagged results", "  EQ007 count=2 rank=32.004 " + HashCodeGroup, "  EQ007 count=1 rank=32.002 runtime-change:extern"], ReviewList.Lines(run), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -93,8 +114,9 @@ public sealed class ReviewListTests
             StringComparer.Ordinal);
     }
 
+    /// <summary>Ticket P2-238 criterion 5: six tiers, EQ007 between EQ006 and a line-scoped EQ003.</summary>
     [Fact]
-    public void Observed_divergent_ranks_above_eq002_above_eq006_above_unknown()
+    public void Observed_divergent_ranks_above_eq002_above_eq006_above_eq007_above_unknown()
     {
         ExecutionOutcome outcome = new(new ExecutionInput([]), "", OutcomeKind.Returned, "1");
         Run run = Write(
@@ -105,18 +127,20 @@ public sealed class ReviewListTests
             Result("Observed", Observed()),
             Result("Reproduced", Diverges(["N::Old()"], ["N::New()"])) with { Replay = ReplayResult.Reproduced },
             Result("RuntimeReproduced", Diverges([Flagged(IndexOfCall)], [])) with { Replay = ReplayResult.Reproduced },
-            Result("NotReproduced", Diverges(["N::A()"], ["N::B()"])) with { Replay = ReplayResult.NotReproduced(outcome, outcome) });
+            Result("NotReproduced", Diverges(["N::A()"], ["N::B()"])) with { Replay = ReplayResult.NotReproduced(outcome, outcome) },
+            Exposed(Result("Exposure", new Unknown(UnknownReason.Timeout, "slow")), "x87"));
 
-        Assert.Equal([0.002, 20.002, 40.002, 60.002, 80.002, 80.002, 80.002, 60.002], run.Results.Select(static r => r.Rank));
+        Assert.Equal([0.002, 16.002, 48.002, 64.002, 80.002, 80.002, 80.002, 64.002, 32.002], run.Results.Select(static r => r.Rank));
         Assert.Equal(
             [
                 new Entry(SwapGroup, "EQ002", 80.002, 1, ["Reproduced"]),
                 new Entry("proofMethod:observed", "EQ002", 80.002, 1, ["Observed"]),
                 new Entry(IndexOfGroup, "EQ006", 80.002, 1, ["RuntimeReproduced"]),
-                new Entry("calls:N::A()|N::B()", "EQ002", 60.002, 1, ["NotReproduced"]),
-                new Entry("proofMethod:none", "EQ002", 60.002, 1, ["Solver"]),
-                new Entry(HashCodeGroup, "EQ006", 40.002, 1, ["Runtime"]),
-                new Entry("opaque:Lambda", "EQ003", 20.002, 1, ["Line"]),
+                new Entry("calls:N::A()|N::B()", "EQ002", 64.002, 1, ["NotReproduced"]),
+                new Entry("proofMethod:none", "EQ002", 64.002, 1, ["Solver"]),
+                new Entry(HashCodeGroup, "EQ006", 48.002, 1, ["Runtime"]),
+                new Entry("runtime-change:x87", "EQ007", 32.002, 1, ["Exposure"]),
+                new Entry("opaque:Lambda", "EQ003", 16.002, 1, ["Line"]),
                 new Entry("timeout", "EQ003", 0.002, 1, ["Method"]),
             ],
             List(run));
@@ -153,7 +177,7 @@ public sealed class ReviewListTests
             Result("Plain", Diverges(["N::Old()"], ["N::New()"])),
             Result("Reproduced", Diverges(["N::Old()"], ["N::New()"])) with { Replay = ReplayResult.Reproduced });
 
-        Assert.Equal([20.004, 20.004, 80.004, 80.004], run.Results.Select(static r => r.Rank));
+        Assert.Equal([16.004, 16.004, 80.004, 80.004], run.Results.Select(static r => r.Rank));
     }
 
     [Fact]
@@ -208,14 +232,14 @@ public sealed class ReviewListTests
         Assert.Equal([new Entry("timeout", "EQ003", 0.014, 7, ["T7", "T6", "T5", "T4", "T3"])], List(run));
     }
 
-    /// <summary>A tier is 20 wide, so a group's size counts up to 9,999 results and no further.</summary>
+    /// <summary>A tier is 16 wide, so a group's size counts up to 7,999 results and no further.</summary>
     [Fact]
     public void A_huge_group_stays_inside_its_tier()
     {
-        Run run = Write([.. Enumerable.Range(1, 10_000).Select(static i => Result(Numbered("T", i), new Unknown(UnknownReason.Timeout, "slow")))]);
+        Run run = Write([.. Enumerable.Range(1, 8_000).Select(static i => Result(Numbered("T", i), new Unknown(UnknownReason.Timeout, "slow")))]);
 
-        Assert.All(run.Results, static r => Assert.Equal(19.998, r.Rank));
-        Assert.Equal(10_000, Assert.Single(List(run)).Count);
+        Assert.All(run.Results, static r => Assert.Equal(15.998, r.Rank));
+        Assert.Equal(8_000, Assert.Single(List(run)).Count);
     }
 
     /// <summary>A baseline's carry-over is a result of the log like any other: it keeps its group and is ranked and counted.</summary>
@@ -288,7 +312,7 @@ public sealed class ReviewListTests
         Assert.Equal(
             [
                 "review list: 2 groups for 5 flagged results",
-                "  EQ002 count=3 rank=60.006 calls:N::New()|N::Old()",
+                "  EQ002 count=3 rank=64.006 calls:N::New()|N::Old()",
                 "  EQ003 count=2 rank=0.004 timeout",
             ],
             ReviewList.Lines(run),
@@ -358,6 +382,10 @@ public sealed class ReviewListTests
     private static string Numbered(string prefix, int number) => prefix + number.ToString(CultureInfo.InvariantCulture);
 
     private static CallIdentity Flagged(string identity) => new(identity, RuntimeChanged: true);
+
+    /// <summary><paramref name="result"/> on a pair whose equal texts only <paramref name="rules"/> keep out of congruence (ADR 0060).</summary>
+    private static VerificationResult Exposed(VerificationResult result, string rules) =>
+        result with { NotCongruent = new FingerprintDifference(FingerprintDifference.RuntimeRule, rules) };
 
     private static Divergent Diverges(string[] old, string[] @new) =>
         Diverges([.. old.Select(static c => new CallIdentity(c))], [.. @new.Select(static c => new CallIdentity(c))]);

@@ -4,7 +4,8 @@ using Equiv.Core.Ir;
 namespace Equiv.Core.Verdicts;
 
 /// <summary>
-/// The two procedures disagree on some observable. SARIF EQ002 (or EQ006 for a runtime-changed callee). A solver's
+/// The two procedures disagree on some observable. SARIF EQ002 (or EQ006 for a runtime-changed callee, EQ007 on an
+/// unedited body: ADR 0060). A solver's
 /// Divergent carries its model as <see cref="Counterexample"/>. One the real runtimes showed while an Unknown pair was
 /// tested carries <see cref="Observed"/> instead (<c>proofMethod: observed</c>; ADR 0035 decision 3, ticket P1-008): it
 /// has no model of the IR, so its <see cref="Counterexample"/> is <see cref="Unmodelled"/> and is never shown.

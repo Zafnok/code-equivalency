@@ -43,6 +43,9 @@ public static class SarifReportWriter
     /// </summary>
     internal const string AbstractedSuffix = "+abstracted";
 
+    /// <summary>What a line-scoped Unknown's message ends with (ADR 0029).</summary>
+    private const string LineScopeSentence = "It is equivalent on every input that reaches none of the related locations.";
+
     /// <summary>The result property naming how a verdict was decided.</summary>
     private const string ProofMethodKey = "proofMethod";
 
@@ -175,7 +178,8 @@ public static class SarifReportWriter
 
         // ADR 0040: a result whose pair's runtimes are not known crosses every change the table covers.
         RuntimeInterval runtimes = result.Runtimes ?? RuntimeChangeTable.Load().Coverage;
-        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = VerdictRule.Describe(result.Verdict, runtimes);
+        ResultRule rule = VerdictRule.Describe(result, runtimes);
+        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange, _) = rule;
 
         // SARIF 2.1.0 (search "kind" property, ss3.27.9): a result's `level` is only meaningful
         // when `kind` is "fail" ("If kind has any value other than fail, then level SHALL be
@@ -188,7 +192,7 @@ public static class SarifReportWriter
             RuleId = ruleId,
             Level = kind == ResultKind.Fail ? level : FailureLevel.None,
             Kind = kind,
-            Message = new Message { Text = MessageText(result, runtimeChange, runtimes) },
+            Message = new Message { Text = MessageText(result, rule, runtimes) },
             BaselineState = BaselineComputer.StateFor(result.Identity.Value, ruleId, fingerprint, baseline),
             PartialFingerprints = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -204,32 +208,75 @@ public static class SarifReportWriter
             sarifResult.SetProperty("divergenceKind", Name(divergenceKind));
         }
 
-        // Sarif.Sdk's Result has no per-result help-link property (only ReportingDescriptor.HelpUri,
-        // one fixed value per rule); EQ006's url is specific to the matched member, so it travels as
-        // a custom property alongside "model", the same way a Divergent's counterexample does.
-        if (runtimeChange is not null)
-        {
-            sarifResult.SetProperty("helpUri", runtimeChange.Url.OriginalString);
-        }
-
         // ADR 0020: an Equivalent says which catalogue entries it rests on. ADR 0019: and which callee pairs it assumed.
         SetListProperty(sarifResult, "equivalencesApplied", result.EquivalencesApplied);
         SetListProperty(sarifResult, "assumedCallees", result.AssumedCallees);
         SetListProperty(sarifResult, "unprovenAssumptions", result.UnprovenAssumptions);
         SetReplayProperties(sarifResult, result.Replay);
         SetTestingProperty(sarifResult, result.Testing);
+        SetRuntimeChangeProperties(sarifResult, rule);
 
         SetPassProperties(sarifResult, result);
         SetCalleeProperties(sarifResult, result);
 
         // Ticket P2-064: a flagged result says which cause it shares with others; ReviewList.Apply ranks the groups.
-        if (ReviewList.KeyOf(result.Verdict, runtimeChange) is { } reviewGroup)
+        if (ReviewList.KeyOf(result.Verdict, rule) is { } reviewGroup)
         {
             sarifResult.SetProperty(ReviewList.GroupProperty, reviewGroup);
         }
 
         SetLocations(sarifResult, result);
         return sarifResult;
+    }
+
+    /// <summary>
+    /// The page of the row an EQ006's call matched, or of an exposure's first rule that has one, as <c>helpUri</c>. And ADR
+    /// 0060 decision 3 (ticket P2-238): a runtime exposure's <c>runtimeExposure</c>, one entry per rule, legacy side first,
+    /// each with its <c>rule</c> and, where known, its <c>changedIn</c>, <c>url</c> and row's <c>precondition</c>. An exposure
+    /// the real runtimes showed is EQ006 with <c>proofMethod: observed</c> (decision 4), a replay's as an observed
+    /// Divergent's already is. Both are left out of every other result.
+    /// </summary>
+    private static void SetRuntimeChangeProperties(Result sarifResult, ResultRule rule)
+    {
+        // Sarif.Sdk's Result has no per-result help-link property (only ReportingDescriptor.HelpUri,
+        // one fixed value per rule); EQ006's url is specific to the matched member, so it travels as
+        // a custom property alongside "model", the same way a Divergent's counterexample does.
+        if ((rule.RuntimeChange?.Url ?? rule.Exposure.Select(static e => e.Url).OfType<Uri>().FirstOrDefault()) is { } helpUri)
+        {
+            sarifResult.SetProperty("helpUri", helpUri.OriginalString);
+        }
+
+        if (rule.Exposure.IsEmpty)
+        {
+            return;
+        }
+
+        sarifResult.SetProperty("runtimeExposure", rule.Exposure.Select(ExposureProperty).ToList());
+        if (string.Equals(rule.RuleId, VerdictRule.RuntimeChangeRule, StringComparison.Ordinal))
+        {
+            sarifResult.SetProperty(ProofMethodKey, ObservedProofMethod);
+        }
+    }
+
+    private static Dictionary<string, string> ExposureProperty(ExposureRule exposure)
+    {
+        Dictionary<string, string> entry = new(StringComparer.Ordinal) { ["rule"] = exposure.Rule };
+        if (exposure.ChangedIn is { } changedIn)
+        {
+            entry["changedIn"] = changedIn.ToString();
+        }
+
+        if (exposure.Url is { } url)
+        {
+            entry["url"] = url.OriginalString;
+        }
+
+        if (exposure.Precondition is { } precondition)
+        {
+            entry["precondition"] = ExposureRule.Name(precondition);
+        }
+
+        return entry;
     }
 
     /// <summary>
@@ -760,14 +807,16 @@ public static class SarifReportWriter
     /// <summary>
     /// <see cref="Verdict"/> is a closed hierarchy (private protected constructor) with five
     /// members; the final arm covers <see cref="Removed"/>, mirroring <see cref="VerdictRule.Describe"/>.
-    /// <paramref name="runtimeChange"/> is non-null only for an EQ006 <see cref="Divergent"/>, whose message names both ends of
-    /// <paramref name="runtimes"/> (ADR 0040; ticket P2-055). An Equivalent that assumed a
-    /// callee pair this run did not prove says so in one more sentence (ADR 0019).
+    /// <paramref name="rule"/>'s row is non-null only for an EQ006 <see cref="Divergent"/> or a witnessed EQ007, whose message
+    /// names both ends of <paramref name="runtimes"/> (ADR 0040; ticket P2-055), as a runtime exposure's does with its rules
+    /// (ADR 0060 decision 3; ticket P2-238). An Equivalent that assumed a callee pair this run did not prove says so in one
+    /// more sentence (ADR 0019).
     /// </summary>
-    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes)
+    private static string MessageText(VerificationResult result, ResultRule rule, RuntimeInterval runtimes)
     {
-        string text = WithAgreesWhenSentence(VerdictText(result, runtimeChange, runtimes), ConditionSearch.Of(result.Verdict)?.AgreesWhen);
-        string kinded = Refinement(result.Verdict, runtimeChange)?.Kind == DivergenceKind.RemovedFailuresOnly ? $"{text} {RemovedFailuresOnlySentence}" : text;
+        string verdictText = rule.Exposure.IsEmpty ? VerdictText(result, rule.RuntimeChange, runtimes) : ExposureText(result, rule, runtimes);
+        string text = WithAgreesWhenSentence(verdictText, ConditionSearch.Of(result.Verdict)?.AgreesWhen);
+        string kinded = Refinement(result.Verdict, rule.RuntimeChange)?.Kind == DivergenceKind.RemovedFailuresOnly ? $"{text} {RemovedFailuresOnlySentence}" : text;
         return result.Testing is { NotConstructible: null } testing ? WithTestedSentence(kinded, testing) : kinded;
     }
 
@@ -790,6 +839,28 @@ public static class SarifReportWriter
     /// <summary><paramref name="text"/> ending in a full stop, so a sentence can follow it.</summary>
     private static string Terminated(string text) => text.EndsWith('.') ? text : $"{text}.";
 
+    /// <summary>
+    /// A runtime exposure's text (ADR 0060 decision 3): the body is unedited, the interval, each rule with its page, then
+    /// what is known of the outcome: the real runtimes' difference on an EQ006, the witness on a witnessed EQ007, or why
+    /// the solver did not decide on an unwitnessed one.
+    /// </summary>
+    private static string ExposureText(VerificationResult result, ResultRule rule, RuntimeInterval runtimes)
+    {
+        string through = string.Join(", ", rule.Exposure.Select(static e => e.Url is { } url ? $"{e.Rule} ({url.OriginalString})" : e.Rule));
+        string exposed = $"{result.Identity.Value}: unedited body; the runtime change between {runtimes.Older} and {runtimes.Newer} reaches it through {through}";
+        return (result.Verdict, rule.RuleId) switch
+        {
+            (Divergent { Observed: { } observed }, _) => $"{exposed}, and the real runtimes show it: {ObservationText.Dump(observed)}",
+            (Divergent divergent, VerdictRule.RuntimeChangeRule) => $"{exposed}, and the real runtimes show it: {CounterexampleText.Dump(divergent.Counterexample)}",
+            (Divergent divergent, _) => $"{exposed}. Witness: {CounterexampleText.Dump(divergent.Counterexample)}",
+            _ => $"{exposed}. {Undecided((Unknown)result.Verdict)}",
+        };
+    }
+
+    /// <summary>An unwitnessed exposure's sentence, an exposure being a Divergent or an Unknown: why the solver did not decide, and a line-scoped one's claim.</summary>
+    private static string Undecided(Unknown unknown) =>
+        $"Whether it reaches the outcome is unknown ({unknown.Reason}): {unknown.Detail}" + (unknown.Scope == UnknownScope.Line ? $". {LineScopeSentence}" : string.Empty);
+
     private static string VerdictText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes) => result.Verdict switch
     {
         Equivalent when !result.UnprovenAssumptions.IsEmpty =>
@@ -800,7 +871,7 @@ public static class SarifReportWriter
             $"{result.Identity.Value} diverges via a runtime-changed API between {runtimes.Older} and {runtimes.Newer} ({runtimeChange.Reason} {runtimeChange.Url.OriginalString}): {CounterexampleText.Dump(divergent.Counterexample)}",
         Divergent divergent => $"{result.Identity.Value} diverges: {CounterexampleText.Dump(divergent.Counterexample)}",
         Unknown { Scope: UnknownScope.Line } unknown =>
-            $"{result.Identity.Value} is unknown ({unknown.Reason}): {unknown.Detail}. It is equivalent on every input that reaches none of the related locations.",
+            $"{result.Identity.Value} is unknown ({unknown.Reason}): {unknown.Detail}. {LineScopeSentence}",
         Unknown unknown => $"{result.Identity.Value} is unknown ({unknown.Reason}): {unknown.Detail}",
         Added => $"{result.Identity.Value} was added.",
         _ => $"{result.Identity.Value} was removed.",
@@ -817,6 +888,7 @@ public static class SarifReportWriter
             Rule("EQ004", "Added", "The procedure is present on the modern side only.", FailureLevel.Note),
             Rule("EQ005", "Removed", "The procedure is present on the legacy side only.", FailureLevel.Note),
             Rule("EQ006", "RuntimeChangedDivergence", "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes.", FailureLevel.Error),
+            Rule("EQ007", "RuntimeExposure", "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree.", FailureLevel.Warning),
         ],
     };
 
