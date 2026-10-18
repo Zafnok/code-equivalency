@@ -72,3 +72,22 @@ Object (class) arguments other than through a constructor, delegates, `Cancellat
   state and nested flat structs are filed as P2-246.
 - Locally, `MatchesTheCheckedInSarifSnapshotAndItsReadmesExitCode` fails for the 12 SDK-style samples whose restore this
   worktree never ran (no SARIF is written); the .NET Framework samples, `float-arithmetic` included, pass.
+- Criterion 4, 2026-10-18: `equiv mcp --execute` from a Release build of this branch, driven over stdio by a throwaway
+  script, on `openra-17989` (the P2-237 checkouts) with `config: tools/corpus/configs/openra-17989.json` (P2-241 is
+  done). Legacy is .NET Framework (net472), modern .NET; inputs chosen by tracing each body, none naming a real file.
+  Eight probes, none an error, every driver compiled:
+  | Member | Arguments | Legacy | Modern | `equal` |
+  |---|---|---|---|---|
+  | `Folder::.ctor(string)` | `"a\|b"` | Threw `ArgumentException` | Threw `IOException` | false |
+  | `Folder::.ctor(string)` | `"probe-folder"` | NotComparable `OpenRA.FileSystem.Folder` | NotComparable, same | absent; `reason`: the legacy side gave NotComparable |
+  | `float2::Max` | `{X:0,Y:1}`, `{X:-0,Y:1}` | `[0x80000000,0x3F800000]` (-0) | `[0x00000000,0x3F800000]` (+0) | false |
+  | `float2::Min` | `{X:-0,Y:1}`, `{X:0,Y:1}` | `[0x00000000,0x3F800000]` (+0) | `[0x80000000,0x3F800000]` (-0) | false |
+  | `float2::Max` (control) | `{X:1,Y:2}`, `{X:3,Y:-4}` | `[0x40400000,0x40000000]` | same | true |
+  | `float2::FromAngle(float)` | `1` | `[0x3F576AA4,0x3F0A5140]` | same | true |
+  | `float2::FromAngle(float)` | `1e10` | `[0xBEF99A64,0x3F5F84C5]` | same | true |
+  | `float2::FromAngle(float)` | `3.4028235e38` | `[0x7F7FFFFF,0x7F7FFFFF]` | `[0xBF0599B3,0x3F5A5F96]` | false |
+  So P2-237's OpenRA 8 (`Folder::.ctor`), 11 (`Max`), 29 (`Min`) and 19 (`FromAngle`) each now show the difference
+  their EQ006 names on a real input: .NET Framework's `Directory.CreateDirectory` rejects `|` with `ArgumentException`
+  where .NET reaches the file system; its `Math.Max`/`Math.Min` on `float` return the second operand on a signed-zero
+  tie where .NET Core 3.0+ follow IEEE 754-2019; its `Math.Sin`/`Math.Cos` return an argument of `float.MaxValue`
+  unchanged. Whether a caller reaches those inputs is the re-adjudication's question (P2-245's), not this ticket's.
