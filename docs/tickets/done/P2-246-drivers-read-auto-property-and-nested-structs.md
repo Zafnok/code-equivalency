@@ -1,5 +1,5 @@
 # P2-246 Execution reach: a driver reads and builds a struct whose fields are behind auto-properties or are flat structs
-Status: in-progress
+Status: done (PR #548)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-242
