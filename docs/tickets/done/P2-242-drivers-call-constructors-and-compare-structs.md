@@ -1,5 +1,5 @@
 # P2-242 Execution reach: a replay or `probe` driver never calls a constructor, passes a struct, or compares a struct or `IntPtr` result
-Status: in-progress
+Status: done (PR #547)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-237
@@ -90,4 +90,4 @@ Object (class) arguments other than through a constructor, delegates, `Cancellat
   their EQ006 names on a real input: .NET Framework's `Directory.CreateDirectory` rejects `|` with `ArgumentException`
   where .NET reaches the file system; its `Math.Max`/`Math.Min` on `float` return the second operand on a signed-zero
   tie where .NET Core 3.0+ follow IEEE 754-2019; its `Math.Sin`/`Math.Cos` return an argument of `float.MaxValue`
-  unchanged. Whether a caller reaches those inputs is the re-adjudication's question (P2-245's), not this ticket's.
+  unchanged. Whether a caller reaches those inputs is for the second execution re-adjudication of the 71 (ROADMAP).
