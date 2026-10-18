@@ -12,7 +12,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// Turns an agent's own JSON arguments into one driver case for <paramref name="method"/> (ADR 0035, ADR 0036; ticket
 /// M5-002's <c>probe</c>). Unlike <see cref="ReplayArguments"/>, there is no model to bind: <paramref name="arguments"/>
 /// are read positionally against <paramref name="method"/>'s own parameters, its receiver excluded (the receiver is
-/// <c>new T()</c>, as replay's is). A flat struct (<see cref="DriverStruct"/>) is a JSON object by field name (ticket P2-242). A JSON value that does not fit its parameter's kind, or an argument count that does not
+/// <c>new T()</c>, as replay's is). A flat struct (<see cref="DriverStruct"/>) is a JSON object by field or auto-property name (tickets P2-242 and
+/// P2-246), a nested struct a nested object. A JSON value that does not fit its parameter's kind, or an argument count that does not
 /// match, makes the case not constructible, naming the parameter.
 /// </summary>
 internal static class ProbeArguments
@@ -65,8 +66,8 @@ internal static class ProbeArguments
     };
 
     /// <summary>
-    /// A flat struct from a JSON object with exactly its fields, by name (ticket P2-242), as the JSON array of their wire
-    /// values in declaration order.
+    /// A flat struct from a JSON object with exactly its fields, by name (tickets P2-242 and P2-246), as the JSON array of
+    /// their wire values in declaration order; a nested struct's own object becomes a nested array.
     /// </summary>
     private static string? Struct(DriverStruct flat, JsonElement value)
     {
@@ -76,7 +77,7 @@ internal static class ProbeArguments
         }
 
         List<string> fields = [];
-        foreach (IFieldSymbol field in flat.Fields)
+        foreach (DriverStruct.Field field in flat.Fields)
         {
             if (!value.TryGetProperty(field.Name, out JsonElement member) || Wire(field.Type, member) is not { } wire)
             {
