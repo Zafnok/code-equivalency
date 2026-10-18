@@ -26,5 +26,10 @@ namespace Equiv.Samples.FloatArithmetic
         {
             return (a + b) / 2.0;
         }
+
+        public static Celsius Warmer(Celsius a, Celsius b)
+        {
+            return a.Degrees >= b.Degrees ? a : b;
+        }
     }
 }

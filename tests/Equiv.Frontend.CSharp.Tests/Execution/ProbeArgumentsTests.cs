@@ -31,6 +31,16 @@ public sealed class ProbeArgumentsTests
             }
 
             public class Q { public Q(int x) { } public int M() => 0; }
+
+            public struct V { public float X; public string S; }
+            public struct P { public readonly float X, Y; public P(float x, float y) { X = x; Y = y; } }
+            public struct Sealed { public readonly int A; }
+            public static class S
+            {
+                public static V Open(V v) => v;
+                public static P Max(P a, P b) => a;
+                public static int Read(Sealed s) => s.A;
+            }
         }
         """;
 
@@ -242,5 +252,51 @@ public sealed class ProbeArgumentsTests
         ProbeArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.Q", "M"), []);
 
         Assert.Equal("N.Q has no public parameterless constructor", result.Reason);
+    }
+
+    /// <summary>Ticket P2-242: a constructor is called like a static method, its own parameters read positionally.</summary>
+    [Fact]
+    public void Constructor_BuildsItsParameters()
+    {
+        ProbeArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.Q", ".ctor"), [Json("7")]);
+
+        Assert.Empty(result.Reason);
+        Assert.Equal(["7"], result.Input!.Arguments);
+    }
+
+    /// <summary>Ticket P2-242: a flat struct is a JSON object by field name, sent as its fields in declaration order.</summary>
+    [Fact]
+    public void FlatStruct_IsAJsonObjectByFieldName()
+    {
+        ProbeArguments.SideCase open = Case("N.S", "Open", "{\"S\":\"a\",\"X\":-0.0}");
+        ProbeArguments.SideCase max = Case("N.S", "Max", "{\"X\":0,\"Y\":1}", "{\"X\":-0.0,\"Y\":1}");
+
+        Assert.Equal(["[\"0x80000000\",\"a\"]"], open.Input!.Arguments);
+        Assert.Equal(["[\"0x00000000\",\"0x3F800000\"]", "[\"0x80000000\",\"0x3F800000\"]"], max.Input!.Arguments);
+    }
+
+    /// <summary>Ticket P2-242: anything but an object with exactly the struct's fields, each of its kind, cannot be built.</summary>
+    [Theory]
+    [InlineData("[0,1]")]
+    [InlineData("{\"X\":0}")]
+    [InlineData("{\"X\":0,\"Y\":1,\"Z\":2}")]
+    [InlineData("{\"X\":0,\"Z\":1}")]
+    [InlineData("{\"X\":0,\"Y\":\"one\"}")]
+    public void FlatStruct_NotItsFields_IsUnconstructible(string json)
+    {
+        ProbeArguments.SideCase result = Case("N.S", "Max", json, "{\"X\":0,\"Y\":1}");
+
+        Assert.Null(result.Input);
+        Assert.StartsWith("no N.P argument can be built for a from ", result.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-242: a struct a driver can read but not build (readonly, no constructor that takes its fields) is no argument.</summary>
+    [Fact]
+    public void FlatStructWithoutABuilder_IsUnconstructible()
+    {
+        ProbeArguments.SideCase result = Case("N.S", "Read", "{\"A\":1}");
+
+        Assert.Null(result.Input);
+        Assert.StartsWith("no N.Sealed argument can be built for s", result.Reason, StringComparison.Ordinal);
     }
 }

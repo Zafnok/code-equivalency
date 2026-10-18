@@ -152,7 +152,7 @@
             "resultFingerprint/v1": "25e0be6418201f96d1ddcd8385763449cfe395afa0a84f0fbd27e5696ea878fa"
           },
           "baselineState": "new",
-          "rank": 64.004,
+          "rank": 64.006,
           "properties": {
             "model": "inputs(f64 1.6415323581137547E+299, f64 7.98336123813888E+292) old(returned f64 1.6415331564498785E+299 outs() trace()) new(returned f64 1.6415315597776309E+299 outs() trace())",
             "proofMethod": "bounded+refined",
@@ -217,7 +217,7 @@
             "resultFingerprint/v1": "fe313e1dd6dfa707c571d943fe7f09d13b6ccb0054cef91cc471aaaafb73dda4"
           },
           "baselineState": "new",
-          "rank": 64.004,
+          "rank": 64.006,
           "properties": {
             "model": "inputs(f64 -3.9999999981373575, f64 3.999999996274714, f64 5.590190643722794E-09) old(returned f64 3.727547270848676E-09 outs() trace()) new(returned f64 3.727547159826372E-09 outs() trace())",
             "proofMethod": "bounded+refined",
@@ -387,6 +387,71 @@
           }
         },
         {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Arithmetic::Warmer(Equiv.Samples.FloatArithmetic.Celsius,Equiv.Samples.FloatArithmetic.Celsius) diverges: inputs(sort \"Equiv.Samples.FloatArithmetic.Celsius\" 0, sort \"Equiv.Samples.FloatArithmetic.Celsius\" 1, map<sort \"Equiv.Samples.FloatArithmetic.Celsius\", sort \"System.Double\"> [] default f64 0) old(returned sort \"Equiv.Samples.FloatArithmetic.Celsius\" 0 outs(map<sort \"Equiv.Samples.FloatArithmetic.Celsius\", sort \"System.Double\"> [] default f64 0) trace()) new(returned sort \"Equiv.Samples.FloatArithmetic.Celsius\" 1 outs(map<sort \"Equiv.Samples.FloatArithmetic.Celsius\", sort \"System.Double\"> [] default f64 0) trace())"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Arithmetic.cs"
+                },
+                "region": {
+                  "startLine": 30,
+                  "startColumn": 31,
+                  "endLine": 30,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Arithmetic::Warmer(Equiv.Samples.FloatArithmetic.Celsius,Equiv.Samples.FloatArithmetic.Celsius)",
+            "resultFingerprint/v1": "5a6a016fda1eee1c065dba60670b3a9bbf2776c59a2540637f406da8aa1a1cb7"
+          },
+          "baselineState": "new",
+          "rank": 64.006,
+          "properties": {
+            "model": "inputs(sort \"Equiv.Samples.FloatArithmetic.Celsius\" 0, sort \"Equiv.Samples.FloatArithmetic.Celsius\" 1, map<sort \"Equiv.Samples.FloatArithmetic.Celsius\", sort \"System.Double\"> [] default f64 0) old(returned sort \"Equiv.Samples.FloatArithmetic.Celsius\" 0 outs(map<sort \"Equiv.Samples.FloatArithmetic.Celsius\", sort \"System.Double\"> [] default f64 0) trace()) new(returned sort \"Equiv.Samples.FloatArithmetic.Celsius\" 1 outs(map<sort \"Equiv.Samples.FloatArithmetic.Celsius\", sort \"System.Double\"> [] default f64 0) trace())",
+            "proofMethod": "bounded+refined",
+            "refined": [
+              "f64.ge",
+              "f64.gt"
+            ],
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "unknown"
+              }
+            },
+            "divergenceKind": "undetermined",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            },
+            "reviewGroup": "proofMethod:none"
+          }
+        },
+        {
           "ruleId": "EQ001",
           "kind": "pass",
           "level": "none",
@@ -456,11 +521,11 @@
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 7,
-            "modern": 7
+            "legacy": 8,
+            "modern": 8
           },
-          "matchedPairs": 7,
-          "pairsWithoutOpaque": 6,
+          "matchedPairs": 8,
+          "pairsWithoutOpaque": 7,
           "pairsWholeBodyOpaque": 0,
           "pairsCongruent": 2,
           "projectsSkipped": {
@@ -473,11 +538,11 @@
               "modern": 1
             }
           },
-          "changedPairs": 5,
-          "changedPairsWithoutOpaque": 5,
+          "changedPairs": 6,
+          "changedPairsWithoutOpaque": 6,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 5
+            "": 6
           },
           "runtimeChangeCalls": {
             "callSites": {
@@ -506,18 +571,18 @@
             "milliseconds": 0
           },
           "divergentRefinement": {
-            "pairs": 2,
+            "pairs": 3,
             "milliseconds": 0
           },
           "agreesWhen": {
-            "pairs": 3,
+            "pairs": 4,
             "admitted": 0,
             "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 58,
-          "modern": 34
+          "legacy": 62,
+          "modern": 35
         },
         "projectsNotBuilt": {
           "legacy": [],
@@ -556,11 +621,12 @@
           {
             "group": "proofMethod:none",
             "ruleId": "EQ002",
-            "rank": 64.004,
-            "count": 2,
+            "rank": 64.006,
+            "count": 3,
             "identities": [
               "Equiv.Samples.FloatArithmetic.Arithmetic::Combine(double,double)",
-              "Equiv.Samples.FloatArithmetic.Arithmetic::Sum(double,double,double)"
+              "Equiv.Samples.FloatArithmetic.Arithmetic::Sum(double,double,double)",
+              "Equiv.Samples.FloatArithmetic.Arithmetic::Warmer(Equiv.Samples.FloatArithmetic.Celsius,Equiv.Samples.FloatArithmetic.Celsius)"
             ]
           },
           {

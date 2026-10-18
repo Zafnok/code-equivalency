@@ -70,6 +70,20 @@ public sealed class Replayer(IDriverHost host)
         return (Once(drivers.Legacy, plan.Legacy, culture), Once(drivers.Modern, plan.Modern, culture));
     }
 
+    /// <summary>
+    /// Whether a <see cref="Run"/>'s two outcomes are equal, or null with why they cannot be compared: a side that gave no
+    /// canonical form says nothing about its value, so two such outcomes are never reported equal (ticket P2-242).
+    /// </summary>
+    public static (bool? Equal, string? Reason) Compare(ExecutionOutcome legacy, ExecutionOutcome modern)
+    {
+        ArgumentNullException.ThrowIfNull(legacy);
+        ArgumentNullException.ThrowIfNull(modern);
+
+        return (Obstacle("legacy", [legacy]) ?? Obstacle("modern", [modern])) is { } reason
+            ? (null, reason)
+            : (RuntimeComparison.Same(legacy, modern), null);
+    }
+
     private ExecutionOutcome Once(string driver, ExecutionInput input, string culture) =>
         runner.Side(driver, new ExecutionRequest(new CallIdentity(driver), [input], [culture]))[0];
 

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
@@ -23,6 +24,8 @@ namespace Equiv.Cli.Mcp;
 /// </summary>
 internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, ExecutionEnvironment execution)
 {
+    private static readonly JsonSerializerOptions OmitNulls = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
     public McpServerTool Create() => McpServerTool.Create(
         Probe,
         new McpServerToolCreateOptions
@@ -33,6 +36,7 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
                 "Runs code from both solutions on this machine: calls one matched pair's method on the legacy runtime "
                 + "and on the modern runtime with the given arguments, and returns each side's outcome. It never writes "
                 + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036). "
+                + "equal is absent, and reason says why, when either side's outcome has no comparable form. "
                 + "With config, the pair is analysed under that equiv.config.json (its runtimes, renames and other "
                 + "declarations), as compare --config does.",
             ReadOnly = false,
@@ -42,7 +46,7 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
         [Description("Path to the modern solution (.sln or .slnx).")] string modern,
         [Description("The matched pair's normalised identity, as compare's SARIF logical locations report it.")] string identity,
-        [Description("The method's own arguments, in order (its receiver excluded), as JSON values; null for a reference-typed one.")] JsonElement[] arguments,
+        [Description("The method's own arguments, in order (its receiver excluded), as JSON values; null for a reference-typed one, an object by field name for a struct of plain fields. A constructor is called like a static method that returns the new object.")] JsonElement[] arguments,
         [Description("Culture to run the case under; the invariant culture when omitted.")] string? culture = null,
         [Description("Path to the pair's equiv.config.json, as compare's config takes it; the default config when omitted.")] string? config = null)
     {
@@ -144,15 +148,20 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         return null;
     }
 
+    /// <summary>
+    /// Both outcomes, and <c>equal</c> when both have a canonical form; otherwise no <c>equal</c>, and a <c>reason</c> naming
+    /// the side that cannot be compared (ticket P2-242), since two outcomes with no canonical form say nothing about the values.
+    /// </summary>
     private static CallToolResult Success(ExecutionOutcome legacy, ExecutionOutcome modern)
     {
-        bool equal = legacy.Kind == modern.Kind && string.Equals(legacy.Canonical, modern.Canonical, StringComparison.Ordinal);
+        (bool? equal, string? reason) = Replayer.Compare(legacy, modern);
         string json = JsonSerializer.Serialize(new
         {
             legacy = new { kind = Name(legacy.Kind), canonical = legacy.Canonical },
             modern = new { kind = Name(modern.Kind), canonical = modern.Canonical },
             equal,
-        });
+            reason,
+        }, OmitNulls);
         return new CallToolResult { Content = [new TextContentBlock { Text = json }] };
     }
 

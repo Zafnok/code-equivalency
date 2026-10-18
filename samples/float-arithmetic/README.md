@@ -23,6 +23,10 @@ those functions given their real meaning, IEEE 754 for `float` and `double`. The
   `op:Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double)`. Its true verdict is Equivalent:
   addition commutes. Interpreting the interpretable part of such a candidate is ADR 0053's first
   rejected alternative, left for a measurement.
+- `Arithmetic.Warmer(Celsius, Celsius)`: `a.Degrees >= b.Degrees ? a : b` against `a.Degrees > b.Degrees ? a : b`.
+  The two break a tie differently, which only a signed zero makes visible: `+0` against `-0` returns `+0` on the legacy
+  side and `-0` on the modern one. Divergent. It is also the struct-returning pair `probe` is tested on (ticket
+  P2-242): two `Celsius` arguments as JSON objects by field name, and a `Celsius` result compared field by field.
 - `Celsius(double)` and the conversion itself are the same source on both sides. Equivalent by
   congruence.
 
@@ -35,6 +39,7 @@ those functions given their real meaning, IEEE 754 for `float` and `double`. The
 | `Arithmetic.Combine(double, double)` | Divergent (`bounded+refined`) |
 | `Arithmetic.Sum(double, double, double)` | Divergent (`bounded+refined`) |
 | `Arithmetic.Mean(double, double)` | Unknown (abstraction): the candidate depends on a user-defined conversion |
+| `Arithmetic.Warmer(Celsius, Celsius)` | Divergent (`bounded+refined`) |
 | `Celsius(double)`, `Celsius.op_Implicit(double)` | Equivalent (congruence) |
 
 Exit code: 1 (a new Divergent result).

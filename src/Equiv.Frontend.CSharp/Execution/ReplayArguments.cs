@@ -15,7 +15,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <c>bool</c>, an integer, a <c>char</c> or an enum from its bitvector; a <c>string</c> from its sort element, <c>null</c>
 /// when the model's <c>null.&lt;Sort&gt;</c> map says so and otherwise <c>"s&lt;id&gt;"</c>, so that equal elements are
 /// equal strings; a <c>float</c>, <c>double</c> or <c>decimal</c> as the number <c>id</c>; any other reference type only
-/// as <c>null</c>. The receiver is <c>new T()</c>. Anything else, and every synthesised input other than <c>this</c> and
+/// as <c>null</c>. The receiver is <c>new T()</c>; a constructor has none, and its parameters are bound as a method's
+/// (ticket P2-242). Anything else, and every synthesised input other than <c>this</c> and
 /// <c>null.*</c> (a heap map, a cast or type-test map, <c>typeof</c>, <c>new</c>), makes the case not constructible.
 /// </summary>
 internal static class ReplayArguments
@@ -112,7 +113,8 @@ internal static class ReplayArguments
 
     /// <summary>
     /// Why generated source cannot call <paramref name="method"/> on <c>new T()</c> at all, whatever its arguments, or null
-    /// (tickets M4-009, P1-008). The driver is a friend of the emitted project (<see cref="ProjectEmitter"/>; ticket
+    /// (tickets M4-009, P1-008). A constructor is called like a static method that returns the new object (ticket P2-242),
+    /// unless its type is abstract. The driver is a friend of the emitted project (<see cref="ProjectEmitter"/>; ticket
     /// P2-052), so an <c>internal</c> or <c>protected internal</c> member is called like a public one. A <c>private</c>,
     /// <c>protected</c> or <c>private protected</c> member, or a member of such a type, is <c>not public</c>, with the
     /// accessibility that hides it in brackets. An <c>extern</c> method is never called (ADR 0054 decision 6; ticket
@@ -130,9 +132,14 @@ internal static class ReplayArguments
             return "extern";
         }
 
-        if (method.MethodKind is not (MethodKind.Ordinary or MethodKind.PropertyGet))
+        if (method.MethodKind is not (MethodKind.Ordinary or MethodKind.PropertyGet or MethodKind.Constructor))
         {
-            return "not a method or a property getter";
+            return "not a method, a property getter or a constructor";
+        }
+
+        if (method.MethodKind == MethodKind.Constructor && method.ContainingType.IsAbstract)
+        {
+            return "constructor of an abstract type";
         }
 
         if (method.IsGenericMethod || method.ContainingType.IsGenericType)
@@ -141,7 +148,7 @@ internal static class ReplayArguments
         }
 
         IParameterSymbol? byRef = method.Parameters.FirstOrDefault(static p => p.RefKind != RefKind.None);
-        return (byRef, method.IsStatic || Constructible(method.ContainingType)) switch
+        return (byRef, !DriverFactory.HasReceiver(method) || Constructible(method.ContainingType)) switch
         {
             ({ } parameter, _) => $"{parameter.Name} is passed by reference",
             (null, false) => $"{method.ContainingType.ToDisplayString()} has no public parameterless constructor",
@@ -170,7 +177,7 @@ internal static class ReplayArguments
         !type.IsAbstract && (type.IsValueType || type.InstanceConstructors.Any(static c => c.Parameters.IsEmpty && c.DeclaredAccessibility == Accessibility.Public));
 
     /// <summary>The accessibility that hides <paramref name="symbol"/>, or the outermost type that hides it, from a friend assembly; null when it is visible.</summary>
-    private static string? Hidden(ISymbol symbol)
+    internal static string? Hidden(ISymbol symbol)
     {
         string? outer = symbol.ContainingType is null ? null : Hidden(symbol.ContainingType);
         return outer ?? symbol.DeclaredAccessibility switch

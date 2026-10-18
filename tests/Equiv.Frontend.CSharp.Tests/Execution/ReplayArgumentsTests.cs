@@ -48,6 +48,7 @@ public sealed class ReplayArgumentsTests
             public class P { private P() { } public int M() => 0; }
             public class Q { public Q(int x) { } public int M() => 0; }
             public struct S { public int M() => 0; }
+            public abstract class B { public B(int x) { } }
         }
         """;
 
@@ -108,7 +109,8 @@ public sealed class ReplayArgumentsTests
     }
 
     [Theory]
-    [InlineData("N.C", "set_Settable", "proc \"X\" (%value: bv32, %this: sort \"N.C\") entry B0 B0: ret", "not a method or a property getter")]
+    [InlineData("N.C", "set_Settable", "proc \"X\" (%value: bv32, %this: sort \"N.C\") entry B0 B0: ret", "not a method, a property getter or a constructor")]
+    [InlineData("N.B", ".ctor", "proc \"X\" (%x: bv32, %this: sort \"N.B\") entry B0 B0: ret", "constructor of an abstract type")]
     [InlineData("N.C", "Generic", "proc \"X\" (%x: sort \"T\") entry B0 B0: ret", "generic")]
     [InlineData("N.C", "Native", "proc \"X\" (%x: bv32) entry B0 B0: ret", "extern")]
     [InlineData("N.G`1", "M", Empty, "generic")]
@@ -158,6 +160,21 @@ public sealed class ReplayArgumentsTests
         Assert.Empty(Case("N.C", "get_Size", "proc \"X\" (%this: sort \"N.C\") entry B0 B0: ret", NoValues).Input!.Arguments);
         Dictionary<string, IrValue> values = new(StringComparer.Ordinal) { ["b"] = new IrBoolValue(Value: false) };
         Assert.Equal(["false"], Case("N.C", "Flag", "proc \"X\" (%b: bool) entry B0 B0: ret", values).Input!.Arguments, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-242: a constructor of a type with no parameterless constructor is called like a static method, its model's
+    /// parameters bound as a method's, its <c>this</c> no argument.
+    /// </summary>
+    [Fact]
+    public void AConstructorBindsItsParametersAsAMethods()
+    {
+        Dictionary<string, IrValue> values = new(StringComparer.Ordinal) { ["x"] = Bv(32, -3), ["this"] = new IrSortValue("N.Q", 1) };
+
+        ReplayArguments.SideCase built = Case("N.Q", ".ctor", "proc \"X\" (%x: bv32, %this: sort \"N.Q\") entry B0 B0: ret", values);
+
+        Assert.Empty(built.Reason);
+        Assert.Equal(["-3"], built.Input!.Arguments, StringComparer.Ordinal);
     }
 
     [Fact]

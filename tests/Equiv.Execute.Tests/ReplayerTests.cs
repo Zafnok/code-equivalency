@@ -260,4 +260,28 @@ public sealed class ReplayerTests
         Assert.Throws<ArgumentNullException>(() => replayer.Run(null!, "invariant"));
         Assert.Throws<ArgumentNullException>(() => replayer.Run(Plan, null!));
     }
+
+    /// <summary>Ticket P2-242: comparable outcomes are equal or not; an incomparable side gives no answer, only why.</summary>
+    [Theory]
+    [InlineData(OutcomeKind.Returned, "1", OutcomeKind.Returned, "1", true, null)]
+    [InlineData(OutcomeKind.Returned, "1", OutcomeKind.Threw, "1", false, null)]
+    [InlineData(OutcomeKind.NotComparable, "\"T\"", OutcomeKind.NotComparable, "\"T\"", null, "the legacy side gave NotComparable \"T\"")]
+    [InlineData(OutcomeKind.Threw, "\"E\"", OutcomeKind.NotConstructible, "\"E\"", null, "the modern side gave NotConstructible \"E\"")]
+    public void Compare_GivesEqualityOnlyForComparableOutcomes(OutcomeKind legacyKind, string legacyText, OutcomeKind modernKind, string modernText, bool? equal, string? reason)
+    {
+        ExecutionInput input = new([]);
+
+        (bool? Equal, string? Reason) result = Replayer.Compare(new(input, "invariant", legacyKind, legacyText), new(input, "invariant", modernKind, modernText));
+
+        Assert.Equal((equal, reason), result);
+    }
+
+    [Fact]
+    public void Compare_RejectsNulls()
+    {
+        ExecutionOutcome outcome = new(new ExecutionInput([]), "invariant", OutcomeKind.Returned, "1");
+
+        Assert.Throws<ArgumentNullException>(() => Replayer.Compare(null!, outcome));
+        Assert.Throws<ArgumentNullException>(() => Replayer.Compare(outcome, null!));
+    }
 }

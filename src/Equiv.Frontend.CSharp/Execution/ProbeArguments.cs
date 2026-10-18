@@ -12,7 +12,7 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// Turns an agent's own JSON arguments into one driver case for <paramref name="method"/> (ADR 0035, ADR 0036; ticket
 /// M5-002's <c>probe</c>). Unlike <see cref="ReplayArguments"/>, there is no model to bind: <paramref name="arguments"/>
 /// are read positionally against <paramref name="method"/>'s own parameters, its receiver excluded (the receiver is
-/// <c>new T()</c>, as replay's is). A JSON value that does not fit its parameter's kind, or an argument count that does not
+/// <c>new T()</c>, as replay's is). A flat struct (<see cref="DriverStruct"/>) is a JSON object by field name (ticket P2-242). A JSON value that does not fit its parameter's kind, or an argument count that does not
 /// match, makes the case not constructible, naming the parameter.
 /// </summary>
 internal static class ProbeArguments
@@ -60,8 +60,34 @@ internal static class ProbeArguments
         ExecutionTypeKind.Text => Text(value),
         ExecutionTypeKind.Enum => Enum(type, value),
         ExecutionTypeKind.NullOnly => value.ValueKind == JsonValueKind.Null ? "null" : null,
+        _ when DriverStruct.Of(type) is { Buildable: true } flat => Struct(flat, value),
         _ => null,
     };
+
+    /// <summary>
+    /// A flat struct from a JSON object with exactly its fields, by name (ticket P2-242), as the JSON array of their wire
+    /// values in declaration order.
+    /// </summary>
+    private static string? Struct(DriverStruct flat, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object || value.EnumerateObject().Skip(flat.Fields.Count).Any())
+        {
+            return null;
+        }
+
+        List<string> fields = [];
+        foreach (IFieldSymbol field in flat.Fields)
+        {
+            if (!value.TryGetProperty(field.Name, out JsonElement member) || Wire(field.Type, member) is not { } wire)
+            {
+                return null;
+            }
+
+            fields.Add(wire);
+        }
+
+        return $"[{string.Join(',', fields)}]";
+    }
 
     private static string? Boolean(JsonElement value) => value.ValueKind switch
     {

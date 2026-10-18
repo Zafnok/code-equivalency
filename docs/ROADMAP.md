@@ -1428,6 +1428,8 @@ private members, build a receiver with no public parameterless constructor from 
 `CancellationToken`, array, delegate, object and struct arguments the model determines. It takes the 41 results no
 driver can call and the 10 whose argument no driver builds, of the 71, and every EQ002 replay that was
 `not-constructible`. P2-240, P2-241, P2-242 and P2-245 come before a second execution re-adjudication of the 71.
+P2-246 (S, filed 2026-10-18 by P2-242's size guard) reads and builds the struct shapes P2-242 left out: state in
+auto-properties, and fields that are flat structs.
 
 Not on it: P2-191's one false positive is congruent since P2-197's config, so it has nothing counted against it. 620 of
 the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture
