@@ -1302,8 +1302,8 @@ public sealed partial class SamplesEndToEndTests
     /// Ticket P1-030 criteria 2 and 3 (ADR 0053): <c>a * 2.0</c> against <c>a + a</c> is Equivalent once the two
     /// functions have their IEEE meaning, <c>a + b</c> against <c>a - b</c> and the two groupings of a three-way sum are
     /// Divergent with numbers for a model, and each such result says it was refined and with what. A pair whose candidate
-    /// also depends on a user-defined conversion is not refined, and names the conversion. The checked-in snapshot is the
-    /// whole run.
+    /// also depends on a user-defined conversion is not refined, and names the conversion. A struct-returning pair that
+    /// breaks a tie differently (ticket P2-242's <c>Warmer</c>) is Divergent too. The checked-in snapshot is the whole run.
     /// </summary>
     [Fact]
     public async Task FloatArithmetic_AnInterpretableCandidateIsRefinedAndAnyOtherIsLeftUnknown()
@@ -1314,6 +1314,7 @@ public sealed partial class SamplesEndToEndTests
         Result combine = Single("float-arithmetic", "::Combine(");
         Result sum = Single("float-arithmetic", "::Sum(");
         Result mean = Single("float-arithmetic", "::Mean(");
+        Result warmer = Single("float-arithmetic", "::Warmer(");
 
         Assert.Equal(await Snapshot("float-arithmetic"), run.NormalizedSarif);
         Assert.Equal(("EQ001", "bounded+refined"), (twice.RuleId, twice.GetProperty<string>("proofMethod")));
@@ -1330,7 +1331,9 @@ public sealed partial class SamplesEndToEndTests
         Assert.False(mean.TryGetProperty("refined", out List<string>? _));
         Assert.False(mean.TryGetProperty("proofMethod", out string? _));
         Assert.Contains("op:Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double)", mean.Message.Text, StringComparison.Ordinal);
-        Assert.Equal(7, run.Log.Runs[0].Results.Count);
+        Assert.Equal(("EQ002", "bounded+refined"), (warmer.RuleId, warmer.GetProperty<string>("proofMethod")));
+        Assert.Equal(["f64.ge", "f64.gt"], warmer.GetProperty<List<string>>("refined"));
+        Assert.Equal(8, run.Log.Runs[0].Results.Count);
     }
 
     /// <summary>

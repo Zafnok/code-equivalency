@@ -11,4 +11,6 @@ public static class Arithmetic
     public static bool IsOrdered(float low, float high) => high >= low;
 
     public static Celsius Mean(double a, double b) => (b + a) / 2.0;
+
+    public static Celsius Warmer(Celsius a, Celsius b) => a.Degrees > b.Degrees ? a : b;
 }

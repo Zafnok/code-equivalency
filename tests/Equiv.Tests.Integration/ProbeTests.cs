@@ -12,7 +12,8 @@ namespace Equiv.Tests.Integration;
 /// <c>samples/removed-null-check</c>'s <c>Greet</c> with a <c>null</c> argument and gets back the same two outcomes
 /// <see cref="ReplayTests"/> observes through <c>--execute</c>'s replay: the legacy side throws
 /// <c>ArgumentNullException</c> on .NET Framework 4.8 and the modern side throws <c>NullReferenceException</c> on .NET 10.
-/// Windows only, like the rest of this project.
+/// Windows only, like the rest of this project. Ticket P2-242 adds <c>samples/float-arithmetic</c>'s struct arguments, struct
+/// result and constructor, on the same two runtimes.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("Console")]
@@ -20,14 +21,55 @@ public sealed class ProbeTests
 {
     private const string Identity = "Equiv.Samples.RemovedNullCheck.Greeter::Greet(string)";
 
-    private static string Sample =>
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "removed-null-check"));
-
     [Fact]
     public async Task Probe_RemovedNullCheck_NullDiffers()
     {
-        string legacy = Path.Combine(Sample, "legacy", "Equiv.Samples.RemovedNullCheck.Legacy.sln");
-        string modern = Path.Combine(Sample, "modern", "Equiv.Samples.RemovedNullCheck.Modern.slnx");
+        using JsonDocument document = await ProbeAsync("removed-null-check", "RemovedNullCheck", Identity, [null]).ConfigureAwait(true);
+
+        Assert.False(document.RootElement.GetProperty("equal").GetBoolean());
+        Assert.Equal("Threw", document.RootElement.GetProperty("legacy").GetProperty("kind").GetString());
+        Assert.Contains("ArgumentNullException", document.RootElement.GetProperty("legacy").GetProperty("canonical").GetString(), StringComparison.Ordinal);
+        Assert.Equal("Threw", document.RootElement.GetProperty("modern").GetProperty("kind").GetString());
+        Assert.Contains("NullReferenceException", document.RootElement.GetProperty("modern").GetProperty("canonical").GetString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-242: <c>samples/float-arithmetic</c>'s <c>Warmer</c> takes two <c>Celsius</c> structs and returns one, and
+    /// its two sides break a tie differently, so <c>+0</c> against <c>-0</c> returns a different struct on each runtime,
+    /// compared field by field.
+    /// </summary>
+    [Fact]
+    public async Task Probe_FloatArithmetic_AStructResultDiffersOnASignedZero()
+    {
+        object?[] arguments = [Degrees(0.0), Degrees(-0.0)];
+
+        using JsonDocument document = await ProbeAsync("float-arithmetic", "FloatArithmetic", Warmer, arguments).ConfigureAwait(true);
+
+        Assert.Equal(("Returned", "[\"0x0000000000000000\"]"), Outcome(document, "legacy"));
+        Assert.Equal(("Returned", "[\"0x8000000000000000\"]"), Outcome(document, "modern"));
+        Assert.False(document.RootElement.GetProperty("equal").GetBoolean());
+    }
+
+    /// <summary>Ticket P2-242: a constructor is called like a static method, and its struct is the same on both runtimes.</summary>
+    [Fact]
+    public async Task Probe_FloatArithmetic_AConstructorReturnsItsStruct()
+    {
+        using JsonDocument document = await ProbeAsync("float-arithmetic", "FloatArithmetic", "Equiv.Samples.FloatArithmetic.Celsius::.ctor(double)", [-0.0]).ConfigureAwait(true);
+
+        Assert.Equal("[\"0x8000000000000000\"]", document.RootElement.GetProperty("legacy").GetProperty("canonical").GetString());
+        Assert.Equal("[\"0x8000000000000000\"]", document.RootElement.GetProperty("modern").GetProperty("canonical").GetString());
+        Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
+    }
+
+    private const string Warmer =
+        "Equiv.Samples.FloatArithmetic.Arithmetic::Warmer(Equiv.Samples.FloatArithmetic.Celsius,Equiv.Samples.FloatArithmetic.Celsius)";
+
+    private static Dictionary<string, object?> Degrees(double degrees) => new(StringComparer.Ordinal) { ["Degrees"] = degrees };
+
+    /// <summary>Calls <c>probe</c> on <paramref name="sample"/> over a real <c>equiv mcp --execute</c> and returns its JSON result.</summary>
+    private static async Task<JsonDocument> ProbeAsync(string sample, string name, string identity, object?[] arguments)
+    {
+        string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", sample));
         StdioClientTransport transport = new(new StdioClientTransportOptions
         {
             Name = "equiv",
@@ -42,26 +84,25 @@ public sealed class ProbeTests
                 "probe",
                 new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
-                    ["legacy"] = legacy,
-                    ["modern"] = modern,
-                    ["identity"] = Identity,
-                    ["arguments"] = new object?[] { null },
+                    ["legacy"] = Path.Combine(root, "legacy", $"Equiv.Samples.{name}.Legacy.sln"),
+                    ["modern"] = Path.Combine(root, "modern", $"Equiv.Samples.{name}.Modern.slnx"),
+                    ["identity"] = identity,
+                    ["arguments"] = arguments,
                 },
                 cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            Assert.NotEqual(true, result.IsError);
-            using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(result.Content)));
-            Assert.False(document.RootElement.GetProperty("equal").GetBoolean());
-            Assert.Equal("Threw", document.RootElement.GetProperty("legacy").GetProperty("kind").GetString());
-            Assert.Contains("ArgumentNullException", document.RootElement.GetProperty("legacy").GetProperty("canonical").GetString(), StringComparison.Ordinal);
-            Assert.Equal("Threw", document.RootElement.GetProperty("modern").GetProperty("kind").GetString());
-            Assert.Contains("NullReferenceException", document.RootElement.GetProperty("modern").GetProperty("canonical").GetString(), StringComparison.Ordinal);
+            string text = Text(Assert.Single(result.Content));
+            Assert.True(result.IsError != true, text);
+            return JsonDocument.Parse(text);
         }
         finally
         {
             await client.DisposeAsync().ConfigureAwait(true);
         }
     }
+
+    private static (string? Kind, string? Canonical) Outcome(JsonDocument document, string side) =>
+        (document.RootElement.GetProperty(side).GetProperty("kind").GetString(), document.RootElement.GetProperty(side).GetProperty("canonical").GetString());
 
     private static string Text(ContentBlock block) => Assert.IsType<TextContentBlock>(block).Text;
 }

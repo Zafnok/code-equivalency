@@ -11,8 +11,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// or an enum). Its comparable form is its fields' canonical forms, in declaration order. It is built, as a parameter, by
 /// an object initializer when no field is <c>readonly</c>, else by a visible constructor whose parameters are its fields,
 /// in order, by type and by name ignoring case (<c>float2(float x, float y)</c> for <c>X, Y</c>); with neither, it is
-/// read but not built. A nested struct, an array or another reference-typed field, or a field behind an auto-property is
-/// not flat (ticket P2-246).
+/// read but not built. A nested struct field or a field behind an auto-property is not flat (ticket P2-246), nor is an
+/// array or another reference-typed field (ticket P2-245).
 /// </summary>
 /// <param name="Fields">The instance fields, in declaration order.</param>
 /// <param name="Constructor">The constructor that builds it from its fields; null when an object initializer does, or nothing can.</param>
