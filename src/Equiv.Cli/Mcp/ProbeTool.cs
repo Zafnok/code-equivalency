@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
@@ -23,6 +24,8 @@ namespace Equiv.Cli.Mcp;
 /// </summary>
 internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, ExecutionEnvironment execution)
 {
+    private static readonly JsonSerializerOptions OmitNulls = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
     public McpServerTool Create() => McpServerTool.Create(
         Probe,
         new McpServerToolCreateOptions
@@ -144,15 +147,20 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         return null;
     }
 
+    /// <summary>
+    /// Both outcomes, and <c>equal</c> when both have a canonical form; otherwise no <c>equal</c>, and a <c>reason</c> naming
+    /// the side that cannot be compared (ticket P2-242), since two outcomes with no canonical form say nothing about the values.
+    /// </summary>
     private static CallToolResult Success(ExecutionOutcome legacy, ExecutionOutcome modern)
     {
-        bool equal = legacy.Kind == modern.Kind && string.Equals(legacy.Canonical, modern.Canonical, StringComparison.Ordinal);
+        (bool? equal, string? reason) = Replayer.Compare(legacy, modern);
         string json = JsonSerializer.Serialize(new
         {
             legacy = new { kind = Name(legacy.Kind), canonical = legacy.Canonical },
             modern = new { kind = Name(modern.Kind), canonical = modern.Canonical },
             equal,
-        });
+            reason,
+        }, OmitNulls);
         return new CallToolResult { Content = [new TextContentBlock { Text = json }] };
     }
 

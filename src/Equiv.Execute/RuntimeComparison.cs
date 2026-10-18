@@ -15,8 +15,8 @@ internal static class RuntimeComparison
         {
             ExecutionOutcome legacy = runs.Legacy1[i];
             ExecutionOutcome modern = runs.Modern1[i];
-            bool legacyVaries = !Same(legacy, runs.Legacy2[i]);
-            bool modernVaries = !Same(modern, runs.Modern2[i]);
+            bool legacyVaries = !Identical(legacy, runs.Legacy2[i]);
+            bool modernVaries = !Identical(modern, runs.Modern2[i]);
             if (legacyVaries && modernVaries)
             {
                 both++;
@@ -48,6 +48,13 @@ internal static class RuntimeComparison
 
     public static bool Comparable(ExecutionOutcome outcome) => outcome.Kind is OutcomeKind.Returned or OutcomeKind.Threw;
 
-    public static bool Same(ExecutionOutcome a, ExecutionOutcome b) =>
+    /// <summary>
+    /// Whether two runtimes' outcomes are the same behaviour: both returned or threw, alike. Two outcomes with no canonical
+    /// form say nothing about the values, so they are never the same, whatever their text (ticket P2-242).
+    /// </summary>
+    public static bool Same(ExecutionOutcome a, ExecutionOutcome b) => Comparable(a) && Comparable(b) && Identical(a, b);
+
+    /// <summary>Whether two outcomes are the same answer, comparable or not: what one side giving it again means (a rerun).</summary>
+    public static bool Identical(ExecutionOutcome a, ExecutionOutcome b) =>
         a.Kind == b.Kind && string.Equals(a.Canonical, b.Canonical, StringComparison.Ordinal);
 }

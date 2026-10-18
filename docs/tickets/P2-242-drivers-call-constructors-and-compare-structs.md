@@ -1,5 +1,5 @@
 # P2-242 Execution reach: a replay or `probe` driver never calls a constructor, passes a struct, or compares a struct or `IntPtr` result
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-237

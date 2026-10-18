@@ -109,8 +109,8 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
     {
         using DriverStream legacyAgain = new(host, drivers.Legacy, RuntimeDiff.CaseTimeout);
         using DriverStream modernAgain = new(host, drivers.Modern, RuntimeDiff.CaseTimeout);
-        return RuntimeComparison.Same(legacyAgain.Run(legacy.Input, legacy.Culture), legacy)
-            && RuntimeComparison.Same(modernAgain.Run(modern.Input, modern.Culture), modern);
+        return RuntimeComparison.Identical(legacyAgain.Run(legacy.Input, legacy.Culture), legacy)
+            && RuntimeComparison.Identical(modernAgain.Run(modern.Input, modern.Culture), modern);
     }
 
     /// <summary>One input's species, as text: each culture's two outcome classes, whether every pair is equal, and both IR paths.</summary>

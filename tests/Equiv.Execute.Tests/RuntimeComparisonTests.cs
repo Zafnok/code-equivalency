@@ -71,4 +71,36 @@ public sealed class RuntimeComparisonTests
         Assert.Equal(0, report.Divergent);
         Assert.Equal(1, report.NotComparable);
     }
+
+    /// <summary>Ticket P2-242: two outcomes with no canonical form are never the same, whatever their text.</summary>
+    [Theory]
+    [InlineData(OutcomeKind.NotComparable)]
+    [InlineData(OutcomeKind.NotConstructible)]
+    public void TwoIncomparableOutcomesAreNeverTheSame(OutcomeKind kind)
+    {
+        ExecutionOutcome outcome = new(Input, "invariant", kind, "\"OpenRA.float2\"");
+
+        Assert.False(RuntimeComparison.Same(outcome, outcome));
+        Assert.True(RuntimeComparison.Identical(outcome, outcome));
+    }
+
+    /// <summary>Ticket P2-242: a side that gives the same incomparable outcome twice is deterministic, not nondeterministic.</summary>
+    [Fact]
+    public void RepeatedIncomparableOutcomesAreNotNondeterminism()
+    {
+        ExecutionOutcome outcome = new(Input, "invariant", OutcomeKind.NotComparable, "\"OpenRA.float2\"");
+
+        OverloadReport report = RuntimeComparison.Compare("M()", Runs((outcome, outcome, outcome, outcome)));
+
+        Assert.Equal((0, 0, 0, 0, 1), (report.Divergent, report.LegacyNondeterministic, report.ModernNondeterministic, report.BothNondeterministic, report.NotComparable));
+    }
+
+    [Fact]
+    public void IdenticalNeedsTheSameKindAndText()
+    {
+        ExecutionOutcome threw = new(Input, "invariant", OutcomeKind.Threw, "1");
+
+        Assert.False(RuntimeComparison.Identical(Returned("1"), threw));
+        Assert.False(RuntimeComparison.Identical(Returned("1"), Returned("2")));
+    }
 }

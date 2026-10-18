@@ -588,7 +588,11 @@ public sealed class McpCommandTests
         Assert.Single(replay.Probes);
     }
 
-    /// <summary>Every <see cref="OutcomeKind"/> is reported by its own name, and equal answers on both sides give <c>equal: true</c>.</summary>
+    /// <summary>
+    /// Every <see cref="OutcomeKind"/> is reported by its own name. Equal comparable answers on both sides give
+    /// <c>equal: true</c>; two answers with no canonical form give no <c>equal</c> at all, and a <c>reason</c> naming the
+    /// side that cannot be compared (ticket P2-242).
+    /// </summary>
     [Theory]
     [InlineData("[\"Returned\",1]", "Returned")]
     [InlineData("[\"Threw\",\"E\"]", "Threw")]
@@ -609,7 +613,34 @@ public sealed class McpCommandTests
         using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(result.Content)));
         Assert.Equal(expectedKind, document.RootElement.GetProperty("legacy").GetProperty("kind").GetString());
         Assert.Equal(expectedKind, document.RootElement.GetProperty("modern").GetProperty("kind").GetString());
-        Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
+        if (expectedKind is "Returned" or "Threw")
+        {
+            Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
+            Assert.False(document.RootElement.TryGetProperty("reason", out _));
+        }
+        else
+        {
+            Assert.False(document.RootElement.TryGetProperty("equal", out _));
+            Assert.StartsWith($"the legacy side gave {expectedKind} ", document.RootElement.GetProperty("reason").GetString(), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Ticket P2-242: a comparable legacy outcome against an incomparable modern one names the modern side.</summary>
+    [Fact]
+    public async Task Probe_IncomparableModernSide_HasNoEqualAndSaysWhy()
+    {
+        FakeReplay replay = new("[\"Returned\",1]", "[\"NotComparable\",\"OpenRA.FileSystem.Folder\"]");
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+        using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(result.Content)));
+        Assert.False(document.RootElement.TryGetProperty("equal", out _));
+        Assert.Equal("the modern side gave NotComparable \"OpenRA.FileSystem.Folder\"", document.RootElement.GetProperty("reason").GetString());
     }
 
     /// <summary>Differing kinds are never equal, without comparing their canonical text (the <c>&amp;&amp;</c> short-circuits).</summary>
