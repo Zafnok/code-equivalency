@@ -1,5 +1,5 @@
 # P2-246 Execution reach: a driver reads and builds a struct whose fields are behind auto-properties or are flat structs
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-242
@@ -37,3 +37,20 @@ Array, object and delegate fields (P2-245). Properties with bodies, which are no
 ## Notes
 - Filed 2026-10-18 by P2-242 under its size guard: no sampled result needed either shape, but modern C# declares most
   struct state as auto-properties, so a struct result is otherwise still `NotComparable` in the common case.
+- Decision: `DriverStruct.Fields` is a list of `DriverStruct.Field(Name, Type)` rather than `IFieldSymbol`: a backing
+  field is read, set and named in `probe`'s JSON by its property's name, so the consumers (`DriverSource`,
+  `ProbeArguments`) needed only the type change and get nesting from their existing recursion.
+- Decision: "auto-property" means a getter that only returns its backing field: in source, every declaration of the
+  getter is an accessor with no body; from metadata (which links no backing field to its property) the field is the
+  compiler's `<Name>k__BackingField` and the getter is `[CompilerGenerated]`. A C# 14 `field`-keyword getter with a body
+  (`get => field * 2`) is a property with a body, so it is out of scope and the struct is not flat; a set-only
+  `field`-keyword property has no getter and is not flat either.
+- Decision: an object initializer needs every field writable and every property's setter visible and not `init`: the
+  driver source is C# 7.3 (P2-056), which cannot call an `init` accessor, so an `init` property is built by its
+  constructor. A struct whose nested struct is read only is itself read only.
+- Decision: the cycle guard is the set of enclosing structs on the walk. Valid C# has no struct layout cycle (CS0523),
+  but the frontend can see a compilation with errors, and a cycle there would otherwise recurse without end.
+- Decision: no `Release:` footer. `probe` accepts and compares more struct shapes but its arguments, result and errors
+  keep their shape, which `equiv-release` counts with newly supported constructs as a patch.
+- Checked in passing: a source struct with a primary constructor whose parameter is captured (`struct S(int a)`) shows
+  the captured field among its members, so it is not flat, not read as if `a` were absent.

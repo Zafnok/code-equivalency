@@ -35,8 +35,11 @@ public sealed class ProbeArgumentsTests
             public struct V { public float X; public string S; }
             public struct P { public readonly float X, Y; public P(float x, float y) { X = x; Y = y; } }
             public struct Sealed { public readonly int A; }
+            public struct A { public float X { get; } public float Y { get; } public A(float x, float y) { X = x; Y = y; } }
+            public struct R { public A Lo; public V Hi; }
             public static class S
             {
+                public static R Wrap(R r) => r;
                 public static V Open(V v) => v;
                 public static P Max(P a, P b) => a;
                 public static int Read(Sealed s) => s.A;
@@ -273,6 +276,27 @@ public sealed class ProbeArgumentsTests
 
         Assert.Equal(["[\"0x80000000\",\"a\"]"], open.Input!.Arguments);
         Assert.Equal(["[\"0x00000000\",\"0x3F800000\"]", "[\"0x80000000\",\"0x3F800000\"]"], max.Input!.Arguments);
+    }
+
+    /// <summary>Ticket P2-246: an auto-property is a JSON member by the property's name, and a nested struct a nested object.</summary>
+    [Fact]
+    public void NestedStructOfAutoProperties_IsANestedJsonObject()
+    {
+        ProbeArguments.SideCase result = Case("N.S", "Wrap", "{\"Lo\":{\"Y\":2,\"X\":1},\"Hi\":{\"X\":3,\"S\":\"s\"}}");
+
+        Assert.Equal(["[[\"0x3F800000\",\"0x40000000\"],[\"0x40400000\",\"s\"]]"], result.Input!.Arguments);
+    }
+
+    /// <summary>Ticket P2-246: a nested struct that is not an object with exactly its own fields cannot be built.</summary>
+    [Theory]
+    [InlineData("{\"Lo\":[1,2],\"Hi\":{\"X\":3,\"S\":\"s\"}}")]
+    [InlineData("{\"Lo\":{\"X\":1},\"Hi\":{\"X\":3,\"S\":\"s\"}}")]
+    public void NestedStruct_NotItsFields_IsUnconstructible(string json)
+    {
+        ProbeArguments.SideCase result = Case("N.S", "Wrap", json);
+
+        Assert.Null(result.Input);
+        Assert.StartsWith("no N.R argument can be built for r from ", result.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>Ticket P2-242: anything but an object with exactly the struct's fields, each of its kind, cannot be built.</summary>

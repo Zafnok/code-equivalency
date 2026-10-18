@@ -84,18 +84,24 @@ public sealed class ReplayIntegrationTests : IDisposable
         }
         """;
 
-    /// <summary>Ticket P2-242's driver targets: a constructor, flat structs as arguments and results, and <c>IntPtr</c>.</summary>
+    /// <summary>
+    /// Tickets P2-242's driver targets: a constructor, flat structs as arguments and results, and <c>IntPtr</c>; and
+    /// P2-246's, a struct of auto-properties built by its constructor and nested in another struct.
+    /// </summary>
     private const string Shapes = """
         namespace N
         {
             public struct V { public float X; public float Y; }
             public struct P { public readonly float X, Y; public P(float x, float y) { X = x; Y = y; } }
+            public struct A { public float X { get; } public float Y { get; } public A(float x, float y) { X = x; Y = y; } }
+            public struct R { public A Lo; public V Hi; }
             public class Box { public Box(string path) { if (path == null) { throw new System.ArgumentNullException("path"); } } }
             public static class C
             {
                 public static P Max(P a, P b) => new P(MAX(a.X, b.X), MAX(a.Y, b.Y));
                 private static float Greater(float a, float b) => a > b ? a : b;
                 public static V Flip(V v) => new V { X = v.Y, Y = v.X };
+                public static R Corner(A a, A b) => new R { Lo = new A(MAX(a.X, b.X), a.Y), Hi = new V { X = b.X, Y = b.Y } };
                 public static System.IntPtr Handle(long x) => new System.IntPtr(x);
                 public static System.UIntPtr Unsigned(ulong x) => new System.UIntPtr(x);
             }
@@ -182,10 +188,13 @@ public sealed class ReplayIntegrationTests : IDisposable
     /// Ticket P2-242, on real drivers: <c>Math.Max</c> and a comparison disagree on the sign of a zero, which only a struct
     /// argument and a struct result compared field by field can show; a constructor returns its object or throws; a struct
     /// with no <c>readonly</c> field is built by an initializer; <c>IntPtr</c> and <c>UIntPtr</c> compare as integers.
+    /// Ticket P2-246: the same zero shows through auto-properties, built by their constructor, nested in a struct result.
     /// </summary>
     [Theory]
     [InlineData("N.C", "Max", "[{\"X\":0,\"Y\":1},{\"X\":-0.0,\"Y\":1}]", "Returned [\"0x00000000\",\"0x3F800000\"]", "Returned [\"0x80000000\",\"0x3F800000\"]", false)]
     [InlineData("N.C", "Flip", "[{\"X\":1,\"Y\":-0.0}]", "Returned [\"0x80000000\",\"0x3F800000\"]", "Returned [\"0x80000000\",\"0x3F800000\"]", true)]
+    [InlineData("N.C", "Corner", "[{\"X\":0,\"Y\":1},{\"X\":-0.0,\"Y\":2}]", "Returned [[\"0x00000000\",\"0x3F800000\"],[\"0x80000000\",\"0x40000000\"]]", "Returned [[\"0x80000000\",\"0x3F800000\"],[\"0x80000000\",\"0x40000000\"]]", false)]
+    [InlineData("N.C", "Corner", "[{\"X\":1,\"Y\":1},{\"X\":2,\"Y\":2}]", "Returned [[\"0x40000000\",\"0x3F800000\"],[\"0x40000000\",\"0x40000000\"]]", "Returned [[\"0x40000000\",\"0x3F800000\"],[\"0x40000000\",\"0x40000000\"]]", true)]
     [InlineData("N.C", "Handle", "[-5]", "Returned -5", "Returned -5", true)]
     [InlineData("N.C", "Unsigned", "[18000000000000000000]", "Returned 18000000000000000000", "Returned 18000000000000000000", true)]
     [InlineData("N.Box", ".ctor", "[null]", "Threw \"System.ArgumentNullException\"", "Threw \"System.ArgumentNullException\"", true)]

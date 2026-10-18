@@ -17,7 +17,7 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// four <c>GetBits</c> integers, strings as ASCII JSON, <c>char</c> as its code point, an enum as its underlying integer,
 /// <c>IntPtr</c> and <c>UIntPtr</c> as their integers, arrays and <c>List&lt;T&gt;</c> of those element-wise, a
 /// <c>System.Drawing</c> point, size or rectangle as the array of its components (ticket P2-051), a flat struct
-/// (<see cref="DriverStruct"/>) as the array of its fields (ticket P2-242), and an exception as its type's full name. A
+/// (<see cref="DriverStruct"/>) as the array of its fields, a nested struct a nested array (tickets P2-242 and P2-246), and an exception as its type's full name. A
 /// constructor's result is the new object. The expression that
 /// canonicalises the result is chosen from the member's static return type, so there is no reflection. The source is
 /// C# 7.3, the newest a .NET Framework side compiles by default, so one template serves every runtime (ticket P2-056).
@@ -112,8 +112,8 @@ internal static class DriverSource
     }
 
     /// <summary>
-    /// A flat struct built from the JSON array of its fields in <paramref name="value"/> (ticket P2-242): by the constructor
-    /// that takes its fields when it has one, else by an object initializer.
+    /// A flat struct built from the JSON array of its fields in <paramref name="value"/> (tickets P2-242 and P2-246): by the
+    /// constructor that takes its fields when it has one, else by an object initializer, a nested struct by the same rule.
     /// </summary>
     private static string FromFields(string display, DriverStruct flat, string value)
     {
@@ -168,7 +168,7 @@ internal static class DriverSource
 
     /// <summary>
     /// An enum as its underlying integer; a one-dimensional array or a <c>List&lt;T&gt;</c> element-wise; a
-    /// <c>System.Drawing</c> value type component-wise; a flat struct field by field, in declaration order (ticket P2-242).
+    /// <c>System.Drawing</c> value type component-wise; a flat struct field by field, in declaration order (tickets P2-242 and P2-246).
     /// </summary>
     private static string? Composite(ITypeSymbol type, string expression, int depth) => type switch
     {
