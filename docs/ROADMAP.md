@@ -1427,14 +1427,23 @@ P2-245 (L, filed 2026-10-17 with ADR 0062) closes that execution-reach group, af
 private members, build a receiver with no public parameterless constructor from the model's fields, and build the
 `CancellationToken`, array, delegate, object and struct arguments the model determines. It takes the 41 results no
 driver can call and the 10 whose argument no driver builds, of the 71, and every EQ002 replay that was
-`not-constructible`. P2-240, P2-241, P2-242 and P2-245 come before a second execution re-adjudication of the 71.
+`not-constructible`.
 P2-246 (S, filed 2026-10-18 by P2-242's size guard) reads and builds the struct shapes P2-242 left out: state in
 auto-properties, and fields that are flat structs.
+
+P2-247 (L, filed 2026-10-18) is the second execution re-adjudication, after P2-240, P2-241, P2-242, P2-245 and
+P2-246: the five large pairs in `full --execute` at one commit, every EQ002 and EQ006 adjudicated (68 at `b0f56ff8`, no
+sample), P2-237's 71 undetermined re-adjudicated, and 15 witnessed and 15 unwitnessed exposures per migration (none of
+the 596 unwitnessed ones has been adjudicated). It refreshes the scoreboard and names "Scoreboard milestone 4".
+P2-248 (M, filed 2026-10-18, no dependency) counts the opaque reasons behind the 416 opaque Unknowns after ADR 0060,
+alone, in combination and by marginal unlock with the open owners (P2-214, P2-215, P2-183), files a ticket for each
+reason at 5%, and splits the 129 `timeout` and 91 `abstraction` Unknowns by edited and unedited body; it may run while
+the reach tickets are built, but its corpus runs never overlap P2-247's.
 
 Not on it: P2-191's one false positive is congruent since P2-197's config, so it has nothing counted against it. 620 of
 the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture
 rows (`Path.Combine` 79, `String.StartsWith` 68, `File.Delete` 26); the valid-path tickets take some, and what is left
-of them is the next measurement. `timeout` (326) is the solver budget.
+of them is the next measurement (P2-248's section 6). `timeout` (326) is the solver budget.
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
