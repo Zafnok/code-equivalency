@@ -32,7 +32,9 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
             Description =
                 "Runs code from both solutions on this machine: calls one matched pair's method on the legacy runtime "
                 + "and on the modern runtime with the given arguments, and returns each side's outcome. It never writes "
-                + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036).",
+                + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036). "
+                + "With config, the pair is analysed under that equiv.config.json (its runtimes, renames and other "
+                + "declarations), as compare --config does.",
             ReadOnly = false,
         });
 
@@ -41,7 +43,8 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         [Description("Path to the modern solution (.sln or .slnx).")] string modern,
         [Description("The matched pair's normalised identity, as compare's SARIF logical locations report it.")] string identity,
         [Description("The method's own arguments, in order (its receiver excluded), as JSON values; null for a reference-typed one.")] JsonElement[] arguments,
-        [Description("Culture to run the case under; the invariant culture when omitted.")] string? culture = null)
+        [Description("Culture to run the case under; the invariant culture when omitted.")] string? culture = null,
+        [Description("Path to the pair's equiv.config.json, as compare's config takes it; the default config when omitted.")] string? config = null)
     {
         if (!File.Exists(legacy) || !File.Exists(modern))
         {
@@ -54,10 +57,15 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
             return Failure($"error: no frontend supports both legacy={legacy} and modern={modern}");
         }
 
+        if (LoadConfig(config, out EquivConfig loaded) is { } configError)
+        {
+            return Failure(configError);
+        }
+
         FrontendAnalysis analysis;
         try
         {
-            analysis = frontend.Analyze(legacy, modern, EquivConfig.Default, NullRunLog.Instance, CancellationToken.None);
+            analysis = frontend.Analyze(legacy, modern, loaded, NullRunLog.Instance, CancellationToken.None);
         }
         catch (FrontendLoadException exception)
         {
@@ -96,6 +104,44 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         {
             CompareCommand.DeleteTemporary(directory, static d => Directory.Delete(d, recursive: true), TimeSpan.FromMilliseconds(500));
         }
+    }
+
+    /// <summary>
+    /// Loads <paramref name="path"/> as <c>compare --config</c> does (<see cref="EquivConfigLoader"/>; ticket P2-241), or the
+    /// default config without one, and returns the error to report, or null. A config diagnostic is an error here, not the
+    /// warning <c>compare</c> prints: a tool result has no channel for warnings, and a config taken only in part would
+    /// analyse the pair differently from the run the agent is following up.
+    /// </summary>
+    private static string? LoadConfig(string? path, out EquivConfig config)
+    {
+        config = EquivConfig.Default;
+        if (path is null)
+        {
+            return null;
+        }
+
+        if (!File.Exists(path))
+        {
+            return $"error: file not found (config={path})";
+        }
+
+        EquivConfigResult result;
+        try
+        {
+            result = EquivConfigLoader.Load(File.ReadAllText(path));
+        }
+        catch (EquivConfigParseException exception)
+        {
+            return $"error: {exception.Message}";
+        }
+
+        if (!result.IsValid)
+        {
+            return string.Join('\n', result.Diagnostics.Select(static d => $"error: equiv.config.json: {d.Id} {d.Path}: {d.Message}"));
+        }
+
+        config = result.Config;
+        return null;
     }
 
     private static CallToolResult Success(ExecutionOutcome legacy, ExecutionOutcome modern)

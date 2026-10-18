@@ -552,11 +552,13 @@ public sealed class McpCommandTests
         Assert.Equal(
             "Runs code from both solutions on this machine: calls one matched pair's method on the legacy runtime "
             + "and on the modern runtime with the given arguments, and returns each side's outcome. It never writes "
-            + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036).",
+            + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036). "
+            + "With config, the pair is analysed under that equiv.config.json (its runtimes, renames and other "
+            + "declarations), as compare --config does.",
             probe.ProtocolTool.Description);
         Assert.NotEqual(true, probe.ProtocolTool.Annotations?.ReadOnlyHint);
         Assert.Equal(
-            ["arguments", "culture", "identity", "legacy", "modern"],
+            ["arguments", "config", "culture", "identity", "legacy", "modern"],
             probe.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         Assert.Equal(
             ["arguments", "identity", "legacy", "modern"],
@@ -727,12 +729,92 @@ public sealed class McpCommandTests
         Assert.Equal("error: this frontend cannot run code", Text(Assert.Single(result.Content)));
     }
 
-    private static Dictionary<string, object?> ProbeArgs(string legacy, string modern, string identity, object?[] arguments, string? culture = null)
+    /// <summary>
+    /// Ticket P2-241 criterion 1: a pair whose modern runtime comes only from its config (OpenRA's mod projects, P2-197) is
+    /// analysed under that config, so a member there is constructible, where the default config leaves it without a runtime.
+    /// </summary>
+    [Fact]
+    public async Task Probe_ConfigNamingTheRuntime_MakesTheMemberConstructible()
+    {
+        FakeReplay noRuntime = new(string.Empty, string.Empty) { ProbeReason = "the modern project Mod has no detected runtime" };
+        FakeReplay runnable = new("[\"Returned\",1]", "[\"Returned\",1]");
+        ExecutionEnvironment windows = new(IsWindows: true, runnable);
+        FakeFrontend frontend = new(
+            "csharp",
+            _ => true,
+            new MatchResult([Pair(PairIdentity)], [], [], []),
+            replayUnder: config => config.ModernRuntime is null ? noRuntime : runnable);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using TempFile config = new();
+        await File.WriteAllTextAsync(config.Path, """{ "runtimes": { "modern": "net5.0" } }""", TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult withoutConfig = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+        CallToolResult withConfig = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null], config: config.Path)).ConfigureAwait(true);
+
+        Assert.True(withoutConfig.IsError);
+        Assert.Equal("error: the modern project Mod has no detected runtime", Text(Assert.Single(withoutConfig.Content)));
+        Assert.NotEqual(true, withConfig.IsError);
+        using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(withConfig.Content)));
+        Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
+        Assert.Single(runnable.Probes);
+        Assert.Equal(EquivConfigLoader.Load("""{ "runtimes": { "modern": "net5.0" } }""").Config, frontend.LastConfig);
+    }
+
+    /// <summary>Ticket P2-241 criterion 1: a config path that does not exist is the tool's error, and nothing is analysed.</summary>
+    [Fact]
+    public async Task Probe_MissingConfig_IsToolError()
+    {
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: new FakeReplay(string.Empty, string.Empty));
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string missing = Path.Combine(Path.GetTempPath(), $"equiv-P2-241-missing-{Guid.NewGuid():N}.json");
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null], config: missing)).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.Equal($"error: file not found (config={missing})", Text(Assert.Single(result.Content)));
+        Assert.Equal(0, frontend.AnalyzeCallCount);
+    }
+
+    /// <summary>
+    /// Ticket P2-241 criterion 1: a config that is not JSON, or that has a diagnostic, is the tool's error naming it; <c>probe</c>
+    /// has no warning channel, so a config it cannot take whole is not run half-applied.
+    /// </summary>
+    [Theory]
+    [InlineData("{", "error: equiv.config.json is not valid JSON: ")]
+    [InlineData("""{ "nope": 1 }""", "error: equiv.config.json: CFG005 /nope: unknown property \"nope\"")]
+    public async Task Probe_BadConfig_IsToolError(string json, string expectedStart)
+    {
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: new FakeReplay(string.Empty, string.Empty));
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using TempFile config = new();
+        await File.WriteAllTextAsync(config.Path, json, TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null], config: config.Path)).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.StartsWith(expectedStart, Text(Assert.Single(result.Content)), StringComparison.Ordinal);
+        Assert.Equal(0, frontend.AnalyzeCallCount);
+    }
+
+    private static Dictionary<string, object?> ProbeArgs(string legacy, string modern, string identity, object?[] arguments, string? culture = null, string? config = null)
     {
         Dictionary<string, object?> args = new(StringComparer.Ordinal) { ["legacy"] = legacy, ["modern"] = modern, ["identity"] = identity, ["arguments"] = arguments };
         if (culture is not null)
         {
             args["culture"] = culture;
+        }
+
+        if (config is not null)
+        {
+            args["config"] = config;
         }
 
         return args;
