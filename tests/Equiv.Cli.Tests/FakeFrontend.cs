@@ -12,6 +12,8 @@ namespace Equiv.Cli.Tests;
 /// <paramref name="replay"/> is the analysis's replay factory (ticket M4-009); without one it cannot replay.
 /// <paramref name="legacyRuntimes"/> and <paramref name="modernRuntimes"/> are each side's project runtimes (ticket P2-053).
 /// <paramref name="generatedProcedures"/> is each side's count of procedures a source generator emitted (ticket P2-118).
+/// <paramref name="replayUnder"/>, when given, picks the replay factory from the config <see cref="Analyze"/> was given, as a
+/// real frontend's runtimes depend on the config (ticket P2-241); it overrides <paramref name="replay"/>.
 /// </summary>
 internal sealed class FakeFrontend(
     string language,
@@ -23,7 +25,8 @@ internal sealed class FakeFrontend(
     IReplayDriverFactory? replay = null,
     (string Project, string Runtime, string Source)[]? legacyRuntimes = null,
     (string Project, string Runtime, string Source)[]? modernRuntimes = null,
-    (int Legacy, int Modern) generatedProcedures = default) : ILanguageFrontend
+    (int Legacy, int Modern) generatedProcedures = default,
+    Func<EquivConfig, IReplayDriverFactory?>? replayUnder = null) : ILanguageFrontend
 {
     public int AnalyzeCallCount { get; private set; }
 
@@ -46,7 +49,7 @@ internal sealed class FakeFrontend(
                 LegacyRuntimes = [.. legacyRuntimes ?? []],
                 ModernRuntimes = [.. modernRuntimes ?? []],
                 GeneratedProcedures = generatedProcedures,
-                Replay = replay,
+                Replay = replayUnder is null ? replay : replayUnder(config),
             };
     }
 }

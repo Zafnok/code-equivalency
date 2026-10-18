@@ -424,9 +424,12 @@ Without `--execute`, `probe` is not registered at all, so an agent cannot turn e
 itself.
 
 - `probe`: `legacy`, `modern`, `identity` and `arguments` (the method's own arguments, in order, as
-  JSON values), and optionally `culture`. The result is `{ legacy: {kind, canonical}, modern: {kind,
-  canonical}, equal }`. An argument that cannot be built, or an identity that matches no pair, comes
-  back as a tool error naming it.
+  JSON values), and optionally `culture` and `config`. With `config` (a path to the pair's
+  `equiv.config.json`, as `compare` takes it) the pair is analysed under that config, so a runtime,
+  rename or other declaration it states applies to the probe as it does to `compare --config`; a
+  missing or invalid config, or any config diagnostic, is a tool error. The result is `{ legacy:
+  {kind, canonical}, modern: {kind, canonical}, equal }`. An argument that cannot be built, or an
+  identity that matches no pair, comes back as a tool error naming it.
 
 Every MCP host takes a stdio server as a command and its arguments; for the binary:
 
