@@ -553,6 +553,7 @@ public sealed class McpCommandTests
             "Runs code from both solutions on this machine: calls one matched pair's method on the legacy runtime "
             + "and on the modern runtime with the given arguments, and returns each side's outcome. It never writes "
             + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036). "
+            + "equal is absent, and reason says why, when either side's outcome has no comparable form. "
             + "With config, the pair is analysed under that equiv.config.json (its runtimes, renames and other "
             + "declarations), as compare --config does.",
             probe.ProtocolTool.Description);
