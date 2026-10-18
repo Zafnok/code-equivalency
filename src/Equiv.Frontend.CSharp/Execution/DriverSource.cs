@@ -15,8 +15,10 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// The canonical form is written by the driver's own code, never by a runtime's
 /// <c>ToString</c>: integers in decimal, <c>float</c> and <c>double</c> as their IEEE bits in hex, <c>decimal</c> as its
 /// four <c>GetBits</c> integers, strings as ASCII JSON, <c>char</c> as its code point, an enum as its underlying integer,
-/// arrays and <c>List&lt;T&gt;</c> of those element-wise, a <c>System.Drawing</c> point, size or rectangle as the array of
-/// its components (ticket P2-051), and an exception as its type's full name. The expression that
+/// <c>IntPtr</c> and <c>UIntPtr</c> as their integers, arrays and <c>List&lt;T&gt;</c> of those element-wise, a
+/// <c>System.Drawing</c> point, size or rectangle as the array of its components (ticket P2-051), a flat struct
+/// (<see cref="DriverStruct"/>) as the array of its fields (ticket P2-242), and an exception as its type's full name. A
+/// constructor's result is the new object. The expression that
 /// canonicalises the result is chosen from the member's static return type, so there is no reflection. The source is
 /// C# 7.3, the newest a .NET Framework side compiles by default, so one template serves every runtime (ticket P2-056).
 /// </summary>
@@ -81,9 +83,15 @@ internal static class DriverSource
     private static string Declare(ITypeSymbol type, List<string> declarations, int slot)
     {
         string name = $"p{(slot - 1).ToString(CultureInfo.InvariantCulture)}";
-        string value = $"a[{slot.ToString(CultureInfo.InvariantCulture)}]";
+        declarations.Add($"{type.ToDisplayString(Qualified)} {name} = {Decode(type, $"a[{slot.ToString(CultureInfo.InvariantCulture)}]")};");
+        return name;
+    }
+
+    /// <summary>A C# expression that builds a <paramref name="type"/> from the parsed wire value <paramref name="value"/>.</summary>
+    private static string Decode(ITypeSymbol type, string value)
+    {
         string display = type.ToDisplayString(Qualified);
-        string decoded = DriverFactory.Classify(type) switch
+        return DriverFactory.Classify(type) switch
         {
             ExecutionTypeKind.Boolean => $"R.B({value})",
             ExecutionTypeKind.Character or ExecutionTypeKind.UnsignedByte or ExecutionTypeKind.Unsigned16 or ExecutionTypeKind.Unsigned32 or ExecutionTypeKind.Unsigned64
@@ -98,10 +106,21 @@ internal static class DriverSource
             ExecutionTypeKind.NullOnly => $"({display}){value}",
             ExecutionTypeKind.Signed32Pair or ExecutionTypeKind.Signed32Quad => FromComponents(type, value, static item => $"checked((int)R.I({item}))"),
             ExecutionTypeKind.Binary32Pair or ExecutionTypeKind.Binary32Quad => FromComponents(type, value, static item => $"R.F({item})"),
+            _ when DriverStruct.Of(type) is { Buildable: true } flat => FromFields(display, flat, value),
             _ => throw new InvalidOperationException($"no input can be built for {type.ToDisplayString()}"),
         };
-        declarations.Add($"{display} {name} = {decoded};");
-        return name;
+    }
+
+    /// <summary>
+    /// A flat struct built from the JSON array of its fields in <paramref name="value"/> (ticket P2-242): by the constructor
+    /// that takes its fields when it has one, else by an object initializer.
+    /// </summary>
+    private static string FromFields(string display, DriverStruct flat, string value)
+    {
+        IEnumerable<string> fields = flat.Fields.Select((f, i) => Decode(f.Type, $"R.At({value}, {i.ToString(CultureInfo.InvariantCulture)})"));
+        return flat.Constructor is null
+            ? $"new {display} {{ {string.Join(", ", flat.Fields.Zip(fields, static (f, d) => $"{f.Name} = {d}"))} }}"
+            : $"new {display}({string.Join(", ", fields)})";
     }
 
     /// <summary>A <c>System.Drawing</c> value built by its component constructor from the JSON array in <paramref name="value"/>.</summary>
@@ -142,12 +161,14 @@ internal static class DriverSource
         SpecialType.System_Double => $"W.D({expression})",
         SpecialType.System_Decimal => $"W.M({expression})",
         SpecialType.System_String => $"W.Str({expression})",
+        SpecialType.System_IntPtr => $"W.I((long){expression})",
+        SpecialType.System_UIntPtr => $"W.U((ulong){expression})",
         _ => Composite(type, expression, depth),
     };
 
     /// <summary>
     /// An enum as its underlying integer; a one-dimensional array or a <c>List&lt;T&gt;</c> element-wise; a
-    /// <c>System.Drawing</c> value type component-wise.
+    /// <c>System.Drawing</c> value type component-wise; a flat struct field by field, in declaration order (ticket P2-242).
     /// </summary>
     private static string? Composite(ITypeSymbol type, string expression, int depth) => type switch
     {
@@ -158,6 +179,7 @@ internal static class DriverSource
         {
             ExecutionTypeKind.Signed32Pair or ExecutionTypeKind.Signed32Quad => Tuple(type, expression, "W.I"),
             ExecutionTypeKind.Binary32Pair or ExecutionTypeKind.Binary32Quad => Tuple(type, expression, "W.F"),
+            _ when DriverStruct.Of(type) is { } flat => $"W.T({string.Join(", ", flat.Fields.Select(f => Canonical(f.Type, $"{expression}.{f.Name}", depth)))})",
             _ => null,
         },
     };

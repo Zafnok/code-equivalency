@@ -36,6 +36,7 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
                 "Runs code from both solutions on this machine: calls one matched pair's method on the legacy runtime "
                 + "and on the modern runtime with the given arguments, and returns each side's outcome. It never writes "
                 + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036). "
+                + "equal is absent, and reason says why, when either side's outcome has no comparable form. "
                 + "With config, the pair is analysed under that equiv.config.json (its runtimes, renames and other "
                 + "declarations), as compare --config does.",
             ReadOnly = false,
@@ -45,7 +46,7 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
         [Description("Path to the modern solution (.sln or .slnx).")] string modern,
         [Description("The matched pair's normalised identity, as compare's SARIF logical locations report it.")] string identity,
-        [Description("The method's own arguments, in order (its receiver excluded), as JSON values; null for a reference-typed one.")] JsonElement[] arguments,
+        [Description("The method's own arguments, in order (its receiver excluded), as JSON values; null for a reference-typed one, an object by field name for a struct of plain fields. A constructor is called like a static method that returns the new object.")] JsonElement[] arguments,
         [Description("Culture to run the case under; the invariant culture when omitted.")] string? culture = null,
         [Description("Path to the pair's equiv.config.json, as compare's config takes it; the default config when omitted.")] string? config = null)
     {
