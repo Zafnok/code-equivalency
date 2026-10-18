@@ -384,10 +384,10 @@ public sealed class SarifReportWriterTests
     }
 
     [Fact]
-    public void ToolDriverListsAllSixRulesInOrder()
+    public void ToolDriverListsAllSevenRulesInOrder()
     {
         SarifLog log = SarifReportWriter.Write([]);
-        Assert.Equal(["EQ001", "EQ002", "EQ003", "EQ004", "EQ005", "EQ006"], log.Runs[0].Tool.Driver.Rules.Select(static r => r.Id), StringComparer.Ordinal);
+        Assert.Equal(["EQ001", "EQ002", "EQ003", "EQ004", "EQ005", "EQ006", "EQ007"], log.Runs[0].Tool.Driver.Rules.Select(static r => r.Id), StringComparer.Ordinal);
     }
 
     [Fact]

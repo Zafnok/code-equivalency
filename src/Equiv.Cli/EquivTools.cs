@@ -113,7 +113,8 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
         new() { IsError = true, Content = [new TextContentBlock { Text = message }] };
 
     /// <summary>
-    /// The verdict counts, read from the log's rule ids (EQ001 equivalent, EQ002 and EQ006 divergent, EQ003 unknown). A skipped
+    /// The verdict counts, read from the log's rule ids (EQ001 equivalent, EQ002 and EQ006 divergent, EQ003 unknown, EQ007
+    /// runtime exposure: ADR 0060; ticket P2-238). A skipped
     /// project is a tool-execution notification without an exception or a descriptor; a pair the tool failed on carries an
     /// exception (ADR 0023), and an uncovered runtime range a descriptor (ADR 0040; ticket P2-055).
     /// The review list's lines follow, the ones <c>equiv compare</c> prints on stdout (ticket P2-064); <c>lower_only</c> has none.
@@ -125,7 +126,7 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
         int skipped = run.Invocations?.SelectMany(static invocation => invocation.ToolExecutionNotifications).Count(static notification => notification.Exception is null && notification.Descriptor is null) ?? 0;
         string verdicts = string.Create(
             CultureInfo.InvariantCulture,
-            $"Equivalent {Count("EQ001")}, Divergent {Count("EQ002", "EQ006")}, Unknown {Count("EQ003")}, skipped projects {skipped}, exit code {exitCode}");
+            $"Equivalent {Count("EQ001")}, Divergent {Count("EQ002", "EQ006")}, Unknown {Count("EQ003")}, Runtime exposure {Count("EQ007")}, skipped projects {skipped}, exit code {exitCode}");
         return string.Join('\n', [verdicts, .. ReviewList.Lines(run)]);
     }
 

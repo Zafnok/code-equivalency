@@ -700,7 +700,8 @@ public sealed partial class SamplesEndToEndTests
 
     /// <summary>
     /// Ticket P2-165 criterion 2 (ADR 0058 decision 3): the same files from .NET Core 3.1 cross .NET 5, whose suffix
-    /// probing reaches the import that is not spelled exactly, which stays Unknown; the one spelled exactly is congruent.
+    /// probing reaches the import that is not spelled exactly; the one spelled exactly is congruent. The reached one is
+    /// unedited, so it is a runtime exposure naming the entry, not EQ003 <c>no-body</c> (ticket P2-238 criterion 1).
     /// </summary>
     [Fact]
     public void ExternImportRuntime_FromNetCore31TheSuffixProbingReachesOnlyTheInexactImport()
@@ -709,13 +710,14 @@ public sealed partial class SamplesEndToEndTests
 
         Assert.Equal(3, results.Count);
         AssertCongruent(ExternImportRuntime(results, "Native::Ticks()"));
-        AssertNoBody(ExternImportRuntime(results, "Native::MessageBox(System.IntPtr,string,string,uint)"));
+        AssertExposure(ExternImportRuntime(results, "Native::MessageBox(System.IntPtr,string,string,uint)"), "extern:suffixProbing");
         AssertNoBody(ExternImportRuntime(results, "Changed::F()"));
     }
 
     /// <summary>
     /// Ticket P2-165 criterion 3 (ADR 0058 decision 2): from .NET Framework 4.8 no list of interop changes is complete, so
-    /// ADR 0054 decision 4 stands for every import, the one the list reaches and the one it does not.
+    /// ADR 0054 decision 4 stands for every import, the one the list reaches and the one it does not. The two unedited ones
+    /// are runtime exposures by the <c>extern</c> rule and the edited one stays EQ003 (ticket P2-238 criterion 1).
     /// </summary>
     [Fact]
     public void ExternImportRuntime_FromNet48EveryImportStaysUnknown()
@@ -723,7 +725,9 @@ public sealed partial class SamplesEndToEndTests
         IList<Result> results = RunExternImportRuntimeFrom("net48");
 
         Assert.Equal(3, results.Count);
-        Assert.All(results, AssertNoBody);
+        AssertExposure(ExternImportRuntime(results, "Native::Ticks()"), "extern");
+        AssertExposure(ExternImportRuntime(results, "Native::MessageBox(System.IntPtr,string,string,uint)"), "extern");
+        AssertNoBody(ExternImportRuntime(results, "Changed::F()"));
     }
 
     private static Result ExternImportRuntime(IList<Result> results, string member) =>
@@ -733,6 +737,16 @@ public sealed partial class SamplesEndToEndTests
     {
         Assert.Equal("EQ001", result.RuleId);
         Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>An unedited import a runtime rule reaches (ADR 0060): EQ007, still <c>opaque</c>, naming <paramref name="rule"/>.</summary>
+    private static void AssertExposure(Result result, string rule)
+    {
+        Assert.Equal("EQ007", result.RuleId);
+        Assert.Equal("opaque", result.GetProperty<string>("unknownReason"));
+        Assert.Contains("unedited body", result.Message.Text, StringComparison.Ordinal);
+        Assert.Equal(rule, Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("runtimeExposure"))["rule"]);
+        Assert.Equal($"runtime-change:{rule}", result.GetProperty<string>("reviewGroup"));
     }
 
     private static void AssertNoBody(Result result)
@@ -1329,11 +1343,11 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal(4, results.Length);
         Assert.All(results, static r => Assert.Equal("EQ002", r.RuleId));
         Assert.Equal("proofMethod:none", discount.GetProperty<string>("reviewGroup"));
-        Assert.Equal(60.002, discount.Rank);
+        Assert.Equal(64.002, discount.Rank);
         Assert.All(results.Except([discount]), static r =>
         {
             Assert.Equal(Swap, r.GetProperty<string>("reviewGroup"));
-            Assert.Equal(60.006, r.Rank);
+            Assert.Equal(64.006, r.Rank);
         });
         List<Dictionary<string, object>> list = run.Log.Runs[0].GetProperty<List<Dictionary<string, object>>>("reviewList");
         Assert.Equal([Swap, "proofMethod:none"], list.Select(static e => (string)e["group"]), StringComparer.Ordinal);

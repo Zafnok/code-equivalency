@@ -76,7 +76,8 @@ flowchart LR
   invariants.
 - **Reports one verdict per pair** in SARIF 2.1.0: `Equivalent`, `Divergent` with a concrete
   counterexample, `Unknown` with a reason and a scope, `Added` or `Removed`. Known behaviour
-  changes between runtimes are reported as their own rule (EQ006).
+  changes between runtimes are reported as their own rule (EQ006), and a body nobody edited that one reaches
+  as a runtime exposure (EQ007).
 - **Ranks what to review**, grouping the Divergent and Unknown results by cause, most certain
   first.
 - **Supports baselines**, so CI fails only on new findings.
@@ -332,13 +333,16 @@ equiv: +00:00:06 verify done in 00:00:00.124; eta@25%=00:00:00.000 eta@50%=00:00
 | Exit code | Meaning |
 |---|---|
 | 0 | No new `Divergent` results (and no new `Unknown` when `--fail-on unknown`) |
-| 1 | At least one `Divergent` result that is `new` relative to `--baseline` |
-| 2 | `--fail-on unknown` and at least one new `Unknown` result |
+| 1 | At least one `Divergent` result that is `new` relative to `--baseline`: EQ002, EQ006, or an EQ007 runtime exposure with a witness (`properties.model`) |
+| 2 | `--fail-on unknown` and at least one new `Unknown` result: EQ003, or an EQ007 without a witness |
 | 3 | Usage error: bad arguments, missing or unparseable file, no frontend for the paths |
 | 4 | A C# project was skipped because it failed to load (the SARIF lists it and is still written), or a side had no C# project that loaded (no SARIF). Outranks 1 and 2. A modern project that loads but does not compile is not skipped: its methods that do not bind are `Unknown` results with reason `unbound`, the rest are compared, and the exit code is 0, 1 or 2 as the verdicts say |
 | 5 | At least one pair's lowering or verification crashed (the SARIF lists it as a tool-execution notification and is still written), or any other unhandled internal error. Outranks 1, 2 and 4 |
 
-Output is always SARIF 2.1.0 (rules EQ001 to EQ006); the exact meaning of each verdict
+An EQ007 is an unedited body a runtime change reaches (ADR 0060): it exits as the Divergent or Unknown it is, so
+relabelling it changes no exit code, but a baseline written before EQ007 existed shows each such result as `new` once.
+
+Output is always SARIF 2.1.0 (rules EQ001 to EQ007); the exact meaning of each verdict
 and of `baselineState` is in [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md).
 
 A real `Divergent` result, from `equiv compare --legacy samples/added-branch/legacy/*.sln
@@ -401,7 +405,7 @@ has two read-only tools that write no file:
 
 - `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
   `bound`, `timeoutMs`, `ilFallback` (`--il-fallback`) and `mode` (`--mode`). The result is a short summary (`Equivalent n, Divergent n, Unknown n,
-  skipped projects n, exit code k`, then the review list's lines), then the SARIF log `equiv compare` would write, as JSON text.
+  Runtime exposure n, skipped projects n, exit code k`, then the review list's lines), then the SARIF log `equiv compare` would write, as JSON text.
 - `lower_only`: `legacy`, `modern` and optionally `config` and `ilFallback`; the same as `equiv compare --lower-only`.
 
 An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#

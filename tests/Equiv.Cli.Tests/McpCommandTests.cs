@@ -78,7 +78,7 @@ public sealed class McpCommandTests
         CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
 
         Assert.Equal(
-            "Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 1\nreview list: 1 groups for 1 flagged results\n  EQ006 count=1 rank=40.002 runtime-change:System.String::IndexOf(",
+            "Equivalent 0, Divergent 1, Unknown 0, Runtime exposure 0, skipped projects 0, exit code 1\nreview list: 1 groups for 1 flagged results\n  EQ006 count=1 rank=48.002 runtime-change:System.String::IndexOf(",
             Text(result.Content[0]));
     }
 
@@ -120,9 +120,9 @@ public sealed class McpCommandTests
 
         Assert.Equal(
             [
-                "Equivalent 1, Divergent 1, Unknown 1, skipped projects 0, exit code 1",
+                "Equivalent 1, Divergent 1, Unknown 1, Runtime exposure 0, skipped projects 0, exit code 1",
                 "review list: 2 groups for 2 flagged results",
-                "  EQ002 count=1 rank=60.002 proofMethod:none",
+                "  EQ002 count=1 rank=64.002 proofMethod:none",
                 "  EQ003 count=1 rank=0.002 timeout",
             ],
             Text(result.Content[0]).Split('\n'),
@@ -239,7 +239,7 @@ public sealed class McpCommandTests
 
         CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
 
-        Assert.Equal("Equivalent 1, Divergent 0, Unknown 0, skipped projects 0, exit code 0\nreview list: 0 groups for 0 flagged results", Text(result.Content[0]));
+        Assert.Equal("Equivalent 1, Divergent 0, Unknown 0, Runtime exposure 0, skipped projects 0, exit code 0\nreview list: 0 groups for 0 flagged results", Text(result.Content[0]));
         Assert.Contains("uncovered-runtime-range", Text(result.Content[1]), StringComparison.Ordinal);
     }
 
@@ -265,7 +265,7 @@ public sealed class McpCommandTests
 
         Assert.NotEqual(true, result.IsError);
         Assert.Equal(2, result.Content.Count);
-        Assert.Equal("Equivalent 2, Divergent 1, Unknown 1, skipped projects 0, exit code 1", VerdictLine(result));
+        Assert.Equal("Equivalent 2, Divergent 1, Unknown 1, Runtime exposure 0, skipped projects 0, exit code 1", VerdictLine(result));
         SarifLog log = Parse(Text(result.Content[1]));
         Assert.Equal(5, log.Runs[0].Results.Count);
         Assert.Single(backend.Calls.Select(static o => o.Bound).Distinct());
@@ -352,7 +352,7 @@ public sealed class McpCommandTests
         CallToolResult second = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path, baseline: baseline.Path)).ConfigureAwait(true);
 
         // The unchanged Divergent is in the run's list and not in the summary's, which counts new and updated results (ticket P2-064).
-        Assert.Equal("Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 0\nreview list: 0 groups for 0 flagged results", Text(second.Content[0]));
+        Assert.Equal("Equivalent 0, Divergent 1, Unknown 0, Runtime exposure 0, skipped projects 0, exit code 0\nreview list: 0 groups for 0 flagged results", Text(second.Content[0]));
         Assert.All(Parse(Text(second.Content[1])).Runs[0].Results, static r => Assert.Equal(BaselineState.Unchanged, r.BaselineState));
     }
 
@@ -370,7 +370,7 @@ public sealed class McpCommandTests
         CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
 
         Assert.NotEqual(true, result.IsError);
-        Assert.Equal("Equivalent 1, Divergent 0, Unknown 0, skipped projects 1, exit code 4", VerdictLine(result));
+        Assert.Equal("Equivalent 1, Divergent 0, Unknown 0, Runtime exposure 0, skipped projects 1, exit code 4", VerdictLine(result));
     }
 
     [Fact]
@@ -477,7 +477,7 @@ public sealed class McpCommandTests
 
         Assert.Empty(backend.Calls);
         Assert.NotEqual(true, result.IsError);
-        Assert.Equal("Equivalent 0, Divergent 0, Unknown 0, skipped projects 0, exit code 0", Text(result.Content[0]));
+        Assert.Equal("Equivalent 0, Divergent 0, Unknown 0, Runtime exposure 0, skipped projects 0, exit code 0", Text(result.Content[0]));
         Assert.Equal(["EQ004", "EQ005"], Parse(Text(result.Content[1])).Runs[0].Results.Select(static r => r.RuleId).Order(StringComparer.Ordinal), StringComparer.Ordinal);
     }
 

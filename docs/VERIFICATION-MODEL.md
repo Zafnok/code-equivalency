@@ -126,9 +126,20 @@ generator emits are no procedures (ADR 0055; P2-118). Every result carries `prop
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
+A pair whose bound texts are equal and that only a runtime rule keeps out of congruence
+(`properties.notCongruent.component: runtime-rule`) is a **runtime exposure** (ADR 0060). Nobody edited its
+body, so the only thing that can make its two sides differ is the documented runtime change the rule names. It is
+lowered and sent to the solver as any other pair; only what its outcome is reported as changes. A proof is still
+Equivalent (EQ001). A counterexample, whose call to the runtime-changed member decides the outcome, is a *witnessed*
+exposure, EQ007 with `properties.model`; an undecided pair, whatever the reason, is an *unwitnessed* one, EQ007 keeping
+`properties.unknownReason`. An unedited `extern` function a rule reaches is one of these, never Unknown `no-body`. A
+Divergent with no runtime-changed call, a difference equal texts cannot hold, stays EQ002 and is a soundness or modelling
+finding. A pair whose text differs and that also calls a runtime-changed member is no exposure: the edit is in play.
+
 Running the code on the two real runtimes (`--execute`, ADR 0035) is a second oracle beside the
 solver, and execution never proves. It can confirm a Divergent (`replay`), show one
-(`proofMethod: observed`, a Divergent the runtimes were seen to produce), or bound an Unknown with
+(`proofMethod: observed`, a Divergent the runtimes were seen to produce), raise a runtime exposure to EQ006 (ADR 0060
+decision 4: a reproduced witness, or a difference differential testing observed), or bound an Unknown with
 a likelihood (`differentialTesting`, the Good-Turing chance that the next generated input shows
 new behaviour, stated for the generators' input distribution). A tested Unknown stays Unknown. No
 number of passing runs makes a result Equivalent, and a `line` Unknown's residual claim, which is a
@@ -665,7 +676,8 @@ Migration-specific normalisations (applied to both sides before matching):
   x86, `GetHashCode` randomisation, serialization defaults), each row with the runtime
   that changed it (`changedIn`). A matched pair of calls to such a member is never
   treated as the same uninterpreted function; it produces Divergent with ruleId EQ006
-  and a link to the breaking-change entry. Users may suppress per member in
+  and a link to the breaking-change entry, or, in a body nobody edited, a runtime exposure, EQ007, with or without
+  a model (section 1; ADR 0060). Users may suppress per member in
   `equiv.config.json`.
   A row may carry a `precondition` on the call's arguments (ticket P2-073): `caseInsensitivePattern`
   on the `Regex` row, `twoDigitYearFormat` on the `DateTime` and `DateTimeOffset` parsing rows,
@@ -775,8 +787,8 @@ are lowered and fingerprinted with that one interval. The rules are:
   .NET Framework version.
 
 On a same-runtime pair the interval is empty: no callee is runtime-changed, no pure function is
-side-specific by a runtime rule, runtime sensitivity never blocks congruence, and EQ006 cannot be
-reported. A .NET 8 to .NET 10 pair gets only the rows changed in .NET 9 or .NET 10. A .NET Framework
+side-specific by a runtime rule, runtime sensitivity never blocks congruence, and neither EQ006 nor EQ007
+can be reported. A .NET 8 to .NET 10 pair gets only the rows changed in .NET 9 or .NET 10. A .NET Framework
 4.8 to .NET 10 pair crosses every row, as before. When a pair's interval reaches below the oldest
 .NET version the table covers (`coveredFrom`, `netcoreapp3.0`), the run carries one `warning`
 tool-execution notification with descriptor id `uncovered-runtime-range` naming the widest
@@ -1105,6 +1117,22 @@ caller then runs through the whole ladder as usual.
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link and both ends of the pair's runtime interval in `message`: `... diverges via a runtime-changed API between net8.0 and net10.0 (...)`; only for a row that applies inside that interval, ADR 0040) |
+| Divergent or Unknown on a runtime exposure | `warning` | `fail` | EQ007 (ADR 0060: a pair whose equal texts only a runtime rule keeps out of congruence; with `properties.model` where the solver found the input on which the runtime-changed call decides the outcome, with `properties.unknownReason` where it did not; below) |
+
+A runtime exposure's result, EQ007 (`RuntimeExposure`, ADR 0060 decision 3), is not EQ006 or EQ003: its body is
+unedited, so it claims neither that an edit changes behaviour nor only that the solver gave up. Its message says so and
+names the interval and every rule: `N.Paths::Join(string): unedited body; the runtime change between net48 and net5.0
+reaches it through System.IO.Path::Combine(string,string) (<url>)`, then `Witness: <model>` or `Whether it reaches the
+outcome is unknown (<reason>): <detail>`. `properties.runtimeExposure` lists one `{ rule, changedIn, url, precondition }`
+per rule `notCongruent` names, legacy side first: `rule` is the `runtime-changes.json` row's `member`, `x87`,
+`float-to-integer`, `extern` or `extern:<id>`, and `changedIn`, the page `url` and the row's `precondition` name
+(`invalidPath`, `cultureSensitiveText`, ...) are each left out when the rule has none. `helpUri` is the first rule's
+page. It carries every other property a non-Equivalent result carries. An Equivalent on such a pair stays EQ001 and an
+EQ002 stays EQ002. Under `--execute` (ADR 0035), a witnessed exposure is replayed as EQ006 is; `replay: reproduced`,
+or a difference differential testing observes on an unwitnessed one, makes the result EQ006 with `proofMethod:
+observed` and its `runtimeExposure`, and equal outcomes leave it EQ007. Execution never makes an exposure Equivalent.
+Exit codes read the verdict, not the rule id: a witnessed EQ007 counts as a Divergent (exit 1), an unwitnessed one as an
+Unknown. A baseline written before ADR 0060 shows each result it moved as `new` once, since its rule id changed.
 
 Every verdict on a matched pair with bodies also carries `properties.assumedCallees` and
 `properties.unprovenAssumptions` (ADR 0019), `properties.equivalencesApplied` when a
@@ -1678,14 +1706,14 @@ only `new` results unless `--no-baseline` is given. Accepting a divergence as th
 behaviour is done by committing the SARIF file as the baseline, nothing more.
 
 `new` versus `updated` is decided by procedure identity *and* rule id (the verdict's kind,
-EQ001-EQ005): a rule-id change for an identity already in the baseline — e.g. Equivalent
+EQ001-EQ007): a rule-id change for an identity already in the baseline — e.g. Equivalent
 (EQ001) regressing to Divergent (EQ002) — is always `new`, so the exit code never misses it.
 `updated` is reserved for a same-rule-id fingerprint change (e.g. a different counterexample
 on a procedure that was already Divergent); that distinction is not exit-code-significant, so
 it does not depend on the "model hash" half of the fingerprint being identical across runs of
 the same underlying divergence.
 
-Every flagged result, one whose rule id is EQ002, EQ003 or EQ006, belongs to a review group, and
+Every flagged result, one whose rule id is EQ002, EQ003, EQ006 or EQ007, belongs to a review group, and
 the groups are ranked, so that a reviewer reads a short list of causes and not every method (ticket
 P2-064; ADR 0006's 2026-10-01 clarification). The result carries its group's key in
 `properties.reviewGroup` and its group's `rank`, SARIF's own result property (0 to 100, higher is
@@ -1694,6 +1722,9 @@ result already carries and reads every list as a set, so it is the same on every
 inputs:
 - EQ006: `runtime-change:` and the `member` of the runtime-changes row the message cites, for
   example `runtime-change:System.String::GetHashCode(`;
+- EQ007: as EQ006, the row its witness's call matched; an unwitnessed one, and an EQ006 the real runtimes showed on an
+  exposure, by the first `runtimeExposure` rule: `runtime-change:System.IO.Path::Combine(string,string)`,
+  `runtime-change:extern`;
 - EQ002: `calls:` and the call identities that only one side's trace in the counterexample holds,
   sorted and joined by `|`. Where the migration swapped one member for another, that is the two
   members: `calls:System.Convert::ToInt32(string)|System.Int32::Parse(string)`. When both traces
@@ -1709,18 +1740,19 @@ group's tier and size. The tiers, highest first:
 1. a Divergent the real runtimes showed, EQ002 or EQ006: `proofMethod: observed`, or `replay: reproduced`;
 2. any other EQ002;
 3. any other EQ006;
-4. EQ003 with `scope: line`;
-5. EQ003 with `scope: method`.
+4. EQ007 (ADR 0060 decision 5);
+5. EQ003 with `scope: line`;
+6. EQ003 with `scope: method`.
 
 `replay` and `scope` are per result, so a group takes the best tier any of its results is in. The
-rank is `20 x (5 - tier) + min(count, 9999) / 500`: tier 1 is 80.002 to 99.998, tier 5 is 0.002 to
-19.998, and inside a tier a larger group ranks higher. It depends on the group alone, never on the
+rank is `16 x (6 - tier) + min(count, 7999) / 500`: tier 1 is 80.002 to 95.998, tier 6 is 0.002 to
+15.998, and inside a tier a larger group ranks higher. It depends on the group alone, never on the
 run's other groups.
 
 Every run that is not `--lower-only` writes `run.properties.reviewList`: one entry per group,
 highest rank first and equal ranks by `group`, then `ruleId`. An entry has `group`, `ruleId`, `rank`,
 `count` and `identities`, the procedure identities of its first five results in result order. The
-counts sum to the number of EQ002, EQ003 and EQ006 results in the log. That includes a baseline's
+counts sum to the number of EQ002, EQ003, EQ006 and EQ007 results in the log. That includes a baseline's
 carry-overs (`absent`, or `unchanged` with `unverified: true`), which keep the `reviewGroup` they
 were written with; one from a log written before this property has the group `ungrouped`. A
 `--lower-only` run writes no list, and its results (an `unmatched-overload` Unknown) still carry
@@ -1730,7 +1762,8 @@ were written with; one from a log written before this property has the group `un
 for <R> flagged results`, then the ten highest-ranked groups, one line each, as
 `  <ruleId> count=<n> rank=<rank> <group>`. These lines count only `new` and `updated` results, so
 against a baseline they list what the run changed, and a group with no such result has no line.
-`equiv mcp`'s `compare` returns the same lines in its summary, after the verdict counts, and never
+`equiv mcp`'s `compare` returns the same lines in its summary, after the verdict counts (`Equivalent n, Divergent n,
+Unknown n, Runtime exposure n, ...`: EQ001, EQ002 with EQ006, EQ003, EQ007), and never
 on stdout (ADR 0033). No verdict, rule id, level, fingerprint, `baselineState` or exit code depends
 on a group or a rank.
 
@@ -1809,4 +1842,9 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   input that satisfies the condition gives equal observables on the CLR. The condition is evaluated
   as the C# its `text` is, so a text that is not a predicate over the modern side's parameters fails
   too. 200 pairs per PR, with the gate's seed.
+- Runtime exposure (ADR 0060; `RuntimeExposureTests` in `Equiv.Core.Tests`, ticket P2-238): on a pair whose
+  `notCongruent` is `runtime-rule`, each of the four outcomes (EQ001, EQ002, EQ007 with a model, EQ007 with an
+  `unknownReason`) and the two execution results that make it EQ006 have a test, with a snapshot of an unedited body
+  calling `Path.Combine` across net48 and net5.0 with and without a model; and a run's exit code is the same with and
+  without the relabelling, under both `--fail-on` values (`CompareCommandTests`).
 - Every row in the tables above has at least one unit test named after it.

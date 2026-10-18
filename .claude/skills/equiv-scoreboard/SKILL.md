@@ -57,8 +57,9 @@ percentages. A changed pair is ADR 0034's: matched and not congruent.
 | Changed pairs the solver proves | solver Equivalent / changed pairs | same |
 | Unknown | Unknown / matched pairs, then / changed pairs, then the count by reason | same; leave `unmatched-overload` out, it is not a matched pair |
 | Divergent | (EQ002 + EQ006) / matched pairs, then / changed pairs | same |
-| Divergent precision | confirmed / (confirmed + false positive), undetermined left out, per pair kind (migration, upgrade, cleanup) | the newest adjudication of each kind: `*-divergent-audit.md`, `*-upgrade-verdict.md`, `*-cleanup-verdict.md` |
-| Left for a reviewer | (Unknown + Divergent) / matched pairs | the SUMMARYs |
+| Runtime exposure | EQ007 / matched pairs, then / changed pairs, then how many have a witness input (`properties.model`) and how many do not (ADR 0060) | same |
+| Divergent precision | confirmed / (confirmed + false positive) over EQ002 and EQ006 only, undetermined left out, per pair kind (migration, upgrade, cleanup) | the newest adjudication of each kind: `*-divergent-audit.md`, `*-upgrade-verdict.md`, `*-cleanup-verdict.md` |
+| Left for a reviewer | (Unknown + Divergent + runtime exposure) / matched pairs | the SUMMARYs |
 | Soundness | seeded behaviour changes reported Equivalent, over seeds applied; false Equivalents found on a real pair (a count, with the ticket each became); open `P2-nnn-soundness-*` tickets by id | newest verdict with a `seeded` run; the adjudications; `docs/tickets/` |
 | Large pairs that run to a result | pairs whose latest `full` run wrote SARIF with no crashed pair (exit 0, 1 or 2) / large pairs in `pairs.csv` | SUMMARY or a done ticket's Notes |
 | Run time | mean wall-clock of the large pairs' latest runs, and the range | SUMMARY `wall-clock` |

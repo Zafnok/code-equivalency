@@ -425,7 +425,7 @@ public sealed partial class CompareCommandTests
             [
                 "analysed lines of code: legacy=10 modern=20",
                 "review list: 2 groups for 4 flagged results",
-                "  EQ002 count=3 rank=60.006 calls:N::New()|N::Old()",
+                "  EQ002 count=3 rank=64.006 calls:N::New()|N::Old()",
                 "  EQ003 count=1 rank=0.002 timeout",
                 string.Empty,
             ],
@@ -434,10 +434,10 @@ public sealed partial class CompareCommandTests
         Run run = sink.Log!.Runs[0];
         Assert.True(run.TryGetSerializedPropertyValue("reviewList", out string? list));
         Assert.Equal(
-            """[{"group":"calls:N::New()|N::Old()","ruleId":"EQ002","rank":60.006,"count":3,"identities":["T::A()","T::B()","T::C()"]},{"group":"timeout","ruleId":"EQ003","rank":0.002,"count":1,"identities":["T::Slow()"]}]""",
+            """[{"group":"calls:N::New()|N::Old()","ruleId":"EQ002","rank":64.006,"count":3,"identities":["T::A()","T::B()","T::C()"]},{"group":"timeout","ruleId":"EQ003","rank":0.002,"count":1,"identities":["T::Slow()"]}]""",
             list);
         Assert.Equal(
-            [-1.0, 0.002, 60.006, 60.006, 60.006, -1.0],
+            [-1.0, 0.002, 64.006, 64.006, 64.006, -1.0],
             run.Results.Select(static r => r.Rank));
     }
 
@@ -2321,6 +2321,47 @@ public sealed partial class CompareCommandTests
         Result result = Assert.Single(sink.Log!.Runs[0].Results);
         Assert.Equal(ruleId, result.RuleId);
         Assert.Contains(message, result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-238 criterion 4 (ADR 0060 decision 5): reporting a pair as a runtime exposure changes its rule id, never the
+    /// exit code. A witnessed EQ007 exits as the EQ006 it was, an unwitnessed one as the EQ003 it was, under either
+    /// <c>--fail-on</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("divergent", true, "EQ006", ExitCodes.Divergent)]
+    [InlineData("unknown", true, "EQ006", ExitCodes.Divergent)]
+    [InlineData("divergent", false, "EQ003", ExitCodes.Success)]
+    [InlineData("unknown", false, "EQ003", ExitCodes.UnknownPresent)]
+    public void ARuntimeExposureExitsAsItsVerdictDidBeforeIt(string failOn, bool witnessed, string ruleBefore, int expectedExit)
+    {
+        IrCallRecord record = new(new CallIdentity("System.IO.Path::Combine(string,string)", RuntimeChanged: true), []);
+        Verdict verdict = witnessed ? new Divergent(Counterexample() with { Old = Run(1) with { Trace = [record] } }) : new Unknown(UnknownReason.Timeout, "slow");
+        FingerprintDifference exposure = new(FingerprintDifference.RuntimeRule, "System.IO.Path::Combine(string,string)");
+
+        (int exitBefore, Result before) = Compare(difference: null);
+        (int exitAfter, Result after) = Compare(exposure);
+
+        Assert.Equal(expectedExit, exitBefore);
+        Assert.Equal(exitBefore, exitAfter);
+        Assert.Equal(ruleBefore, before.RuleId);
+        Assert.Equal("EQ007", after.RuleId);
+        Assert.Equal(before.PartialFingerprints, after.PartialFingerprints);
+
+        (int ExitCode, Result Result) Compare(FingerprintDifference? difference)
+        {
+            using TempFile legacy = new();
+            using TempFile modern = new();
+            InMemoryReportSink sink = new();
+            int exitCode = ExitCodes.InternalError;
+            _ = CaptureStdOut(() => exitCode = CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, failOn, DryRun: false),
+                [new FakeFrontend("csharp", _ => true, new MatchResult([Pair(PairIdentity) with { Runtimes = Interval("net48", "net5.0"), FingerprintDifference = difference }], [], [], []))],
+                new FakeBackend(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = verdict }),
+                sink,
+                NullRunLog.Instance));
+            return (exitCode, Assert.Single(sink.Log!.Runs[0].Results));
+        }
     }
 
     private static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);

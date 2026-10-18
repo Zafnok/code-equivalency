@@ -63,6 +63,13 @@
               defaultConfiguration: {
                 level: error
               }
+            },
+            {
+              id: EQ007,
+              name: RuntimeExposure,
+              shortDescription: {
+                text: An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree.
+              }
             }
           ]
         }
@@ -79,7 +86,7 @@
             resultFingerprint/v1: 91aed6d0b18d138b21259495899fa98f81be9d05438aa1f956baaaae18575ea7
           },
           baselineState: new,
-          rank: 40.002,
+          rank: 48.002,
           properties: {
             model: inputs(bv32 0) old(returned bv32 1 outs() trace("System.String::GetHashCode()"())) new(returned bv32 2 outs() trace()),
             helpUri: https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0,

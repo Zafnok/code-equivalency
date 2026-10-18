@@ -1,7 +1,6 @@
 using System.Globalization;
 
 using Equiv.Core.Ir;
-using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis.Sarif;
@@ -9,12 +8,12 @@ using Microsoft.CodeAnalysis.Sarif;
 namespace Equiv.Core.Reporting;
 
 /// <summary>
-/// The review list (ticket P2-064; VERIFICATION-MODEL.md section 6): every flagged result, EQ002, EQ003 or EQ006, is put
+/// The review list (ticket P2-064; VERIFICATION-MODEL.md section 6): every flagged result, EQ002, EQ003, EQ006 or EQ007, is put
 /// in a group by its cause (<see cref="KeyOf"/>, SARIF <c>properties.reviewGroup</c>), and each group gets one SARIF
 /// <c>rank</c>, so that a reviewer reads tens of groups, most certain first, instead of every method. A group is a rule
 /// id and a key. It takes the best tier any of its results is in: a Divergent the real runtimes showed
-/// (<c>proofMethod: observed</c> or <c>replay: reproduced</c>), any other EQ002, EQ006, a line-scoped EQ003, a
-/// method-scoped EQ003. Inside a tier a larger group ranks higher. <see cref="Apply"/> reads the SARIF results, so a
+/// (<c>proofMethod: observed</c> or <c>replay: reproduced</c>), any other EQ002, EQ006, EQ007 (ADR 0060 decision 5;
+/// ticket P2-238), a line-scoped EQ003, a method-scoped EQ003. Inside a tier a larger group ranks higher. <see cref="Apply"/> reads the SARIF results, so a
 /// baseline's carry-overs are grouped, ranked and counted like the run's own. Nothing here changes a verdict, a rule id, a
 /// fingerprint or an exit code (ADR 0006's 2026-10-01 clarification).
 /// </summary>
@@ -31,7 +30,8 @@ public static class ReviewList
 
     private const string DivergentRule = "EQ002";
     private const string UnknownRule = "EQ003";
-    private const string RuntimeChangeRule = "EQ006";
+    private const string RuntimeChangeRule = VerdictRule.RuntimeChangeRule;
+    private const string RuntimeExposureRule = VerdictRule.RuntimeExposureRule;
 
     /// <summary>How many of a group's procedure identities its <c>reviewList</c> entry names.</summary>
     private const int IdentitiesListed = 5;
@@ -39,8 +39,8 @@ public static class ReviewList
     /// <summary>How many groups <see cref="Lines"/> prints.</summary>
     private const int GroupsPrinted = 10;
 
-    /// <summary>A tier is 20 wide and a result is worth 0.002, so a group's size counts up to here.</summary>
-    private const int LargestCounted = 9999;
+    /// <summary>A tier is 16 wide and a result is worth 0.002, so a group's size counts up to here.</summary>
+    private const int LargestCounted = 7999;
 
     /// <summary>
     /// What <c>equiv compare</c> prints after the analysed line counts, and what <c>equiv mcp</c> adds to its summary:
@@ -75,7 +75,8 @@ public static class ReviewList
     /// The group key of <paramref name="verdict"/>, or null when it is not a flagged one. It is derived from what the
     /// verdict already carries and reads every list as a set, so it is the same on every run of the same inputs:
     /// <list type="bullet">
-    /// <item>EQ006: <c>runtime-change:</c> and the table row's member, the one the message cites;</item>
+    /// <item>EQ006 and EQ007: <c>runtime-change:</c> and the table row's member, the one the message cites, or for an
+    /// exposure with no counterexample its first rule (<see cref="ResultRule.RuntimeMember"/>);</item>
     /// <item>EQ002: <c>calls:</c> and the call identities only one side's trace holds, sorted and joined by <c>|</c> (the
     /// migration swapped one member for another); when both traces call the same members, <c>proofMethod:observed</c>, or
     /// <c>proofMethod:none</c> for a solver's counterexample, which carries no <c>proofMethod</c>;</item>
@@ -83,11 +84,11 @@ public static class ReviewList
     /// behind it, sorted and joined by <c>+</c>: an opaque Unknown's causes, an abstraction Unknown's opaque fragments.</item>
     /// </list>
     /// </summary>
-    internal static string? KeyOf(Verdict verdict, RuntimeChange? runtimeChange) => verdict switch
+    internal static string? KeyOf(Verdict verdict, ResultRule rule) => (verdict, rule.RuntimeMember) switch
     {
-        Divergent when runtimeChange is not null => $"runtime-change:{runtimeChange.Member}",
-        Divergent divergent => DivergentKey(divergent),
-        Unknown unknown => UnknownKey(unknown),
+        (Divergent or Unknown, { } member) => $"runtime-change:{member}",
+        (Divergent divergent, _) => DivergentKey(divergent),
+        (Unknown unknown, _) => UnknownKey(unknown),
         _ => null,
     };
 
@@ -150,7 +151,7 @@ public static class ReviewList
     private static List<Group> Groups(IEnumerable<Result> results) =>
     [
         .. results
-            .Where(static r => r.RuleId is DivergentRule or UnknownRule or RuntimeChangeRule)
+            .Where(static r => r.RuleId is DivergentRule or UnknownRule or RuntimeChangeRule or RuntimeExposureRule)
             .GroupBy(static r => (r.RuleId, Key: r.TryGetProperty(GroupProperty, out string? key) ? key : Ungrouped))
             .Select(static g => new Group(g.Key.Key, g.Key.RuleId, RankOf(g.Min(Tier), g.Count()), [.. g]))
             .OrderByDescending(static g => g.Rank)
@@ -158,23 +159,24 @@ public static class ReviewList
             .ThenBy(static g => g.RuleId, StringComparer.Ordinal),
     ];
 
-    /// <summary>1, the most certain, to 5, read from the properties <see cref="SarifReportWriter"/> wrote on the result.</summary>
+    /// <summary>1, the most certain, to 6, read from the properties <see cref="SarifReportWriter"/> wrote on the result.</summary>
     private static int Tier(Result result) => result.RuleId switch
     {
-        UnknownRule => Has(result, "scope", "line") ? 4 : 5,
+        UnknownRule => Has(result, "scope", "line") ? 5 : 6,
         _ when Has(result, "proofMethod", SarifReportWriter.ObservedProofMethod) || Has(result, "replay", "reproduced") => 1,
         DivergentRule => 2,
-        _ => 3,
+        RuntimeChangeRule => 3,
+        _ => 4,
     };
 
     private static bool Has(Result result, string property, string value) =>
         result.TryGetProperty(property, out string? found) && string.Equals(found, value, StringComparison.Ordinal);
 
     /// <summary>
-    /// <c>20 x (5 - tier) + min(count, 9999) / 500</c>: tier 1 is 80.002 to 99.998 and tier 5 is 0.002 to 19.998. It depends
+    /// <c>16 x (6 - tier) + min(count, 7999) / 500</c>: tier 1 is 80.002 to 95.998 and tier 6 is 0.002 to 15.998. It depends
     /// on the group's tier and size only, never on the run's other groups.
     /// </summary>
-    private static double RankOf(int tier, int count) => ((20_000 * (5 - tier)) + (2 * Math.Min(count, LargestCounted))) / 1000.0;
+    private static double RankOf(int tier, int count) => ((16_000 * (6 - tier)) + (2 * Math.Min(count, LargestCounted))) / 1000.0;
 
     private sealed record Group(string Key, string RuleId, double Rank, IReadOnlyList<Result> Results);
 }

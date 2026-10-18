@@ -6,7 +6,7 @@ namespace Equiv.Core.Verdicts;
 
 /// <summary>
 /// <see cref="Reason"/> plus a human-readable <see cref="Detail"/> (the solver's message, the opaque
-/// node's reason, the ambiguous overload's candidates, ...). SARIF EQ003. <see cref="Causes"/> are the lines it points
+/// node's reason, the ambiguous overload's candidates, ...). SARIF EQ003, or EQ007 on an unedited body (ADR 0060). <see cref="Causes"/> are the lines it points
 /// at, each reached opaque node and each abstraction it depends on (ADR 0027 decision 4). For
 /// <see cref="UnknownReason.Abstraction"/>, <see cref="Candidate"/> is the solver's model replayed on both sides, and
 /// <see cref="Abstractions"/> are what its divergence depends on (ADR 0026). None of the three is part of the result's

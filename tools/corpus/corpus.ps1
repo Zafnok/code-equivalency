@@ -838,6 +838,12 @@ switch ($PSCmdlet.ParameterSetName) {
             Show-Step ("  {0} {1}" -f $_.Name, $_.Count)
             $_.Group | Group-Object scope | Sort-Object Count -Descending | ForEach-Object { Show-Step ("    {0} {1}" -f $_.Name, $_.Count) }
         }
+        # P2-238 (ADR 0060): runtime exposures, those with a witness (properties.model) and the others by unknownReason.
+        Show-Step "== runtime exposure (EQ007): witnessed, and the others by unknownReason"
+        $exposures = @($results | Where-Object { $_.ruleId -eq 'EQ007' })
+        Show-Step ("  witnessed {0}" -f @($exposures | Where-Object { $null -ne (Get-Bag (Get-Bag $_ 'properties') 'model') }).Count)
+        $exposures | ForEach-Object { Get-Bag (Get-Bag $_ 'properties') 'unknownReason' } | Where-Object { $null -ne $_ } |
+            Group-Object | Sort-Object Count -Descending | ForEach-Object { Show-Step ("  not witnessed, {0} {1}" -f $_.Name, $_.Count) }
     }
 
     'RuntimeDiff' {

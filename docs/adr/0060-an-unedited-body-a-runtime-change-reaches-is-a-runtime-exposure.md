@@ -1,6 +1,6 @@
 # ADR 0060: An unedited body that a runtime change reaches is a runtime exposure (EQ007), not a Divergent or an Unknown
 
-Status: proposed (2026-10-17). Supersedes in part ADR 0040 decision 2 and VERIFICATION-MODEL section 6 (what a pair a
+Status: accepted (2026-10-17). Supersedes in part ADR 0040 decision 2 and VERIFICATION-MODEL section 6 (what a pair a
 runtime rule alone keeps out of congruence is reported as), and ADR 0058 decision 4 and ADR 0054 decision 4 (the rule id
 of an unedited `extern` function a runtime change reaches). Extends ADR 0019's `unprovenAssumptions` to a suppressed
 runtime-changes row.
