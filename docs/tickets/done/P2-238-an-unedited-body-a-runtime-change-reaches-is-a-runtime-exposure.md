@@ -1,5 +1,5 @@
 # P2-238 An unedited body a runtime change reaches is reported as a runtime exposure (EQ007)
-Status: in-progress
+Status: done (PR #545)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-212
