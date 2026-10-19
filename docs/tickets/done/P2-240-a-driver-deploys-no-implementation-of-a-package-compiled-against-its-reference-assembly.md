@@ -1,5 +1,5 @@
 # P2-240 Execution bug: a driver deploys no implementation of a NuGet package its project compiled against a reference assembly
-Status: in-progress
+Status: done (PR #550)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-237
