@@ -89,15 +89,17 @@ internal static class ProjectEmitter
     /// Deploys the file <paramref name="path"/> that <paramref name="compilation"/> references: a package's runtime assets
     /// in its place, else the file itself unless it is in a <paramref name="pack"/>.
     /// </summary>
-    private static string? Deploy(Compilation compilation, string path, bool referenceAssembly, bool pack, Deployment deployment)
-    {
-        if (deployment.Assets.For(deployment.Deployed, compilation, path, referenceAssembly) is not { } package)
-        {
-            return pack ? null : Copy(path, deployment);
-        }
+    private static string? Deploy(Compilation compilation, string path, bool referenceAssembly, bool pack, Deployment deployment) =>
+        deployment.Assets.For(deployment.Deployed, compilation, path, referenceAssembly) is { } package
+            ? Deploy(compilation, package, deployment)
+            : Unpackaged(path, pack, deployment);
 
-        return package.Error is { } error ? $"{compilation.AssemblyName}: {error}" : Copy(package.Files, deployment);
-    }
+    /// <summary>A package's runtime assets, or the error naming it.</summary>
+    private static string? Deploy(Compilation compilation, PackageFiles package, Deployment deployment) =>
+        package.Error is { } error ? $"{compilation.AssemblyName}: {error}" : Copy(package.Files, deployment);
+
+    /// <summary>A file no package owns: copied, unless the runtime supplies it from a <paramref name="pack"/>.</summary>
+    private static string? Unpackaged(string path, bool pack, Deployment deployment) => pack ? null : Copy(path, deployment);
 
     /// <summary>
     /// Every project is emitted as <c>&lt;assembly&gt;.dll</c>, an executable one too: both runtimes probe the application
