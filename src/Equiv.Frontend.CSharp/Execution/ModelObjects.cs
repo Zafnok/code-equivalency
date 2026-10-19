@@ -412,14 +412,14 @@ internal sealed class ModelObjects
         foreach ((IFieldSymbol field, IrMapValue map) in given)
         {
             string label = $"{field.ContainingType.Name}.{(field.AssociatedSymbol as IPropertySymbol)?.Name ?? field.Name}";
-            if (Value(field.Type, map.Read(element), $"{name}'s {label}") is not { } wire)
-            {
-                return null;
-            }
-
             if (!open.Peek().Fields.Contains(label, StringComparer.Ordinal))
             {
                 open.Peek().Fields.Add(label);
+            }
+
+            if (Value(field.Type, map.Read(element), $"{name}'s {label}") is not { } wire)
+            {
+                return null;
             }
 
             written.Add(heap.Field(field, wire));

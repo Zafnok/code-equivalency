@@ -442,7 +442,7 @@ public sealed class ReplayDriverFactoryTests : IDisposable
 
         Assert.Empty(plan.Reason);
         ReplayInput[] expected = [new("this", "constructor N.Greeter.Greeter()"), new("name", "value")];
-        Assert.Equal(expected, plan.Inputs.Legacy);
+        Assert.Equal(expected, plan.Inputs!.Legacy);
         Assert.Equal(expected, plan.Inputs.Modern);
     }
 
