@@ -132,7 +132,7 @@ public sealed class ReplayIntegrationTests : IDisposable
         }
         """;
 
-    private const string NoIr ="proc \"X\" () entry B0 B0: ret";
+    private const string NoIr = "proc \"X\" () entry B0 B0: ret";
 
     private const string ShoutIr = "proc \"X\" (%name: sort \"System.String\", %null.System.String: map<sort \"System.String\", bool>) entry B0 B0: ret";
 
