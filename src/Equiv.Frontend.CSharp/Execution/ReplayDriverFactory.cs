@@ -23,7 +23,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <c>EquivReplay&lt;n&gt;.exe</c> with an <c>app.config</c> on .NET Framework, <c>EquivReplay&lt;n&gt;.dll</c> with a
 /// <c>runtimeconfig.json</c> on .NET (<see cref="DriverRuntime"/>). A same-runtime pair runs both sides on that one runtime.
 /// A runtime <paramref name="hosts"/> does not find installed makes the plan not constructible, and none is used in its
-/// place. Its source is written beside it, so a reproduced divergence is one the user can read and run. <see cref="Plan"/> builds the same two drivers
+/// place. A .NET project that uses the Windows Desktop framework runs on that runtime's <c>Microsoft.WindowsDesktop.App</c>,
+/// which must be installed too (ticket P2-253). Its source is written beside it, so a reproduced divergence is one the user can read and run. <see cref="Plan"/> builds the same two drivers
 /// for an Unknown pair to be tested on generated inputs (ticket P1-008). <see cref="Probe"/> builds them for one case an
 /// agent supplies itself, with no model in play (ADR 0035, ADR 0036; ticket M5-002).
 /// </summary>
@@ -206,6 +207,12 @@ internal sealed class ReplayDriverFactory(
             return (null, target.Runtime is { } runtime ? DriverFactory.NotInstalled(runtime) : $"the {side} project {target.Compilation.AssemblyName} has no detected runtime");
         }
 
+        bool desktop = !host.IsFramework && UsesDesktop(target.Compilation);
+        if (desktop && host.DesktopVersion.Length == 0)
+        {
+            return (null, DriverFactory.NotInstalled(host.Target, desktop));
+        }
+
         string project = Path.Combine(sideDirectory, target.Compilation.AssemblyName!);
         if (!emitted.TryGetValue((target.Compilation, sideDirectory), out (Compilation Granted, string? Error) friend))
         {
@@ -234,9 +241,19 @@ internal sealed class ReplayDriverFactory(
             return (null, $"the {side} driver does not compile: {string.Join("; ", result.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error))}");
         }
 
-        host.WriteConfig(path, desktop: false);
+        host.WriteConfig(path, desktop);
         return (path, string.Empty);
     }
+
+    /// <summary>
+    /// Whether <paramref name="compilation"/>'s project uses the Windows Desktop framework (ticket P2-253): it compiles against
+    /// the <c>Microsoft.WindowsDesktop.App.Ref</c> pack, as the SDK resolves a <c>net&lt;v&gt;-windows</c> project with
+    /// <c>UseWindowsForms</c> or <c>UseWPF</c>, and every project that references one, since a framework reference flows to
+    /// its referencing projects. Its driver then runs on <c>Microsoft.WindowsDesktop.App</c>, as the project does.
+    /// </summary>
+    private static bool UsesDesktop(Compilation compilation) =>
+        compilation.References.OfType<PortableExecutableReference>().Select(static r => r.FilePath).OfType<string>()
+            .Any(static path => path.Split(['/', '\\']).Contains(DriverReferences.DesktopPack, StringComparer.OrdinalIgnoreCase));
 
     /// <summary>Whether <paramref name="compilation"/>'s references have <c>RuntimeHelpers.GetUninitializedObject</c>, as .NET 5 and later do.</summary>
     private static bool Uninitializes(Compilation compilation) =>

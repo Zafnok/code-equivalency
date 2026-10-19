@@ -108,7 +108,31 @@ public sealed class ReplayIntegrationTests : IDisposable
         }
         """;
 
-    private const string NoIr = "proc \"X\" () entry B0 B0: ret";
+    /// <summary>
+    /// Ticket P2-253's failures: a static constructor that cannot load <c>System.Windows.Forms</c>, a Windows Desktop assembly
+    /// that does not load, and, for contrast, a missing file and a missing assembly that is no Windows Desktop one.
+    /// </summary>
+    private const string Loads = """
+        namespace N
+        {
+            public static class S
+            {
+                public static int Load(int kind)
+                {
+                    switch (kind)
+                    {
+                        case 0: throw new System.TypeInitializationException("N.AppSettings", new System.IO.FileNotFoundException("gone", "System.Windows.Forms, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"));
+                        case 1: throw new System.IO.FileLoadException("bad", "PresentationCore");
+                        case 2: throw new System.IO.FileNotFoundException("gone", "settings.xml");
+                        case 3: throw new System.IO.FileNotFoundException("gone");
+                        default: throw new System.IO.FileNotFoundException("gone", "Newtonsoft.Json, Version=13.0.0.0");
+                    }
+                }
+            }
+        }
+        """;
+
+    private const string NoIr ="proc \"X\" () entry B0 B0: ret";
 
     private const string ShoutIr = "proc \"X\" (%name: sort \"System.String\", %null.System.String: map<sort \"System.String\", bool>) entry B0 B0: ret";
 
@@ -212,6 +236,32 @@ public sealed class ReplayIntegrationTests : IDisposable
 
         Assert.Empty(plan.Reason);
         Assert.Equal(legacyOutcome, $"{l.Kind} {l.Canonical}");
+        Assert.Equal(modernOutcome, $"{m.Kind} {m.Canonical}");
+        Assert.Equal(equal, Replayer.Compare(l, m).Equal);
+    }
+
+    /// <summary>
+    /// Ticket P2-253 criterion 2: an exception that is, or wraps, a Windows Desktop assembly that did not load is not
+    /// constructible, so no replay compares it; any other missing file is an exception the member threw.
+    /// </summary>
+    [Theory]
+    [InlineData("0", "NotConstructible \"System.TypeInitializationException loading System.Windows.Forms\"", null)]
+    [InlineData("1", "NotConstructible \"System.IO.FileLoadException loading PresentationCore\"", null)]
+    [InlineData("2", "Threw \"System.IO.FileNotFoundException\"", true)]
+    [InlineData("3", "Threw \"System.IO.FileNotFoundException\"", true)]
+    [InlineData("4", "Threw \"System.IO.FileNotFoundException\"", true)]
+    public void AWindowsDesktopAssemblyThatDidNotLoad_IsNotConstructible(string kind, string modernOutcome, bool? equal)
+    {
+        CSharpCompilation legacy = Compile(Loads.Replace("switch (kind)", "switch (kind + 99)", StringComparison.Ordinal), "Loads");
+        CSharpCompilation modern = Compile(Loads, "Loads");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(
+            Self, Self, DriverReferences.Installed().Host, legacy, Method(legacy, "N.S", "Load"), NoIr, modern, Method(modern, "N.S", "Load"), NoIr);
+        using JsonDocument json = JsonDocument.Parse($"[{kind}]");
+
+        ReplayPlan plan = factory.Probe(pair, [.. json.RootElement.EnumerateArray()], receiver: null, directory);
+        (ExecutionOutcome l, ExecutionOutcome m) = new Replayer(new ChildProcessHost(ChildProcessHost.DefaultMemoryLimitBytes).Within(directory)).Run(plan, Replayer.Culture);
+
+        Assert.Equal("Threw \"System.IO.FileNotFoundException\"", $"{l.Kind} {l.Canonical}");
         Assert.Equal(modernOutcome, $"{m.Kind} {m.Canonical}");
         Assert.Equal(equal, Replayer.Compare(l, m).Equal);
     }

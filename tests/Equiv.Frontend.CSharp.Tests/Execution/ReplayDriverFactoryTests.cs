@@ -159,6 +159,59 @@ public sealed class ReplayDriverFactoryTests : IDisposable
             static driver => Assert.Contains("\"tfm\": \"net8.0\"", File.ReadAllText(Path.ChangeExtension(driver, ".runtimeconfig.json")), StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Ticket P2-253 criterion 1: the project that compiles against the Windows Desktop reference pack runs on
+    /// <c>Microsoft.WindowsDesktop.App</c> of its runtime's version; the one that does not stays on <c>Microsoft.NETCore.App</c>.
+    /// </summary>
+    [Fact]
+    public void ADesktopProject_RunsOnTheDesktopRuntime()
+    {
+        CSharpCompilation legacy = Compile(Greeter, "Greeter");
+        CSharpCompilation modern = Compile(Greeter, "Greeter", DesktopPack());
+        TargetRuntime net5 = TargetRuntime.Parse("net5.0")!;
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(
+            net5, net5, static target => new DriverRuntime(target, "5.0.17", "5.0.18"), legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        ExecutionDrivers drivers = factory.Create(pair, NullName(), directory).Drivers!;
+
+        string legacyConfig = File.ReadAllText(Path.ChangeExtension(drivers.Legacy, ".runtimeconfig.json"));
+        string modernConfig = File.ReadAllText(Path.ChangeExtension(drivers.Modern, ".runtimeconfig.json"));
+        Assert.Contains("\"tfm\": \"net5.0\"", legacyConfig, StringComparison.Ordinal);
+        Assert.Contains("\"framework\": { \"name\": \"Microsoft.NETCore.App\", \"version\": \"5.0.17\" }", legacyConfig, StringComparison.Ordinal);
+        Assert.Contains("\"tfm\": \"net5.0-windows\"", modernConfig, StringComparison.Ordinal);
+        Assert.Contains("\"framework\": { \"name\": \"Microsoft.WindowsDesktop.App\", \"version\": \"5.0.18\" }", modernConfig, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(drivers.Modern)!, "System.Windows.Forms.dll")));
+    }
+
+    /// <summary>
+    /// Ticket P2-253 criterion 3: a Windows Desktop project whose runtime has no <c>Microsoft.WindowsDesktop.App</c> installed
+    /// is not constructible, and <c>Microsoft.NETCore.App</c> does not stand in.
+    /// </summary>
+    [Fact]
+    public void ADesktopProject_WithoutTheDesktopRuntime_IsNotConstructible()
+    {
+        CSharpCompilation legacy = Compile(Greeter, "Greeter");
+        CSharpCompilation modern = Compile(Greeter, "Greeter", DesktopPack());
+        TargetRuntime net5 = TargetRuntime.Parse("net5.0")!;
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(
+            Net48, net5, static target => new DriverRuntime(target, "5.0.17"), legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        Assert.Equal("runtime net5.0-windows not installed", factory.Create(pair, NullName(), directory).Reason);
+        Assert.Equal("runtime net5.0-windows not installed", factory.Plan(pair, candidate: null, directory).Reason);
+        using JsonDocument json = JsonDocument.Parse("[\"a\"]");
+        Assert.Equal("runtime net5.0-windows not installed", factory.Probe(pair, [.. json.RootElement.EnumerateArray()], receiver: null, directory).Reason);
+        Assert.False(Directory.Exists(Path.Combine(directory, "modern")));
+    }
+
+    /// <summary>A stand-in <c>System.Windows.Forms</c> reference assembly in a <c>Microsoft.WindowsDesktop.App.Ref</c> pack, as the SDK resolves one.</summary>
+    private PortableExecutableReference DesktopPack()
+    {
+        string folder = Directory.CreateDirectory(Path.Combine(directory, "packs", "Microsoft.WindowsDesktop.App.Ref", "5.0.0", "ref", "net5.0")).FullName;
+        string path = Path.Combine(folder, "System.Windows.Forms.dll");
+        Assert.True(Compile("[assembly: System.Runtime.CompilerServices.ReferenceAssembly] namespace System.Windows.Forms { public class Form { } }", "System.Windows.Forms").Emit(path, cancellationToken: TestContext.Current.CancellationToken).Success);
+        return MetadataReference.CreateFromFile(path);
+    }
+
     /// <summary>Ticket P2-056 criterion 2: a side whose runtime is not installed, or that has none, is not constructible, and no other runtime stands in.</summary>
     [Theory]
     [InlineData(true, true, "runtime net48 not installed")]

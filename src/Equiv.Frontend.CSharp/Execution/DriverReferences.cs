@@ -19,6 +19,9 @@ internal sealed record DriverReferences(string FrameworkPacks, string FrameworkR
     private const string CoreApp = "Microsoft.NETCore.App";
     private const string DesktopApp = "Microsoft.WindowsDesktop.App";
 
+    /// <summary>The Windows Desktop reference pack's folder name, under <c>packs</c> (ticket P2-253).</summary>
+    internal const string DesktopPack = DesktopApp + ".Ref";
+
     public static DriverReferences Installed() =>
         Find(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), RuntimeEnvironment.GetRuntimeDirectory(), Environment.GetFolderPath(Environment.SpecialFolder.Windows));
 
@@ -62,7 +65,7 @@ internal sealed record DriverReferences(string FrameworkPacks, string FrameworkR
         List<string> references = host.IsFramework
             ? Framework(Path.Combine(FrameworkPacks, "v" + target.Version.ToString()))
             : Pack(packs, CoreApp + ".Ref", target);
-        List<string> desktop = host.DesktopVersion.Length > 0 ? Pack(packs, DesktopApp + ".Ref", target) : [];
+        List<string> desktop = host.DesktopVersion.Length > 0 ? Pack(packs, DesktopPack, target) : [];
         return references.Count == 0 ? null : host with { References = references, Desktop = desktop };
     }
 
