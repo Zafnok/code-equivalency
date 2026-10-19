@@ -29,8 +29,9 @@ public interface IReplayDriverFactory
     /// <summary>
     /// Emits both sides' projects and the two drivers of <paramref name="pair"/> into <paramref name="directory"/>, and
     /// builds one case from <paramref name="arguments"/>: JSON values in the method's own parameter order, its receiver
-    /// (if any) excluded (ADR 0035, ADR 0036; ticket M5-002's <c>probe</c>). Never throws for an argument it cannot build:
-    /// the plan is then not constructible, naming the parameter.
+    /// (if any) excluded (ADR 0035, ADR 0036; ticket M5-002's <c>probe</c>), and from <paramref name="receiver"/>, the
+    /// receiver's constructor or fields as JSON, or null for its default (ADR 0062 decision 4; ticket P2-245). Never throws
+    /// for an argument it cannot build: the plan is then not constructible, naming the parameter.
     /// </summary>
-    ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, string directory);
+    ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, JsonElement? receiver, string directory);
 }

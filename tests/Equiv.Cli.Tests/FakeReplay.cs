@@ -23,6 +23,9 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
 
     public List<(ProcedurePair Pair, IReadOnlyList<JsonElement> Arguments, string Directory)> Probes { get; } = [];
 
+    /// <summary>The receiver each probe was given, in order (ticket P2-245).</summary>
+    public List<JsonElement?> Receivers { get; } = [];
+
     public List<string> Starts { get; } = [];
 
     /// <summary>Every folder a host was bound to with <see cref="Within"/> (ticket P2-040).</summary>
@@ -33,6 +36,9 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
 
     /// <summary>When set, <see cref="Probe"/> returns a not-constructible plan with this reason instead of a runnable one.</summary>
     public string? ProbeReason { get; set; }
+
+    /// <summary>How <see cref="Probe"/>'s runnable plan says its inputs were built; none when unset (ticket P2-245).</summary>
+    public ReplayInputs? ProbeInputs { get; set; }
 
     public ReplayPlan Create(ProcedurePair pair, Counterexample counterexample, string directory)
     {
@@ -48,9 +54,10 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
         return TestingPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), [], []);
     }
 
-    public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, string directory)
+    public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, JsonElement? receiver, string directory)
     {
         Probes.Add((pair, arguments, directory));
+        Receivers.Add(receiver);
         Assert.True(Directory.Exists(directory));
 
         // A real ReplayDriverFactory.Probe leaves the emitted project and driver files behind, so the directory is
@@ -59,7 +66,7 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
         File.WriteAllText(Path.Combine(directory, "driver.cs"), string.Empty);
         return ProbeReason is { } reason
             ? ReplayPlan.NotConstructible(reason)
-            : ReplayPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), new ExecutionInput(["0"]), new ExecutionInput(["0"]));
+            : ReplayPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), new ExecutionInput(["0"]), new ExecutionInput(["0"])) with { Inputs = ProbeInputs };
     }
 
     public IDriverSession Start(string driver)

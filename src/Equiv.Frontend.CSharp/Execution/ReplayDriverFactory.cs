@@ -60,19 +60,42 @@ internal sealed class ReplayDriverFactory(
             return ReplayPlan.NotConstructible("the model is not over the pair's parameters");
         }
 
-        Dictionary<string, IrValue> nullness = ReplayArguments.Nullness(oldValues, newValues);
-        ReplayArguments.SideCase oldCase = ReplayArguments.Case(old.Method, pair.OldBody!, oldValues, nullness);
-        ReplayArguments.SideCase newCase = ReplayArguments.Case(@new.Method, pair.NewBody!, newValues, nullness);
+        Dictionary<string, IrValue> heap = ReplayArguments.Heap(oldValues, newValues);
+        ReplayArguments.SideCase oldCase = ReplayArguments.Case(old.Method, old.Compilation, pair.OldBody!, oldValues, heap, counterexample);
+        ReplayArguments.SideCase newCase = ReplayArguments.Case(@new.Method, @new.Compilation, pair.NewBody!, newValues, heap, counterexample);
+        ReplayPlan plan = Runnable(old, @new, oldCase, newCase, directory, uninitializes: true);
+        return plan.Drivers is null ? plan : plan with { AlikeReason = AlikeReason(counterexample) };
+    }
+
+    /// <summary>
+    /// The plan that runs <paramref name="oldCase"/> and <paramref name="newCase"/>: both sides' receivers built alike and
+    /// both members reached by one mechanism (ADR 0062 decisions 1 and 2), with how each input was built (decision 5).
+    /// </summary>
+    private ReplayPlan Runnable(ReplayTarget old, ReplayTarget @new, ReplayArguments.SideCase oldCase, ReplayArguments.SideCase newCase, string directory, bool uninitializes)
+    {
         if (oldCase.Input is null || newCase.Input is null)
         {
             return ReplayPlan.NotConstructible(oldCase.Input is null ? $"legacy: {oldCase.Reason}" : $"modern: {newCase.Reason}");
         }
 
+        DriverSource.Access access = DriverSource.Reach(old.Method, @new.Method);
+        if ((access == DriverSource.Access.Direct ? null : DriverSource.Unbound(old.Method) ?? DriverSource.Unbound(@new.Method)) is { } unbound)
+        {
+            return ReplayPlan.NotConstructible(unbound);
+        }
+
+        DriverSource.Receiver mode = ReplayArguments.Mode(oldCase, newCase);
         int number = ++drivers;
-        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(old, @new, directory, number);
+        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(
+            old,
+            @new,
+            directory,
+            number,
+            new DriverSource.Shape(mode, access, oldCase.Heap, Formatter: false) { Builds = true, Uninitializes = uninitializes },
+            new DriverSource.Shape(mode, access, newCase.Heap, Formatter: false) { Builds = true, Uninitializes = uninitializes });
         return pairDrivers is null
             ? ReplayPlan.NotConstructible(problem)
-            : ReplayPlan.Runnable(pairDrivers, oldCase.Input, newCase.Input) with { AlikeReason = AlikeReason(counterexample) };
+            : ReplayPlan.Runnable(pairDrivers, oldCase.For(mode), newCase.For(mode)) with { Inputs = new ReplayInputs(oldCase.Provenance(mode), newCase.Provenance(mode)) };
     }
 
     /// <summary>
@@ -99,7 +122,7 @@ internal sealed class ReplayDriverFactory(
         }
 
         int number = ++drivers;
-        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(old, @new, directory, number);
+        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(old, @new, directory, number, Tested, Tested);
         return pairDrivers is null
             ? TestingPlan.NotConstructible(problem)
             : TestingPlan.Runnable(
@@ -108,26 +131,18 @@ internal sealed class ReplayDriverFactory(
                 Seeds(pair, old, candidate));
     }
 
-    public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, string directory)
+    public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, JsonElement? receiver, string directory)
     {
         ArgumentNullException.ThrowIfNull(pair);
         ArgumentNullException.ThrowIfNull(arguments);
 
         ReplayTarget old = legacy[pair.Old];
         ReplayTarget @new = modern[pair.New];
-        ProbeArguments.SideCase oldCase = ProbeArguments.Case(old.Method, arguments);
-        ProbeArguments.SideCase newCase = ProbeArguments.Case(@new.Method, arguments);
-        if (oldCase.Input is null || newCase.Input is null)
-        {
-            return ReplayPlan.NotConstructible(oldCase.Input is null ? $"legacy: {oldCase.Reason}" : $"modern: {newCase.Reason}");
-        }
-
-        int number = ++drivers;
-        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(old, @new, directory, number);
-        return pairDrivers is null
-            ? ReplayPlan.NotConstructible(problem)
-            : ReplayPlan.Runnable(pairDrivers, oldCase.Input, newCase.Input);
+        return Runnable(old, @new, ProbeArguments.Case(old.Method, old.Compilation, arguments, receiver), ProbeArguments.Case(@new.Method, @new.Compilation, arguments, receiver), directory, uninitializes: false);
     }
+
+    /// <summary>A differential-testing driver's shape: <c>new T()</c>, the member called directly, inputs from the generators.</summary>
+    private static DriverSource.Shape Tested => new(DriverSource.Receiver.New, DriverSource.Access.Direct, new DriverHeap(), Formatter: false);
 
     /// <summary>
     /// Why generated inputs cannot be given to both methods alike: either cannot be called, they take parameters of
@@ -165,25 +180,25 @@ internal sealed class ReplayDriverFactory(
             return [];
         }
 
-        ReplayArguments.SideCase seed = ReplayArguments.Case(old.Method, pair.OldBody!, oldValues, ReplayArguments.Nullness(oldValues, newValues));
-        return seed.Input is { } input ? [input] : [];
+        ReplayArguments.SideCase seed = ReplayArguments.Case(old.Method, old.Compilation, pair.OldBody!, oldValues, ReplayArguments.Heap(oldValues, newValues), candidate);
+        return seed.Input is null || seed.Arguments.Any(static a => a.Built.Wire.StartsWith("[\"@", StringComparison.Ordinal)) ? [] : [seed.For(DriverSource.Receiver.New)];
     }
 
-    /// <summary>Compiles a driver for each side of the pair, in that order; or returns why one could not be.</summary>
-    private (ExecutionDrivers? Drivers, string Problem) SideDrivers(ReplayTarget old, ReplayTarget @new, string directory, int number)
+    /// <summary>Compiles a driver for each side of the pair, in that order, each of its shape; or returns why one could not be.</summary>
+    private (ExecutionDrivers? Drivers, string Problem) SideDrivers(ReplayTarget old, ReplayTarget @new, string directory, int number, DriverSource.Shape oldShape, DriverSource.Shape newShape)
     {
-        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true);
+        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true, oldShape);
         if (legacyDriver is null)
         {
             return (null, legacyProblem);
         }
 
-        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
+        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false, newShape);
         return modernDriver is null ? (null, modernProblem) : (new ExecutionDrivers(legacyDriver, modernDriver), string.Empty);
     }
 
     /// <summary>Emits <paramref name="target"/>'s project, once, and compiles a driver beside it; or returns why it could not.</summary>
-    private (string? Driver, string Problem) Driver(ReplayTarget target, string sideDirectory, int number, bool legacy)
+    private (string? Driver, string Problem) Driver(ReplayTarget target, string sideDirectory, int number, bool legacy, DriverSource.Shape shape)
     {
         string side = legacy ? "legacy" : ModernSide;
         if (Host(target) is not { } host)
@@ -205,7 +220,7 @@ internal sealed class ReplayDriverFactory(
 
         string name = "EquivReplay" + number.ToString(CultureInfo.InvariantCulture);
         string path = Path.Combine(project, name + host.Extension);
-        string source = DriverSource.Generate(target.Method, constructReceiver: true);
+        string source = DriverSource.Generate(target.Method, shape with { Formatter = !Uninitializes(target.Compilation) });
         File.WriteAllText(Path.ChangeExtension(path, ".cs"), source);
         CSharpCompilationOptions options = new(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release, deterministic: true);
         CSharpCompilation driver = CSharpCompilation.Create(
@@ -222,6 +237,10 @@ internal sealed class ReplayDriverFactory(
         host.WriteConfig(path, desktop: false);
         return (path, string.Empty);
     }
+
+    /// <summary>Whether <paramref name="compilation"/>'s references have <c>RuntimeHelpers.GetUninitializedObject</c>, as .NET 5 and later do.</summary>
+    private static bool Uninitializes(Compilation compilation) =>
+        compilation.GetTypesByMetadataName("System.Runtime.CompilerServices.RuntimeHelpers").SelectMany(static t => t.GetMembers("GetUninitializedObject")).Any();
 
     /// <summary>The installed runtime <paramref name="target"/>'s project runs on, or null when it has none or it is not installed.</summary>
     private DriverRuntime? Host(ReplayTarget target) => target.Runtime is { } runtime ? hosts(runtime) : null;

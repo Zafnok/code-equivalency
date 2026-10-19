@@ -1,5 +1,5 @@
 # P2-245 Execution reach: a replay or `probe` driver calls a private member, builds a receiver with no public parameterless constructor from the model's fields, and builds the arguments the model determines
-Status: todo
+Status: done (PR #551)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-240, P2-242
@@ -141,3 +141,73 @@ structs (P2-242). The second execution re-adjudication of all 71 (after this gro
   counts as confirmed without a trace).
 - Decision (filing): Depends on P2-240 as well as P2-242: a `reproduced` caused by a missing package implementation would
   be miscounted in criterion 6. Alternative: depend on P2-242 only and recheck. Rule: soundness first.
+- Deviation: ADR 0062 decision 3's delegate "answers each invocation with the model's interpretation of that open call".
+  The `Counterexample` a replay gets holds no call answers; they exist only in `Equiv.Verify.Z3`'s `ModelOracle`, and
+  the size guard forbids any change in `Equiv.Verify.*`. A replay builds a delegate where neither of the model's runs
+  calls through it (a fixed exception if called, which no model run does) and is `not-constructible` ("the model's runs
+  call ...") where one does. ADR 0062's decision 3 says so as accepted; P2-249 (new) carries the answers. `probe`'s
+  delegate is the constant answer decision 4 names.
+- Deviation: decision 3's "a cancelled token when the model's run observes cancellation": the counterexample shows
+  cancellation only as an outcome, so a token is cancelled exactly when a model run ends in
+  `OperationCanceledException`, else `default`. ADR 0062 says so as accepted.
+- Decision: `replayInputs` is `{legacy: [{name, built}], modern: [...]}` on every replay whose drivers ran, and absent
+  when the plan built no input (not constructible before any driver). Alternatives: one flat list with a side field; an
+  empty object on every replay. Rule: 1 (mirror `replayOutcomes`, the property beside it).
+- Decision: heap inputs travel as tagged JSON arrays (`@u`, `@s`, `@a`, `@c`, `@r`, `@t`) read by a generated value
+  builder `V.Value(wire, Type)`, with a per-driver type table and maker table (`DriverHeap`). Alternative: bake each
+  replay's values into its driver's source. Rule: 2 (one decoder shared by replay and `probe`, the driver's protocol
+  unchanged). The helpers (`D`, `H`, `V`) are emitted only into a driver that uses them, so a runtime-diff, testing or
+  plain replay driver carries no reflection (P2-052's assertion holds).
+- Decision: both sides' inputs are built from the union of both sides' synthesised inputs, so they get one state; a
+  field map a side does not declare is `the model constrains ...` there, never a skipped write. The receiver is `new
+  T()` only when on both sides the model gives its object no field, names no type derived from `T`, and no other input
+  refers to it, and `T` has a public parameterless constructor; otherwise both receivers are constructor-free. Rule:
+  soundness first.
+- Decision: an element and the elements its upcasts and its passing type tests yield are one object of the one type
+  each is; casts joining two references of one sort, a type test of a type the side does not resolve, and a `new.*`
+  that names an input's reference are `not-constructible`. Alternative: ignore an unresolvable test (found while testing:
+  `istype.<From>.System.Collections.Generic.List_1` did not resolve, and ignoring it would build the wrong type). Rule:
+  soundness first.
+- Decision: the access mechanism is one per pair (`DriverSource.Reach`): direct when a friend sees both members, a
+  typed delegate when both allow one, else `MethodInfo.Invoke`; the exact-signature check runs in the factory only when
+  the access is reflective, so a public member with a pointer still says what it said. Rule: ADR 0062 decision 1.
+- Decision: differential testing of Unknowns keeps its own call rules (`CallObstacle(reach: false)`: not public, no
+  public parameterless constructor), so no new observed Divergent can appear: the ticket changes no verdict. Rule:
+  ticket Goal ("Nothing here changes a verdict").
+- Decision: `DriverStruct` gains `Comparable`: a struct with an array or reference field is built but never compared,
+  so a runtime-diff driver's result comparison is unchanged. Rule: soundness first (no new observed difference).
+- Decision: a driver creates an instance without a constructor by `RuntimeHelpers.GetUninitializedObject` when its
+  project's references have it (.NET 5 and later), else `FormatterServices.GetUninitializedObject`. Alternative: by the
+  side's runtime family. Rule: 2 (what the driver compiles against decides what compiles).
+- Decision: four new files under `src/` (Core `ReplayInput.cs`, `ReplayInputs.cs`; frontend `DriverHeap.cs`,
+  `ModelObjects.cs`), the size guard's limit; CA1034 forbids nesting `ReplayInput` in Core. `HeapInputs.Part` became
+  `internal` (one word, in `Lowering/`) so that the builder spells map names as lowering does.
+- Decision: the corpus runs reuse P2-237's checkouts and restores (`.corpus/` of its worktree, linked into this one by a
+  directory junction), so the three pairs ran on the same inputs P2-237's did.
+- Decision (from the first corpus run): a replay driver reads a solution struct sent as `["@s", ...]` through the value
+  builder, and a `probe` driver keeps P2-242's positional flat form (`Shape.Uninitializes`). Found as OpenRA's `float2`
+  replays failing with `FormatException`: the replay sent the struct's fields while the driver read it positionally.
+  Rule: soundness first (a harness failure must not read as an outcome).
+- Decision (from criterion 6's first re-adjudication): ADR 0035's window rule refuses a window receiver or a window
+  parameter, never a static member of a window type (Git Extensions row 41); a hidden constructor binds by its exact
+  signature both as a target and as a maker (OpenRA row 6, Git Extensions row 19, Duplicati row 44); a `probe` object's
+  `type` resolves a framework type too, built only by a public constructor as decision 2 says (OpenRA row 20); a struct
+  may be given by its constructor (`DateTime(long)`, Duplicati row 32); constructor names in `probe` are spelled without
+  nullable annotations. Alternative: leave them for a later ticket. Rule: the ticket's criterion 6 names these rows as
+  callable, and each is a reading of decisions 1, 3 and 4, not a new kind.
+- Decision: an EQ006 row of P2-237's appendix whose result is EQ007 here is the same result: ADR 0060 (P2-238) reports
+  an unedited body a runtime change reaches as EQ007, and makes it EQ006 again when its replay is `reproduced` (decision
+  4). Rule: 1 (P2-237 and P2-212 matched results by procedure identity and rule; the rule's rename is not a new result).
+- Deviation: criterion 7's "an argument the driver cannot build" leaves 6, not only reasons ADR 0062 leaves out: five
+  enums (P2-237's three plus two its earlier obstacles hid) and one `System.Drawing.Color`. An enum is an uninterpreted
+  sort element in the model, which replay never built (ADR 0062 says "as replay builds it today"): P2-251 (new). The
+  other two of P2-237's five, a delegate and an object, are built now.
+- Finding (filed): four false EQ002 and nine `not-constructible` replays rest on a framework static field read as a
+  free input per side (`IntPtr.Zero`, `String.Empty`): P2-250. `async` results are never awaited, so Duplicati rows 14 and
+  47 stay undetermined: P2-252. A replay or `probe` driver of a Windows Desktop project runs without
+  `Microsoft.WindowsDesktop.App` (Git Extensions rows 22 and 41, two EQ007 replays, and three `AppSettings` replays `reproduced` only by the modern
+  side's `TypeInitializationException`): P2-253. The two drivers of a case start in different working directories, so
+  three replays are `reproduced` on paths that hold them (found by `probe` while tracing criterion 7's `uninitialized`
+  inputs): P2-254. No confirmation of P2-237's or this ticket's rests on either.
+- Note: the `.corpus` directory of this worktree is a junction to P2-237's worktree's `.corpus`, so this ticket's runs
+  (`20261019-*`) sit beside P2-237's under that worktree's `pairs/<slug>/runs/`.

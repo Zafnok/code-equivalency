@@ -207,7 +207,7 @@ public sealed class ReplayIntegrationTests : IDisposable
             Self, Self, DriverReferences.Installed().Host, legacy, Method(legacy, type, member), NoIr, modern, Method(modern, type, member), NoIr);
         using JsonDocument json = JsonDocument.Parse(arguments);
 
-        ReplayPlan plan = factory.Probe(pair, [.. json.RootElement.EnumerateArray()], directory);
+        ReplayPlan plan = factory.Probe(pair, [.. json.RootElement.EnumerateArray()], receiver: null, directory);
         (ExecutionOutcome l, ExecutionOutcome m) = new Replayer(new ChildProcessHost(ChildProcessHost.DefaultMemoryLimitBytes).Within(directory)).Run(plan, Replayer.Culture);
 
         Assert.Empty(plan.Reason);

@@ -1238,11 +1238,31 @@ side's parameters by the product's pairing rule (ADR 0021) and become C# argumen
 generator types: a `bool`, an integer, a `char` or an enum from its bitvector; a `string` from its
 sort element, `null` where the model's `null.<Sort>` map holds it and otherwise `"s<id>"`, so that
 equal elements are equal strings; a `float`, `double` or `decimal` as the number `id`; any other
-reference type only as `null`. A static method is called directly, and an instance method on
-`new T()`, which needs a public parameterless constructor. Each side's project is emitted with its
+reference type as the model's object (ADR 0062; P2-245). The receiver and every other input are built
+from both sides' synthesised inputs together, so the two sides get one state: an object of a solution
+type is created without a constructor and given each field the model's `field.*` maps give any of its
+elements, a field they do not give staying at its default; an element and the elements its upcasts,
+and its casts whose `istype.*` test passes, yield are one object of the one type each of them is; an
+element reached twice is one object, and a cycle closes; an array has the model's length and
+elements; a solution struct is built like an object but by value, any other struct from its fields; a
+framework or third-party object only by its public parameterless constructor, and only when the model
+gives it no field; a `CancellationToken` is cancelled exactly when a run of the model ends in
+`OperationCanceledException`; and a delegate, where neither run of the model calls through it, throws
+if called. The receiver is `new T()` when on both sides the model gives its object no field, names no
+type derived from `T`, and no other input refers to it, and `T` has a public parameterless
+constructor; otherwise both sides' receivers are created without a constructor. A static method is
+called directly, and an instance method on that receiver. Each side's project is emitted with its
 references beside it, and with one `InternalsVisibleTo` naming the driver's assembly (`EquivReplay`)
 added to its compilation as a syntax tree of its own, so the driver calls `internal` and
-`protected internal` members directly, with no reflection; no source file changes. A strong-named
+`protected internal` members directly; no source file changes. A `private`, `protected` or
+`private protected` method or getter, or one of a type so hidden, is bound once by its exact signature
+(name, staticness and parameter types, never a nearest match) and called through a typed delegate, or
+through `MethodInfo.Invoke` with the member's own exception rethrown when its signature names a type the
+driver cannot, both sides by one mechanism when either needs it (ADR 0062 decision 1). That generated
+source is the only reflection there is. Every replay whose drivers ran carries `properties.replayInputs`:
+per side, for the receiver and each argument, `value`, `constructor <signature>`, `uninitialized
+<fields>` or `delegate` (decision 5); a difference on an `uninitialized` input confirms a Divergent only
+with a trace showing some constructor and calls of the solution reach that state. A strong-named
 project may name a friend only by public key, so its driver is signed with a key generated for the
 run and the attribute carries that key (P2-052). A driver calls each side's method once on that side's project's detected
 runtime (`run.properties.runtimes`; ADR 0040 decision 3, P2-056), under the invariant culture, and also under `tr-TR` when either body
@@ -1256,19 +1276,24 @@ calls a member of the runtime-changes table, as differential testing does (P2-03
   call trace holds a runtime-changed callee). EQ006 claims the member differs between runtimes, and
   its side-specific functions are free in the model, so one call with the model's inputs need not
   show it (a hash seed, a default encoding, an ICU detail). Not a soundness finding (P2-038);
-- `not-constructible`, with `properties.replayReason`: the method, or a type that contains it, is
-  `private`, `protected` or `private protected` (`not public (<accessibility>)`, so `not public (private)`
-  counts what only reflection could reach; P2-052); the method is generic, an
-  accessor other than a getter, or takes a parameter by reference; the receiver has no public
-  parameterless constructor or the model makes it null; a parameter's type has no generator; the
-  model has a synthesised input other than `this` and `null.*` (a heap map, a cast or type-test
-  map, `typeof`, `new`), since replay builds no object graphs; a project does not emit
+- `not-constructible`, with `properties.replayReason`: the method is a hidden constructor (`not
+  public (<accessibility>)`), generic, an accessor other than a getter, `extern`, takes a parameter by
+  reference, drives the desktop session or has a window as its receiver or a parameter; it is reached
+  by reflection and a type in its signature has no name a driver can spell (`... is not bound by its
+  exact signature`); the model makes the receiver null; an input is of a kind no driver builds (an
+  abstract or interface type whose concrete type the model does not name, a framework or third-party
+  type with no public parameterless constructor or with a field the model gives, a generic solution
+  type, a framework struct that is not flat, a window, a delegate a run of the model calls, a
+  delegate with a by-reference parameter, an array longer than 65,536); the model's casts make two
+  references of one sort one object, a type test names a type the side does not resolve, a body's
+  fresh array is an input's reference (`new.*`), or the model constrains a static field, a field the
+  side does not declare, `typeof`, `caller.*` or `thrown.*` (`the model constrains ...`); a project does not emit
   (`emit-failed`); the model's two runs end alike, so the divergence is in the call trace, which a
   driver does not observe; the model's call traces differ and the two real outcomes are equal, since
   the model's outcomes may then rest on call answers the solver chose after the traces split (ADR
   0026, "Why"; P2-037), so equal real outcomes are no evidence against it, while differing ones still
   give `reproduced`; both sides throw the same exception where the model's runs do not both throw,
-  so the driver's `new T()` or an argument is not the model's (P2-038); or a side gives no
+  so the driver's receiver or an argument is not the model's (P2-038); or a side gives no
   comparable outcome. These come before `not-applicable`, so `not-reproduced` always means the
   model was wrong.
 

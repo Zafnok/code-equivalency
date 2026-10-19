@@ -78,4 +78,52 @@ public sealed class ReplayTests
 
         Assert.Equal(await File.ReadAllTextAsync(Snapshot, TestContext.Current.CancellationToken), normalized);
     }
+
+    /// <summary>
+    /// Ticket P2-245: <c>samples/private-field-receiver</c>'s Divergent is a private method that reads two fields, of a class
+    /// with no public parameterless constructor. Its replay binds the method by its exact signature on .NET Framework 4.8
+    /// and on .NET 10, builds each receiver without a constructor from the model's fields, and reproduces, saying so in
+    /// <c>replayInputs</c> (ADR 0062).
+    /// </summary>
+    [Fact]
+    public void Replay_APrivateMethodOnAReceiverBuiltFromTheModel_Reproduces()
+    {
+        string sample = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "private-field-receiver"));
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-245-{Guid.NewGuid():N}.sarif");
+        TextWriter originalOut = Console.Out;
+        TextWriter originalError = Console.Error;
+        using StringWriter output = new();
+        using StringWriter error = new();
+        Console.SetOut(output);
+        Console.SetError(error);
+        SarifLog log;
+        int exitCode;
+        try
+        {
+            exitCode = Program.Main(
+            [
+                "compare",
+                "--legacy", Path.Combine(sample, "legacy", "Equiv.Samples.PrivateFieldReceiver.Legacy.sln"),
+                "--modern", Path.Combine(sample, "modern", "Equiv.Samples.PrivateFieldReceiver.Modern.slnx"),
+                "--out", outPath,
+                "--execute",
+                "--verbosity", "quiet",
+            ]);
+            log = SarifLog.Load(outPath);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+            File.Delete(outPath);
+        }
+
+        Assert.Equal(ExitCodes.Divergent, exitCode);
+        Result result = Assert.Single(log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ002", StringComparison.Ordinal));
+        Assert.Equal("reproduced", result.GetProperty<string>("replay"));
+        Dictionary<string, List<Dictionary<string, string>>> inputs = result.GetProperty<Dictionary<string, List<Dictionary<string, string>>>>("replayInputs");
+        Assert.All(
+            [inputs["legacy"], inputs["modern"]],
+            static side => Assert.Equal(("this", "uninitialized Account.balance, Account.owner"), (Assert.Single(side)["name"], side[0]["built"])));
+    }
 }

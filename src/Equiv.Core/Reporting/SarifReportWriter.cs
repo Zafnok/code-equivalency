@@ -213,6 +213,7 @@ public static class SarifReportWriter
         SetListProperty(sarifResult, "assumedCallees", result.AssumedCallees);
         SetListProperty(sarifResult, "unprovenAssumptions", result.UnprovenAssumptions);
         SetReplayProperties(sarifResult, result.Replay);
+        SetReplayInputs(sarifResult, result.Replay?.Inputs);
         SetTestingProperty(sarifResult, result.Testing);
         SetRuntimeChangeProperties(sarifResult, rule);
 
@@ -669,6 +670,26 @@ public static class SarifReportWriter
                 break;
         }
     }
+
+    /// <summary>
+    /// <c>replayInputs</c>, once a replay's drivers ran: per side, how each input was built (ADR 0062 decision 5; ticket
+    /// P2-245). Left out when the run did not replay, or the replay built no input.
+    /// </summary>
+    private static void SetReplayInputs(Result sarifResult, ReplayInputs? inputs)
+    {
+        if (inputs is not null)
+        {
+            sarifResult.SetProperty("replayInputs", new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacyKey] = Describe(inputs.Legacy),
+                [ModernKey] = Describe(inputs.Modern),
+            });
+        }
+    }
+
+    /// <summary>One side's inputs, in call order, each as its <c>name</c> and how it was <c>built</c>.</summary>
+    private static List<Dictionary<string, string>> Describe(IReadOnlyList<ReplayInput> inputs) =>
+        [.. inputs.Select(static i => new Dictionary<string, string>(StringComparer.Ordinal) { ["name"] = i.Name, ["built"] = i.Built })];
 
     /// <summary>
     /// An Unknown's run on generated inputs (ADR 0035 decision 3; ticket P1-008): <c>differentialTesting</c> is the input

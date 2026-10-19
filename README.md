@@ -425,12 +425,21 @@ itself.
 
 - `probe`: `legacy`, `modern`, `identity` and `arguments` (the method's own arguments, in order, as
   JSON values; a struct of plain fields or auto-properties as an object by name, a field that is
-  itself such a struct as a nested object), and optionally `culture` and
-  `config`. A constructor's identity is called like a static method that returns the new object. With `config` (a path to the pair's
+  itself such a struct as a nested object; an array as a JSON array; a `CancellationToken` as
+  `"cancelled"` or `"live"`; a delegate as `{"returns": value}`, answering every call with it; an object
+  as `null`, `{"constructor": "int, string", "arguments": [...]}` naming a visible constructor by its
+  parameter types, or `{"fields": {...}, "type": "N.Derived"}`, a solution type created without a
+  constructor with those fields, by field or auto-property name), and optionally `receiver`, `culture` and
+  `config`. A private or protected method or getter is called too, bound by its exact signature (ADR 0062).
+  `receiver` is an instance method's receiver, given as an object argument is; without it the receiver is
+  `new T()` when `T` has a public parameterless constructor and otherwise an instance created without one.
+  A constructor's identity is called like a static method that returns the new object. With `config` (a path to the pair's
   `equiv.config.json`, as `compare` takes it) the pair is analysed under that config, so a runtime,
   rename or other declaration it states applies to the probe as it does to `compare --config`; a
   missing or invalid config, or any config diagnostic, is a tool error. The result is `{ legacy:
-  {kind, canonical}, modern: {kind, canonical}, equal }`; when either side's outcome has no
+  {kind, canonical}, modern: {kind, canonical}, equal, inputs }`, `inputs` listing per side how the receiver and each
+  argument were built (`value`, `constructor <signature>`, `uninitialized <fields>`, a state no constructor need reach,
+  or `delegate`); when either side's outcome has no
   comparable form (`NotComparable`, `NotConstructible`), `equal` is absent and `reason` says which
   side and why. A struct of plain fields or auto-properties compares field by field (a nested struct as a nested
   array), and `IntPtr` as its integer. An argument that cannot be built, or an
