@@ -106,14 +106,21 @@ internal sealed class RuntimeAssets(Lazy<IReadOnlyDictionary<string, string>> re
             : new PackageFiles(package.Runtime, Error: null);
     }
 
+    /// <summary>
+    /// <paramref name="compilation"/>'s restore, read once. A project with no restore file caches nothing, so
+    /// <see cref="None"/>, which every caller shares, is never written to.
+    /// </summary>
     private Restore? Restored(Compilation compilation)
     {
         string name = compilation.AssemblyName!;
+        if (!restoreFiles.Value.TryGetValue(name, out string? file))
+        {
+            return null;
+        }
+
         if (!restores.TryGetValue(name, out Restore? restore))
         {
-            restore = restoreFiles.Value.TryGetValue(name, out string? file) && File.Exists(file)
-                ? Restore.Read(File.ReadAllText(file), References(compilation), rids)
-                : null;
+            restore = File.Exists(file) ? Restore.Read(File.ReadAllText(file), References(compilation), rids) : null;
             restores[name] = restore;
         }
 
