@@ -1,5 +1,5 @@
 # P2-250 Precision: a framework `static readonly` field the body reads is a free input, so `IntPtr.Zero` can differ between the sides
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none

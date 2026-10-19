@@ -53,7 +53,8 @@ public sealed class SynthesisedInputNamingTests
 
     /// <summary>
     /// Acceptance criterion 9: every method of both sides of every sample lowers with its C# parameters first, none of
-    /// them synthesised, then its synthesised inputs, all of them synthesised, and every heap map by-ref.
+    /// them synthesised, then its synthesised inputs, all of them synthesised, and every heap map by-ref but the map of a
+    /// framework <c>static readonly</c> field, which no call writes (ticket P2-250).
     /// </summary>
     [Theory]
     [MemberData(nameof(Samples))]
@@ -77,7 +78,7 @@ public sealed class SynthesisedInputNamingTests
                     Assert.True(
                         body.Parameters
                             .Where(static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal) || p.Var.Name.StartsWith("array.", StringComparison.Ordinal))
-                            .All(static p => p.Kind == IrParameterKind.Ref),
+                            .All(p => p.Kind == IrParameterKind.Ref || IsFrozen(compilation, p)),
                         where);
                     lowered++;
                 }
@@ -85,6 +86,15 @@ public sealed class SynthesisedInputNamingTests
         }
 
         Assert.NotEqual(0, lowered);
+    }
+
+    /// <summary>Whether <paramref name="map"/> is the <c>field.*</c> map of a field <see cref="FrameworkStatics"/> freezes.</summary>
+    private static bool IsFrozen(Compilation compilation, IrParameter map)
+    {
+        string sort = ((IrSort)((IrMap)map.Var.Type).Key).Name;
+        return compilation.GetTypeByMetadataName(sort) is { } type
+            && type.GetMembers().OfType<IFieldSymbol>().Any(f =>
+                FrameworkStatics.IsFrozen(f) && string.Equals(map.Var.Name, $"field.{HeapInputs.Part(sort)}.{HeapInputs.Part(f.Name)}", StringComparison.Ordinal));
     }
 
     private static IrProcedure Lower(string source)

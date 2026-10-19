@@ -49,12 +49,12 @@ internal sealed class HeapLowerer(
 
     /// <summary>
     /// The heap slices every call reads and writes (ticket P1-005): each <c>field.*</c> and <c>array.*</c> map the body touches,
-    /// and the <c>thrown.*</c> cell when a clause reads it (ticket P2-140).
+    /// but a framework <c>static readonly</c> field's (ticket P2-250), and the <c>thrown.*</c> cell when a clause reads it (ticket P2-140).
     /// A <c>length.*</c> map the body writes is not one: only an array creation writes it, and a call cannot change the
     /// length of an array.
     /// </summary>
     public IEnumerable<SsaBuilder.Variable> CallHeap() =>
-        Inputs.Parameters.Where(static p => HeapInputs.IsWritable(p.Var.Name)).Select(p => slices[p.Var.Name]);
+        Inputs.Parameters.Where(p => Inputs.IsWritable(p.Var.Name)).Select(p => slices[p.Var.Name]);
 
     /// <summary>
     /// The heap slice an assignment target names, or null when it is not a field or a single-dimensional

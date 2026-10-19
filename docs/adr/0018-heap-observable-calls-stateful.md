@@ -77,6 +77,15 @@ silent false Equivalent.
 - Once P1-005, P1-006 and M3-007 have landed, ADR 0015's two gaps are closed.
 
 ## Clarifications
+- 2026-10-19 (P2-250). A `static readonly` field of a value or string type that no source in the compilation
+  declares (`IntPtr.Zero`, `String.Empty`) is one the body cannot write and no call can either: only its own
+  type's static constructor writes it, and that has run by the time any read sees it. So its `field.*` map is
+  `In`, not `Ref`, and is in no call's heap pairs, as `null.*` is; the Decision's rule, a map the body or its
+  calls write is `Ref`, is unchanged. Before this a call wrote the map, so a read moved past a call was another
+  value. Where the frontend knows the value (`String.Empty` is `""`; `IntPtr.Zero`, `Guid.Empty`,
+  `TimeSpan.Zero`, `DateTime.MinValue` and the `System.Drawing` `Empty` structs are their type's `default`), the
+  read is that constant and no map at all. A field the source declares stays `Ref`: its static constructor is a
+  body of the pair. So does one of a reference type, whose object's fields a call can still change.
 - 2026-10-17 (P2-180). The exception a call left in `thrown.System.Exception` may also be handed on as the
   inner exception of a `throw new T(..., e)`, not only read for its `Message`: it is then an argument of the
   constructor call, compared as any argument is, so two sides that wrap the exception after the same calls

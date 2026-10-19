@@ -1192,12 +1192,14 @@ internal sealed class IrLowerer
     /// <summary>
     /// A field is its heap map read at the receiver, except that an element of a tuple of an <see cref="IrTuple"/> sort is the
     /// <c>tuple.item</c> function of its position applied to the tuple, and a tuple literal of such a sort the
-    /// <c>tuple.new</c> function of its elements (ticket P2-027); any other tuple literal is opaque with reason <c>Tuple</c>.
+    /// <c>tuple.new</c> function of its elements (ticket P2-027); any other tuple literal is opaque with reason <c>Tuple</c>. A
+    /// framework <c>static readonly</c> field whose value <see cref="FrameworkStatics"/> knows is that constant (ticket P2-250).
     /// </summary>
     private IrVar? FieldOrTuple(IOperation operation, LoweringContext context) => operation switch
     {
         IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is { } position =>
             Pure(IrTuple.Item(position), [], runtimeSensitive: false, [Value(field.Instance!, context)], Map(field.Type!), context),
+        IFieldReferenceOperation field when FrameworkStatics.Known(field.Field, catalogue.Sorts) is { } known => Const(known, context),
         IFieldReferenceOperation field => heap.ReadSlice(heap.Field(field, context), context),
         ITupleOperation tuple when TypeMapper.Tuple(tuple.Type) is { } sort =>
             Pure(IrTuple.New, [], runtimeSensitive: false, [.. tuple.Elements.Select(e => Value(e, context))], sort, context),
