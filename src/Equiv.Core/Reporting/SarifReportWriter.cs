@@ -213,6 +213,7 @@ public static class SarifReportWriter
         SetListProperty(sarifResult, "assumedCallees", result.AssumedCallees);
         SetListProperty(sarifResult, "unprovenAssumptions", result.UnprovenAssumptions);
         SetReplayProperties(sarifResult, result.Replay);
+        SetReplayInputs(sarifResult, result.Replay?.Inputs);
         SetTestingProperty(sarifResult, result.Testing);
         SetRuntimeChangeProperties(sarifResult, rule);
 
@@ -644,9 +645,7 @@ public static class SarifReportWriter
     /// <summary>
     /// A Divergent's replay on both real runtimes (ADR 0035 decision 2; ticket M4-009): <c>replay</c> is <c>reproduced</c>,
     /// <c>not-reproduced</c> or (an EQ006 Divergent's, ticket P2-038) <c>not-applicable</c> with both canonical outcomes as
-    /// <c>replayOutcomes</c>, or <c>not-constructible</c> with <c>replayReason</c>; and, once its drivers ran,
-    /// <c>replayInputs</c>: per side, how each input was built (ADR 0062 decision 5; ticket P2-245). Left out when the run did
-    /// not replay.
+    /// <c>replayOutcomes</c>, or <c>not-constructible</c> with <c>replayReason</c>. Left out when the run did not replay.
     /// </summary>
     private static void SetReplayProperties(Result sarifResult, ReplayResult? replay)
     {
@@ -670,8 +669,15 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("replayReason", replay.Reason);
                 break;
         }
+    }
 
-        if (replay.Inputs is { } inputs)
+    /// <summary>
+    /// <c>replayInputs</c>, once a replay's drivers ran: per side, how each input was built (ADR 0062 decision 5; ticket
+    /// P2-245). Left out when the run did not replay, or the replay built no input.
+    /// </summary>
+    private static void SetReplayInputs(Result sarifResult, ReplayInputs? inputs)
+    {
+        if (inputs is not null)
         {
             sarifResult.SetProperty("replayInputs", new Dictionary<string, object>(StringComparer.Ordinal)
             {
