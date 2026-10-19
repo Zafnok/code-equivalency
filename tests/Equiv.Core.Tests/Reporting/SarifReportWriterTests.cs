@@ -754,6 +754,32 @@ public sealed class SarifReportWriterTests
             r => Assert.Equal(none.PartialFingerprints["resultFingerprint/v1"], r.PartialFingerprints["resultFingerprint/v1"]));
     }
 
+    /// <summary>
+    /// Ticket P2-245 criterion 5: a replay whose drivers ran says, per side, how each input was built (ADR 0062 decision 5),
+    /// and one built without inputs says nothing; neither changes the fingerprint.
+    /// </summary>
+    [Fact]
+    public void ReplayInputs_SayHowEachSidesInputsWereBuilt()
+    {
+        VerificationResult plain = Fixtures.Result(new Divergent(Fixtures.Counterexample()));
+        ReplayInputs inputs = new(
+            [new ReplayInput("this", "uninitialized Account.owner"), new ReplayInput("prefix", "value")],
+            [new ReplayInput("this", "constructor N.Account.Account(string)"), new ReplayInput("f", "delegate")]);
+
+        Result built = SarifReportWriter.Write([plain with { Replay = ReplayResult.Reproduced with { Inputs = inputs } }]).Runs[0].Results[0];
+        Result bare = SarifReportWriter.Write([plain with { Replay = ReplayResult.Reproduced }]).Runs[0].Results[0];
+
+        Dictionary<string, List<Dictionary<string, string>>> written = built.GetProperty<Dictionary<string, List<Dictionary<string, string>>>>("replayInputs");
+        Assert.Equal(
+            [("this", "uninitialized Account.owner"), ("prefix", "value")],
+            written["legacy"].Select(static i => (i["name"], i["built"])));
+        Assert.Equal(
+            [("this", "constructor N.Account.Account(string)"), ("f", "delegate")],
+            written["modern"].Select(static i => (i["name"], i["built"])));
+        Assert.False(bare.TryGetProperty("replayInputs", out Dictionary<string, object>? _));
+        Assert.Equal(bare.PartialFingerprints["resultFingerprint/v1"], built.PartialFingerprints["resultFingerprint/v1"]);
+    }
+
     /// <summary>Ticket P1-008 criteria 1 and 3.</summary>
     [Fact]
     public Task TestedUnknown()

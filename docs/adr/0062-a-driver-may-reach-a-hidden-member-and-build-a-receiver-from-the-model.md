@@ -1,6 +1,6 @@
 # ADR 0062: A replay or `probe` driver may reach a member the friend assembly cannot name, and build a receiver from the model's fields; each input says how it was built
 
-Status: proposed (2026-10-17). Supersedes in part ADR 0035 ("There is no reflection anywhere: the driver is generated
+Status: accepted (2026-10-19), as revised by ticket P2-245 (decision 3's delegates and tokens). Supersedes in part ADR 0035 ("There is no reflection anywhere: the driver is generated
 source") for generated driver source only, and VERIFICATION-MODEL section 6's replay paragraph ("an instance method on
 `new T()`", "replay builds no object graphs"). Ticket P2-245 implements it.
 
@@ -28,16 +28,24 @@ argument no driver builds (`CancellationToken`, a delegate, an array, a struct, 
    both are its state. When the model constrains fields, the instance is created without a constructor and each field
    the model gives is written with the model's value; a reference-typed value is built by the same rule, one instance
    per model element (shared where the model shares it), a string, enum or primitive as replay builds it today, and an
-   array from the model's length and elements. A cast or type-test map that names a concrete type builds that type. Only
+   array from the model's length and elements. A cast or type-test map that names a concrete type builds that type: an
+   element and the elements its upcasts, and its casts whose type test passes, yield are one object, of the one type each
+   of them is. Casts that make two references of one sort one object, a type test of a type the side does not resolve,
+   and a `new.*` map that gives a body's fresh array an input's reference are states no real run has, so not
+   constructible. Only
    a class or struct declared in the solution's own source is ever built without a constructor; a framework or
    third-party type is built only by a public constructor (or `null`), because an instance whose invariants its own
    constructor never set would differ between two runtimes' internals, not between the two sides of the pair. A replay
    never runs a constructor to build a state the model constrains: its state would not be the model's, and a
    `not-reproduced` on it would be a false alarm.
 3. **The argument kinds the model determines are built.** A `CancellationToken` is `default`, or a cancelled token when
-   the model's run observes cancellation. An array is built from the model's array map. A delegate is a generated
-   function of the parameter's type that answers each invocation with the model's interpretation of that open call (its
-   result, or its throw), the same table on both sides. A struct whose fields are arrays, strings or objects is built
+   a run of the model ends in `OperationCanceledException`, the one way the model's run observes cancellation that the
+   counterexample shows. An array is built from the model's array map, its elements at their defaults where the bodies
+   read none. A delegate is a generated function of the parameter's type. Where neither of the model's runs calls through
+   it, any answer is the model's, and it throws a fixed exception if called, which no run of the model does. Where a run
+   calls it, its answers are the model's interpretation of that open call (its result, or its throw), the same table on
+   both sides; the counterexample a replay is given carries no call answers, and recording them is a change to the
+   solver's model decoder, so until ticket P2-249 such a delegate is not constructible with that reason. A struct whose fields are arrays, strings or objects is built
    field by field by decision 2's rules, extending ticket P2-242's flat structs. A parameter whose type is a window or a
    desktop-session type stays not constructible (ADR 0035's 2026-09-29 clarification), as does an `extern` method.
 4. **`probe` takes the same inputs by name.** A receiver is either a constructor and its JSON arguments, or a type and

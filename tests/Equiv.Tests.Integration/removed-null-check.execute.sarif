@@ -130,6 +130,28 @@
             },
             "divergenceKind": "undetermined",
             "replay": "reproduced",
+            "replayInputs": {
+              "legacy": [
+                {
+                  "name": "this",
+                  "built": "constructor Equiv.Samples.RemovedNullCheck.Greeter.Greeter()"
+                },
+                {
+                  "name": "name",
+                  "built": "value"
+                }
+              ],
+              "modern": [
+                {
+                  "name": "this",
+                  "built": "constructor Equiv.Samples.RemovedNullCheck.Greeter.Greeter()"
+                },
+                {
+                  "name": "name",
+                  "built": "value"
+                }
+              ]
+            },
             "notCongruent": {
               "component": "operation",
               "identity": "Conditional"

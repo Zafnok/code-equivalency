@@ -88,6 +88,18 @@ public sealed class ReplayerTests
             ReplayResult.Reproduced,
             Replay("[\"Threw\",\"System.ArgumentNullException\"]", "[\"Threw\",\"System.NullReferenceException\"]"));
 
+    /// <summary>Ticket P2-245 criterion 5: every replay whose drivers ran carries how its inputs were built, whatever it found.</summary>
+    [Fact]
+    public void AReplayWhoseDriversRan_CarriesHowItsInputsWereBuilt()
+    {
+        ReplayInputs inputs = new([new ReplayInput("this", "uninitialized")], [new ReplayInput("this", "uninitialized")]);
+        ReplayPlan plan = Plan with { Inputs = inputs };
+
+        Assert.Same(inputs, Replay("[\"Returned\",1]", "[\"Returned\",2]", plan: plan).Inputs);
+        Assert.Same(inputs, Replay("[\"Returned\",1]", "[\"NotComparable\",\"N.Box\"]", plan: plan).Inputs);
+        Assert.Null(new Replayer(new FakeHost(static (_, _, _) => null)).Replay(ReplayPlan.NotConstructible("no"), Model, Body, Body).Inputs);
+    }
+
     [Fact]
     public void EqualOutcomes_DoNotReproduceAndCarryBoth()
     {

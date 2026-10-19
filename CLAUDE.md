@@ -33,7 +33,7 @@ only a `Deviation:` line in the ticket. Most things are not a new ADR.
 - .NET 10 / C# 14. `file`-scoped namespaces, records for data, `sealed` by default,
   `internal` by default, `InternalsVisibleTo` for the matching test project only (plus `Equiv.Tests.Integration`
   where a ticket puts integration tests for an internal contract there, e.g. M2-001).
-- No reflection, no dynamic, no `#pragma warning disable` (use `.editorconfig` severity
+- No reflection (the generated source of a replay or `probe` driver excepted, as ADR 0062 bounds it), no dynamic, no `#pragma warning disable` (use `.editorconfig` severity
   with a comment if a rule is genuinely wrong for this repo, and mention it in the PR).
 - No top-level statements in `src/`. They compile to a `[CompilerGenerated]` class that
   coverage tooling skips, so code there is invisible to the 100% gate. Use an explicit

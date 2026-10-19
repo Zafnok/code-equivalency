@@ -590,6 +590,37 @@ public sealed class McpCommandTests
         Assert.Equal("\"System.NullReferenceException\"", document.RootElement.GetProperty("modern").GetProperty("canonical").GetString());
         Assert.False(document.RootElement.GetProperty("equal").GetBoolean());
         Assert.Single(replay.Probes);
+        Assert.Null(Assert.Single(replay.Receivers));
+        Assert.Equal(0, document.RootElement.GetProperty("inputs").GetProperty("legacy").GetArrayLength());
+    }
+
+    /// <summary>
+    /// Ticket P2-245 criteria 4 and 5: a receiver an agent gives reaches the factory as given, and the result says, per side,
+    /// how each input was built.
+    /// </summary>
+    [Fact]
+    public async Task Probe_TakesAReceiverAndSaysHowItsInputsWereBuilt()
+    {
+        FakeReplay replay = new("[\"Returned\",1]", "[\"Returned\",1]")
+        {
+            ProbeInputs = new([new ReplayInput("this", "uninitialized Account.owner")], [new ReplayInput("this", "constructor N.Account.Account(string)")]),
+        };
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+        Dictionary<string, object?> args = ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, []);
+        args["receiver"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["fields"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["owner"] = "ada" } };
+
+        CallToolResult result = await session.CallAsync("probe", args).ConfigureAwait(true);
+
+        Assert.NotEqual(true, result.IsError);
+        Assert.Equal("{\"fields\":{\"owner\":\"ada\"}}", Assert.Single(replay.Receivers)!.Value.GetRawText());
+        using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(result.Content)));
+        JsonElement inputs = document.RootElement.GetProperty("inputs");
+        Assert.Equal("{\"name\":\"this\",\"built\":\"uninitialized Account.owner\"}", inputs.GetProperty("legacy")[0].GetRawText());
+        Assert.Equal("{\"name\":\"this\",\"built\":\"constructor N.Account.Account(string)\"}", inputs.GetProperty("modern")[0].GetRawText());
     }
 
     /// <summary>

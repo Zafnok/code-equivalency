@@ -37,6 +37,9 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
     /// <summary>When set, <see cref="Probe"/> returns a not-constructible plan with this reason instead of a runnable one.</summary>
     public string? ProbeReason { get; set; }
 
+    /// <summary>How <see cref="Probe"/>'s runnable plan says its inputs were built; none when unset (ticket P2-245).</summary>
+    public ReplayInputs? ProbeInputs { get; set; }
+
     public ReplayPlan Create(ProcedurePair pair, Counterexample counterexample, string directory)
     {
         Creates.Add((pair, counterexample, directory));
@@ -63,7 +66,7 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
         File.WriteAllText(Path.Combine(directory, "driver.cs"), string.Empty);
         return ProbeReason is { } reason
             ? ReplayPlan.NotConstructible(reason)
-            : ReplayPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), new ExecutionInput(["0"]), new ExecutionInput(["0"]));
+            : ReplayPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), new ExecutionInput(["0"]), new ExecutionInput(["0"])) with { Inputs = ProbeInputs };
     }
 
     public IDriverSession Start(string driver)
