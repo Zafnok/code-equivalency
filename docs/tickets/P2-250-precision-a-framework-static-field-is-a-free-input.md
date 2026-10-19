@@ -5,9 +5,9 @@ Model: Opus, high effort. If you are a weaker model family than named, or the na
 Depends on: none
 
 ## Goal
-P2-245's re-adjudication (`docs/runs/2026-10-19-execution-reach.md`) found three false EQ002 on `gitextensions-8522`
-(`EasyHook.HookAccessControl::SetInclusiveACL(int[])`, `::SetExclusiveACL(int[])`, `EasyHook.LocalHook::get_HookBypassAddress()`,
-P2-212 sample rows 0, 7, 18): both bodies are the same, and the solver's divergence rests on `field.System.IntPtr.Zero`,
+P2-245's re-adjudication (`docs/runs/2026-10-19-execution-reach.md`) found four false EQ002 on `gitextensions-8522`
+(`EasyHook.HookAccessControl::SetInclusiveACL(int[])`, `::SetExclusiveACL(int[])`, `EasyHook.LocalHook::get_HookBypassAddress()`
+and `::IsThreadIntercepted(int)`, P2-212 sample rows 0, 7, 18 and 3): both bodies are the same, and the solver's divergence rests on `field.System.IntPtr.Zero`,
 a static field map keyed by the type's token that one side reads and the model gives a value other than zero. A
 framework `static readonly` field (`IntPtr.Zero`, `String.Empty`, `SizeF.Empty`) has one value at run time, the same on
 both sides, so a model that gives it another value, or two, is a state no run has. The same maps make replays
@@ -24,11 +24,11 @@ VERIFICATION-MODEL section 2 (heap and nullness inputs, `field.*` maps keyed by 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. A pair whose two bodies read `IntPtr.Zero` (or `String.Empty`) the same way and differ in nothing else is not
    Divergent; a sample under `samples/` shows it.
-2. Rerun `gitextensions-8522` in `full --execute` (compare mode quick, `--jobs 4`): the three results above are no longer
+2. Rerun `gitextensions-8522` in `full --execute` (compare mode quick, `--jobs 4`): the four results above are no longer
    EQ002, and each P2-245 replay reason naming a framework static field is gone or names something else; the run file
    says which.
 
 ## Notes
-- Filed 2026-10-19 by P2-245 (finding from criterion 6's re-adjudication: Git Extensions rows 0, 7 and 18 are false
+- Filed 2026-10-19 by P2-245 (finding from criterion 6's re-adjudication: Git Extensions rows 0, 3, 7 and 18 are false
   positives by hand trace; a `probe` of 0 and 7 differed only because the native EasyHook DLL loads on one side's driver
   host, which P2-245 did not count as confirming).

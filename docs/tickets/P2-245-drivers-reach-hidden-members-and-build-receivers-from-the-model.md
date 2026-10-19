@@ -184,3 +184,30 @@ structs (P2-242). The second execution re-adjudication of all 71 (after this gro
   `internal` (one word, in `Lowering/`) so that the builder spells map names as lowering does.
 - Decision: the corpus runs reuse P2-237's checkouts and restores (`.corpus/` of its worktree, linked into this one by a
   directory junction), so the three pairs ran on the same inputs P2-237's did.
+- Decision (from the first corpus run): a replay driver reads a solution struct sent as `["@s", ...]` through the value
+  builder, and a `probe` driver keeps P2-242's positional flat form (`Shape.Uninitializes`). Found as OpenRA's `float2`
+  replays failing with `FormatException`: the replay sent the struct's fields while the driver read it positionally.
+  Rule: soundness first (a harness failure must not read as an outcome).
+- Decision (from criterion 6's first re-adjudication): ADR 0035's window rule refuses a window receiver or a window
+  parameter, never a static member of a window type (Git Extensions row 41); a hidden constructor binds by its exact
+  signature both as a target and as a maker (OpenRA row 6, Git Extensions row 19, Duplicati row 44); a `probe` object's
+  `type` resolves a framework type too, built only by a public constructor as decision 2 says (OpenRA row 20); a struct
+  may be given by its constructor (`DateTime(long)`, Duplicati row 32); constructor names in `probe` are spelled without
+  nullable annotations. Alternative: leave them for a later ticket. Rule: the ticket's criterion 6 names these rows as
+  callable, and each is a reading of decisions 1, 3 and 4, not a new kind.
+- Decision: an EQ006 row of P2-237's appendix whose result is EQ007 here is the same result: ADR 0060 (P2-238) reports
+  an unedited body a runtime change reaches as EQ007, and makes it EQ006 again when its replay is `reproduced` (decision
+  4). Rule: 1 (P2-237 and P2-212 matched results by procedure identity and rule; the rule's rename is not a new result).
+- Deviation: criterion 7's "an argument the driver cannot build" leaves 6, not only reasons ADR 0062 leaves out: five
+  enums (P2-237's three plus two its earlier obstacles hid) and one `System.Drawing.Color`. An enum is an uninterpreted
+  sort element in the model, which replay never built (ADR 0062 says "as replay builds it today"): P2-251 (new). The
+  other two of P2-237's five, a delegate and an object, are built now.
+- Finding (filed): four false EQ002 and nine `not-constructible` replays rest on a framework static field read as a
+  free input per side (`IntPtr.Zero`, `String.Empty`): P2-250. `async` results are never awaited, so Duplicati rows 14 and
+  47 stay undetermined: P2-252. A replay or `probe` driver of a Windows Desktop project runs without
+  `Microsoft.WindowsDesktop.App` (Git Extensions rows 22 and 41, two EQ007 replays, and three `AppSettings` replays `reproduced` only by the modern
+  side's `TypeInitializationException`): P2-253. The two drivers of a case start in different working directories, so
+  three replays are `reproduced` on paths that hold them (found by `probe` while tracing criterion 7's `uninitialized`
+  inputs): P2-254. No confirmation of P2-237's or this ticket's rests on either.
+- Note: the `.corpus` directory of this worktree is a junction to P2-237's worktree's `.corpus`, so this ticket's runs
+  (`20261019-*`) sit beside P2-237's under that worktree's `pairs/<slug>/runs/`.
