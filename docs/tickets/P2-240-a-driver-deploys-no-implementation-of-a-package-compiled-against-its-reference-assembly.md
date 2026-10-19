@@ -1,5 +1,5 @@
 # P2-240 Execution bug: a driver deploys no implementation of a NuGet package its project compiled against a reference assembly
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-237
@@ -47,3 +47,30 @@ and structs (P2-242).
 
 ## Notes
 - Filed 2026-10-17 by P2-237 (`docs/runs/2026-10-17-precision-execute-verdict.md`).
+- Decision: a project's restore file is found from what MSBuildWorkspace loads, without evaluating MSBuild again: in
+  the four folders above its intermediate assembly (`Project.CompilationOutputInfo.AssemblyPath`, `obj/<config>/<tfm>[/<rid>]`,
+  which sits under `MSBuildProjectExtensionsPath` by default), else `<project dir>/obj/project.assets.json`. It is looked
+  for when a replay first needs it, so a run without `--execute` reads nothing.
+- Decision: the target is the restore's target without a runtime identifier whose compile assets the compilation
+  references most of, so a multi-targeted project's compilation gets its own framework's target.
+- Decision: a package's runtime assets are chosen as the host picks them from a `deps.json`: the `runtimeTargets` of the
+  most specific runtime identifier in the portable graph of this machine's (`RuntimeInformation.RuntimeIdentifier`;
+  `win-x64`, `win`, `any`), else its plain `runtime` assets. A driver has no `deps.json`, so the chosen files go beside it.
+- Decision: a package that a referenced project compiles against is resolved by the deployed project's restore first (it
+  unified the version, as the deployed project's build output does), else by the referenced project's own.
+- Decision: only packages a compilation references a compile asset of are deployed, in place of that asset; a
+  runtime-only transitive package is not, and native assets are not carried (Out of scope).
+- Decision: a package whose runtime asset is NuGet's `_._` placeholder deploys nothing and is not an error: the runtime
+  supplies it, as in the build output. A runtime asset the restore names that is not on disk is the error (criterion 2).
+- Decision: a reference assembly in a `<id>/<version>/ref/<tfm>` folder that has a `.nuspec`, and no
+  `data/FrameworkList.xml` (a targeting pack restored as a package has one), and that no restore names, is the error
+  too, so a project whose restore file is not found never gets a driver without the package. An unreadable restore file
+  counts as absent. The bare loader's non-SDK projects (Linux) are not in the loaded `Solution`, so they have no restore
+  file: a package they compile against through a reference assembly is now not constructible instead of
+  `FileNotFoundException` at run time.
+- Decision: the error reads `emit-failed: <side> project <assembly>: the package <id> <version> runs <path>, which is not on
+  disk` (or `... is compiled against its reference assembly, and no restore names its runtime asset`), through the
+  emitter's existing error path.
+- Decision: the integration test is `probe` on a new sample, `samples/package-runtime-asset` (`System.Management` 4.7.0 on
+  the modern side, the framework's on the legacy side): ADR 0002 and THIRD-PARTY-NOTICES gain its samples-only row. With
+  the build before this change the modern side threw `FileNotFoundException` there; with it both return the query text.

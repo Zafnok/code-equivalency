@@ -17,7 +17,7 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <see cref="IReplayDriverFactory"/> over the projects one <see cref="CSharpFrontend.Analyze"/> loaded (ADR 0035 decision
 /// 2; ticket M4-009). Each project a replay needs is emitted once, into <c>&lt;directory&gt;/&lt;side&gt;/&lt;assembly&gt;</c>
 /// (<see cref="ProjectEmitter"/>), with the driver as its friend, so that the driver calls <c>internal</c> members too
-/// (ticket P2-052). Every driver's assembly is named <see cref="ProjectEmitter.DriverAssembly"/>, whatever its file is called,
+/// (ticket P2-052), and each package it compiles against deployed as it runs on this machine (ticket P2-240). Every driver's assembly is named <see cref="ProjectEmitter.DriverAssembly"/>, whatever its file is called,
 /// and a strong-named project's driver is signed with a key generated for this factory (<see cref="DriverKey"/>). Each
 /// replay's driver is compiled against that project's own references into the same folder, for that project's detected runtime (<see cref="ReplayTarget.Runtime"/>; ADR 0040 decision 3, ticket P2-056):
 /// <c>EquivReplay&lt;n&gt;.exe</c> with an <c>app.config</c> on .NET Framework, <c>EquivReplay&lt;n&gt;.dll</c> with a
@@ -194,7 +194,7 @@ internal sealed class ReplayDriverFactory(
         string project = Path.Combine(sideDirectory, target.Compilation.AssemblyName!);
         if (!emitted.TryGetValue((target.Compilation, sideDirectory), out (Compilation Granted, string? Error) friend))
         {
-            friend = ProjectEmitter.Emit(target.Compilation, project, key);
+            friend = ProjectEmitter.Emit(target.Compilation, project, key, target.Assets);
             emitted[(target.Compilation, sideDirectory)] = friend;
         }
 
