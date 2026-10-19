@@ -1445,6 +1445,9 @@ P2-253 (M, filed 2026-10-19 by P2-245, no dependency) runs a replay or `probe` d
 from reaching an outcome: three `reproduced` replays on Git Extensions rest on it.
 P2-254 (S, filed 2026-10-19 by P2-245, no dependency) gives the two drivers of a replay or `probe` case one working
 directory path: three `reproduced` replays differ only in the `cwd-<random>` folder each side starts in.
+P2-255 (S, filed 2026-10-19 by P2-253, no dependency) gives the two drivers of a replay or `probe` case one executable
+path, or refuses an outcome that reads it: two `reproduced` `AppSettings` replays on Git Extensions differ only in the
+legacy driver's own folder against the `dotnet` host's.
 
 P2-247 (L, filed 2026-10-18) is the second execution re-adjudication, after P2-240, P2-241, P2-242, P2-245 and
 P2-246: the five large pairs in `full --execute` at one commit, every EQ002 and EQ006 adjudicated (68 at `b0f56ff8`, no

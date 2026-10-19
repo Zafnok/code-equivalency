@@ -91,8 +91,11 @@ public sealed class DriverFactory : IExecutionDriverFactory
                 Driver(modern.Value!, request.Member.Value, Path.Combine(directory, "modern")));
     }
 
-    /// <summary>The not-constructible reason for a runtime that is not installed (ADR 0040 decision 3).</summary>
-    internal static string NotInstalled(TargetRuntime runtime) => $"runtime {runtime} not installed";
+    /// <summary>
+    /// The not-constructible reason for a runtime that is not installed (ADR 0040 decision 3); <paramref name="desktop"/>
+    /// names its Windows Desktop runtime, <c>net&lt;v&gt;-windows</c> (ticket P2-253).
+    /// </summary>
+    internal static string NotInstalled(TargetRuntime runtime, bool desktop = false) => $"runtime {runtime}{(desktop ? "-windows" : string.Empty)} not installed";
 
     /// <summary>The reason no driver can be built, when a side's runtime or its reference assemblies are not installed.</summary>
     private string? Missing() => (legacy.Value, modern.Value) switch

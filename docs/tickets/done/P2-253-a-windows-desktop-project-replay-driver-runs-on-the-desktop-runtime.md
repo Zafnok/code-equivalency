@@ -1,5 +1,5 @@
 # P2-253 Execution bug: a replay or `probe` driver of a Windows Desktop project runs on `Microsoft.NETCore.App` only, so it cannot load `System.Windows.Forms`
-Status: todo
+Status: done (PR #552)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -36,3 +36,28 @@ ADR 0040 decision 3, ADR 0035 (the 2026-09-29 clarification), ticket P2-051, `Dr
 ## Notes
 - Filed 2026-10-19 by P2-245. The box has `Microsoft.WindowsDesktop.App` 10.x only; P2-237 installed the .NET 5.0.17
   runtime without the desktop one.
+- Decision: a project uses the Windows Desktop framework when a reference of its compilation sits in a
+  `Microsoft.WindowsDesktop.App.Ref` folder, as the SDK resolves `UseWindowsForms`/`UseWPF` on `net<v>-windows` and
+  flows a framework reference to referencing projects (`ReplayDriverFactory.UsesDesktop`). Only a .NET host is
+  affected; a .NET Framework driver's `app.config` is unchanged. A missing desktop runtime is
+  `runtime net<v>-windows not installed` (`DriverFactory.NotInstalled(runtime, desktop: true)`), checked before the
+  project is emitted.
+- Decision: "a Windows Desktop assembly" in criterion 2 is a fixed list in the driver template (`L.Desktop`): the
+  managed assemblies of `Microsoft.WindowsDesktop.App` 10.0 that `Microsoft.NETCore.App` lacks. The driver walks the
+  exception's inner chain for a `FileNotFoundException` or `FileLoadException` whose `FileName` names one, and answers
+  `NotConstructible "<exception type> loading <assembly>"`; any other missing file stays `Threw`. The template is shared,
+  so `runtime-diff`'s member drivers and both sides get it too; it can only turn a `Threw` into `NotConstructible`.
+- Decision: criterion 3's runtime was not installed machine-wide. .NET 5 is out of support (2022-05-10), and the user
+  allowed an install only if leaving it would not be a latent risk, which an unserviced runtime that any
+  `net5.0-windows` application would use is. Instead a private dotnet root in the session scratch folder (a copy of
+  `dotnet.exe`, junctions to the machine install, and `Microsoft.WindowsDesktop.App` 5.0.17 from Microsoft's zip,
+  every DLL's Microsoft Authenticode signature checked) ran `equiv` and its drivers through `PATH` and `DOTNET_ROOT`.
+  `C:\Program Files\dotnet` is unchanged. `docs/runs/2026-10-19-desktop-replay.md` records the setup.
+- Criterion 3: `full --execute` of Git Extensions (353 s). The five replays P2-245's missing desktop runtime decided
+  now run: `ReadBoolRegKey` is `not-applicable` (both `false`), `IsSelectableChar` `not-applicable`, the two `ParseFont`
+  and `GetPathToSparseCheckoutFile` `not-constructible` for split call traces. `GetDictionaryDir` and
+  `GetGitExtensionsDirectory` stay `reproduced`, now because `Application.ExecutablePath` is the legacy driver on one
+  side and the `dotnet` host on the other: filed P2-255. Rows 22 and 41 probed again on P2-245's inputs: both
+  **confirmed** (22: -1 against 31 and 131, culture-aware against ordinal; 41: `recovery.txt` against
+  `recovery.json`/`.html`, ICU ignoring a leading NUL or zero-width space). Migration Divergent precision over P2-245's
+  sample: 51.9% (41 of 79), from 50.6%; ceiling unchanged at 68.1%; scoreboard not changed (P2-247 refreshes it).

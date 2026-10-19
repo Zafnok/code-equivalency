@@ -19,7 +19,9 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <c>System.Drawing</c> point, size or rectangle as the array of its components (ticket P2-051), a flat struct
 /// (<see cref="DriverStruct"/>) as the array of its fields, a nested struct a nested array (tickets P2-242 and P2-246), and an exception as its type's full name. A
 /// constructor's result is the new object. The expression that canonicalises the result is chosen from the member's static
-/// return type. The source is C# 7.3, the newest a .NET Framework side compiles by default, so one template serves every
+/// return type. An exception that is, or wraps, a Windows Desktop assembly that did not load (<c>L.Desktop</c>) is
+/// <c>NotConstructible</c>, never <c>Threw</c>: it says the driver's runtime lacks that assembly, not what the member does
+/// (ticket P2-253). The source is C# 7.3, the newest a .NET Framework side compiles by default, so one template serves every
 /// runtime (ticket P2-056).
 /// <para>
 /// A replay or <c>probe</c> driver (ADR 0062; ticket P2-245) may also reach a member its friend assembly cannot name, bound
@@ -481,6 +483,12 @@ internal static class DriverSource
                 }
                 catch (Exception e)
                 {
+                    string desktop = L.Desktop(e);
+                    if (desktop != null)
+                    {
+                        return "[\"NotConstructible\"," + W.Str(e.GetType().FullName + " loading " + desktop) + "]";
+                    }
+
                     return "[\"Threw\"," + W.Str(e.GetType().FullName) + "]";
                 }
 
@@ -572,6 +580,49 @@ internal static class DriverSource
                 char[] c = new char[digits];
                 for (int i = digits - 1; i >= 0; i--) { c[i] = Hex[(int)(bits & 15)]; bits >>= 4; }
                 return "\"0x" + new string(c) + "\"";
+            }
+        }
+
+        internal static class L
+        {
+            private static readonly string[] Names =
+            {
+                "Accessibility", "DirectWriteForwarder", "Microsoft.VisualBasic.Forms",
+                "Microsoft.Win32.Registry.AccessControl", "Microsoft.Win32.SystemEvents", "PresentationCore",
+                "PresentationFramework", "PresentationFramework-SystemCore", "PresentationFramework-SystemData",
+                "PresentationFramework-SystemDrawing", "PresentationFramework-SystemXml",
+                "PresentationFramework-SystemXmlLinq", "PresentationFramework.Aero", "PresentationFramework.Aero2",
+                "PresentationFramework.AeroLite", "PresentationFramework.Classic", "PresentationFramework.Fluent",
+                "PresentationFramework.Luna", "PresentationFramework.Royale", "PresentationUI", "ReachFramework",
+                "System.CodeDom", "System.Configuration.ConfigurationManager", "System.Design",
+                "System.Diagnostics.EventLog", "System.Diagnostics.EventLog.Messages",
+                "System.Diagnostics.PerformanceCounter", "System.DirectoryServices", "System.Drawing.Common",
+                "System.Drawing.Design", "System.Formats.Nrbf", "System.IO.Packaging", "System.Printing",
+                "System.Private.Windows.Core", "System.Private.Windows.GdiPlus", "System.Resources.Extensions",
+                "System.Security.Cryptography.Pkcs", "System.Security.Cryptography.ProtectedData",
+                "System.Security.Cryptography.Xml", "System.Security.Permissions", "System.Windows.Controls.Ribbon",
+                "System.Windows.Extensions", "System.Windows.Forms", "System.Windows.Forms.Design",
+                "System.Windows.Forms.Design.Editors", "System.Windows.Forms.Primitives",
+                "System.Windows.Input.Manipulations", "System.Windows.Presentation", "System.Windows.Primitives",
+                "System.Xaml", "UIAutomationClient", "UIAutomationClientSideProviders", "UIAutomationProvider",
+                "UIAutomationTypes", "WindowsFormsIntegration"
+            };
+
+            public static string Desktop(Exception e)
+            {
+                for (Exception x = e; x != null; x = x.InnerException)
+                {
+                    FileNotFoundException missing = x as FileNotFoundException;
+                    FileLoadException unloadable = x as FileLoadException;
+                    string file = missing != null ? missing.FileName : unloadable != null ? unloadable.FileName : null;
+                    string name = file == null ? null : file.Split(',')[0].Trim();
+                    if (name != null && Array.IndexOf(Names, name) >= 0)
+                    {
+                        return name;
+                    }
+                }
+
+                return null;
             }
         }
 
