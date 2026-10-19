@@ -253,7 +253,7 @@ internal sealed class ReplayDriverFactory(
     /// </summary>
     private static bool UsesDesktop(Compilation compilation) =>
         compilation.References.OfType<PortableExecutableReference>().Select(static r => r.FilePath).OfType<string>()
-            .Any(static path => path.Split('/', '\\').Contains(DriverReferences.DesktopPack, StringComparer.OrdinalIgnoreCase));
+            .Any(static path => path.Replace('\\', '/').Split('/').Contains(DriverReferences.DesktopPack, StringComparer.OrdinalIgnoreCase));
 
     /// <summary>Whether <paramref name="compilation"/>'s references have <c>RuntimeHelpers.GetUninitializedObject</c>, as .NET 5 and later do.</summary>
     private static bool Uninitializes(Compilation compilation) =>
