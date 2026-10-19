@@ -29,6 +29,7 @@ public sealed class SamplesFixtureTests
             ["partly-compiling-modern"] = ["Equivalent", "Unknown"],
             ["timespan-integer-overloads"] = ["Equivalent", "Divergent", "Unknown"],
             ["switch-expression-no-match"] = ["Equivalent", "Divergent"],
+            ["framework-static-fields"] = ["Equivalent", "Divergent"],
         };
 
     private static string SamplesRoot =>

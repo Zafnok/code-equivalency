@@ -217,11 +217,17 @@ internal sealed partial class IlLowerer
         return fresh;
     }
 
-    /// <summary>The value a heap, type-test or function instruction yields, or, for an integer or <c>null</c> constant, the one of <paramref name="hint"/>'s type.</summary>
+    /// <summary>
+    /// The value a heap, type-test or function instruction yields, or, for an integer or <c>null</c> constant, the one of
+    /// <paramref name="hint"/>'s type. A framework <c>static readonly</c> field whose value <see cref="FrameworkStatics"/> knows is that
+    /// constant, as the IOperation lowering reads it (ticket P2-250).
+    /// </summary>
     private Val Heap(ILInstruction instruction, ITypeSymbol hint) => instruction switch
     {
         LdObj load when load.Target is LdsFlda { Field: { DeclaringType.FullName: "System.Decimal" } field } && DecimalFields.TryGetValue(field.Name, out decimal constant) =>
             Literal(SpecialType.System_Decimal, constant),
+        LdObj { Target: LdsFlda address } when FrameworkStatics.Known(Field(address.Field)!, TypeMapper.Unmapped) is { } known =>
+            new(Const(known), Field(address.Field)!.Type),
         LdObj load => Read(Address(load.Target)),
         StObj store => Store(store),
         NewArr array => Allocate(array),

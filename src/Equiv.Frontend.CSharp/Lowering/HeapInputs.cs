@@ -35,6 +35,8 @@ internal sealed class HeapInputs(Func<string, string> sorts)
 
     private readonly HashSet<string> written = new(StringComparer.Ordinal);
 
+    private readonly HashSet<string> frozen = new(StringComparer.Ordinal);
+
     /// <summary>The synthesised parameters, ordered by name.</summary>
     public ImmutableArray<IrParameter> Parameters =>
         [.. inputs.Values.OrderBy(static v => v.Name, StringComparer.Ordinal).Select(v => new IrParameter(v, IsWritable(v.Name) || written.Contains(v.Name) ? IrParameterKind.Ref : IrParameterKind.In))];
@@ -49,8 +51,19 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// One heap slice per field, from the receiver (a static field's is the type's token) to the field's value. A
     /// property's backing field is named for the property, so both sides agree whatever the compiler calls it, and an
     /// auto-property is one slice with a field of its name on the other side (ticket M4-008).
+    /// A <c>static readonly</c> field of a value or string type that no source declares is <see cref="IrParameterKind.In"/>
+    /// and no call writes it (<see cref="FrameworkStatics"/>; ticket P2-250).
     /// </summary>
-    public IrVar Field(IFieldSymbol field) => Field(field, (field.AssociatedSymbol as IPropertySymbol)?.Name ?? field.Name, field.Type);
+    public IrVar Field(IFieldSymbol field)
+    {
+        IrVar input = Field(field, (field.AssociatedSymbol as IPropertySymbol)?.Name ?? field.Name, field.Type);
+        if (FrameworkStatics.IsFrozen(field))
+        {
+            frozen.Add(input.Name);
+        }
+
+        return input;
+    }
 
     /// <summary>
     /// A field-like event's backing field, which the compiler names for the event (ticket P2-004), so reading the event and
@@ -156,9 +169,13 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
     private IrSort Receiver(ISymbol member) => new(TypeMapper.MetadataName(member.ContainingType, sorts));
 
-    /// <summary>Whether <paramref name="name"/> is a <c>field.*</c>, <c>array.*</c> or <c>thrown.*</c> map, which is always <see cref="IrParameterKind.Ref"/>.</summary>
-    public static bool IsWritable(string name) =>
-        name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal) || name.StartsWith("thrown.", StringComparison.Ordinal);
+    /// <summary>
+    /// Whether <paramref name="name"/> is a <c>field.*</c>, <c>array.*</c> or <c>thrown.*</c> map, which is always
+    /// <see cref="IrParameterKind.Ref"/> and every call writes, except the map of a field <see cref="FrameworkStatics"/> freezes.
+    /// </summary>
+    public bool IsWritable(string name) =>
+        !frozen.Contains(name)
+        && (name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal) || name.StartsWith("thrown.", StringComparison.Ordinal));
 
     internal static string Part(string name) =>
         string.Concat(name.Select(static c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' ? c : '_'));

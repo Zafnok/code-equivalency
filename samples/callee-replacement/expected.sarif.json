@@ -187,7 +187,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.CalleeReplacement.Culture::Leave() diverges: inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(threw \"System.Exception\" outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981852) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+            "text": "Equiv.Samples.CalleeReplacement.Culture::Leave() diverges: inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0))) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1)))"
           },
           "locations": [
             {
@@ -206,12 +206,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.CalleeReplacement.Culture::Leave()",
-            "resultFingerprint/v1": "64b545275a66720ad0b5d4880d9c0d1c63975798bf6b32948d9ae35df5b38c4d"
+            "resultFingerprint/v1": "9f34c53c225936613c756119abb9589eec9d7be439604157dd1d63b18fd5f47a"
           },
           "baselineState": "new",
           "rank": 64.002,
           "properties": {
-            "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(threw \"System.Exception\" outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981852) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))",
+            "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0))) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1)))",
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -222,15 +222,15 @@
             "failureRefinement": {
               "newFailures": {
                 "outcome": "found",
-                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(threw \"System.Exception\" outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 0) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0))) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1)))"
               },
               "removedFailures": {
                 "outcome": "found",
-                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(threw \"System.Exception\" outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(returned outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 0) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1) old(threw \"System.Exception\" outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0))) new(returned outs() trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1)))"
               },
               "resultChanges": {
                 "outcome": "found",
-                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850))) new(returned outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981852) trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1) heap(\"field.System.String.Empty\" map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 1665981850)))"
+                "model": "inputs(map<sort \"System.String\", sort \"System.Object\"> [] default sort \"System.Object\" 1) old(returned outs() trace(\"System.Runtime.Remoting.Messaging.CallContext::LogicalSetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 0))) new(returned outs() trace(\"Equiv.Samples.CalleeReplacement.Slots::SetData(string,object)\"(sort \"System.String\" 1665981849, sort \"System.Object\" 1)))"
               }
             },
             "divergenceKind": "result-changed",

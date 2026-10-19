@@ -79,7 +79,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.AddedNullGuard.Greeter::Greet(string) diverges: inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790627 outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) trace(\"System.String::ToUpper()\"(sort \"System.String\" 522790625), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790626))). Equivalent when name != null. The modern side differs only where the legacy side throws."
+            "text": "Equiv.Samples.AddedNullGuard.Greeter::Greet(string) diverges: inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790626 outs() trace(\"System.String::ToUpper()\"(sort \"System.String\" 18652613), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790625))). Equivalent when name != null. The modern side differs only where the legacy side throws."
           },
           "locations": [
             {
@@ -98,12 +98,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.AddedNullGuard.Greeter::Greet(string)",
-            "resultFingerprint/v1": "24a7f59f463f9a36955f9398138e2fa16f2ca9e20ddc8d2c56c2badfe3fdd5ae"
+            "resultFingerprint/v1": "430409bb4bc841de24a3eba2ed186136aa196d4c3a1388de8f4d99459535f86b"
           },
           "baselineState": "new",
           "rank": 64.002,
           "properties": {
-            "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790627 outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) trace(\"System.String::ToUpper()\"(sort \"System.String\" 522790625), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790626)))",
+            "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790626 outs() trace(\"System.String::ToUpper()\"(sort \"System.String\" 18652613), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790625)))",
             "agreesWhen": {
               "smt": "(not (select in.null.System.String in.name))",
               "text": "name != null",
@@ -123,7 +123,7 @@
               },
               "removedFailures": {
                 "outcome": "found",
-                "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790623 outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) trace(\"System.String::ToUpper()\"(sort \"System.String\" 522790625), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790623)))"
+                "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790623 outs() trace(\"System.String::ToUpper()\"(sort \"System.String\" 18652613), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790623)))"
               },
               "resultChanges": {
                 "outcome": "none-proved"
