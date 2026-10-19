@@ -240,7 +240,7 @@ internal sealed class ReplayDriverFactory(
 
     /// <summary>Whether <paramref name="compilation"/>'s references have <c>RuntimeHelpers.GetUninitializedObject</c>, as .NET 5 and later do.</summary>
     private static bool Uninitializes(Compilation compilation) =>
-        compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.RuntimeHelpers")?.GetMembers("GetUninitializedObject").IsEmpty == false;
+        compilation.GetTypesByMetadataName("System.Runtime.CompilerServices.RuntimeHelpers").SelectMany(static t => t.GetMembers("GetUninitializedObject")).Any();
 
     /// <summary>The installed runtime <paramref name="target"/>'s project runs on, or null when it has none or it is not installed.</summary>
     private DriverRuntime? Host(ReplayTarget target) => target.Runtime is { } runtime ? hosts(runtime) : null;

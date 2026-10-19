@@ -46,6 +46,7 @@ public sealed class ModelObjectsTests
                 internal Window Owner;
                 internal int Weight { get; set; }
                 private Node() { }
+                public int Peek() => Value;
             }
 
             public abstract class Shape { internal int Sides; }
@@ -73,6 +74,8 @@ public sealed class ModelObjectsTests
                 public static int Third(ThirdParty.Box b, ThirdParty.Locked l, System.Collections.Generic.List<int> list) => 0;
                 public static int Scalars(int x, string s) => 0;
                 public int Self(Kinds other) => Mine;
+                private static int Hidden(Hush h) => 0;
+                private delegate int Hush(int x);
             }
 
             public class Special : Kinds { }
@@ -323,12 +326,24 @@ public sealed class ModelObjectsTests
     {
         IrSortValue f = S("System.Func`2", 1);
         Dictionary<string, IrValue> values = Values(("f", f), ("r", S("N.ByRef", 2)), ("null.N.ByRef", Nulls("N.ByRef", 2)));
-        Counterexample called = new(new IrInputs([]), new IrRun(new IrThrew("A"), [], [new IrCallRecord(new CallIdentity("System.Func`2::Invoke(int)"), [f, Bv(2)])]), new IrRun(new IrThrew("B"), [], []));
+        Counterexample called = new(new IrInputs([]), new IrRun(new IrThrew("A"), [], [new IrCallRecord(new CallIdentity("System.Func`2::Invoke(int)"), [S("Other", 1), f, Bv(2)])]), new IrRun(new IrThrew("B"), [], []));
 
         Assert.Equal([("[\"@c\",\"1\",0,[]]", "delegate"), ("null", "value")], Built(Case("Delegates", values)));
         Assert.Equal("the model's runs call f, and the counterexample holds none of the model's answers to that call", Case("Delegates", values, called).Reason);
         values.Remove("null.N.ByRef");
         Assert.Equal("no N.ByRef delegate can be built for r", Case("Delegates", values).Reason);
+        Assert.Equal("no N.Kinds.Hush delegate can be built for h", Case("Hidden", Values(("h", S("N.Kinds+Hush", 1)))).Reason);
+    }
+
+    /// <summary>A receiver the model leaves free, of a type with no public parameterless constructor, is created without one.</summary>
+    [Fact]
+    public void AFreeReceiverWithNoPublicConstructor_IsCreatedWithoutOne()
+    {
+        ReplayArguments.SideCase built = Case("Peek", Values(("this", S("N.Node", 1))), type: "N.Node");
+
+        Assert.Null(built.NewReceiver);
+        Assert.Equal(DriverSource.Receiver.Wire, built.Mode);
+        Assert.Equal(["[\"@u\",\"1\",0,[]]"], built.Input!.Arguments);
     }
 
     [Theory]

@@ -13,6 +13,13 @@ namespace Equiv.Frontend.CSharp.Tests.Execution;
 public sealed class ReplayArgumentsTests
 {
     private const string Source = """
+        namespace System.Windows.Forms
+        {
+            public interface IWin32Window { }
+            public static class Application { public static void Run() { } }
+            public class Form : IWin32Window { public int M() => 0; }
+        }
+
         namespace N
         {
             public enum E : short { A = -1 }
@@ -33,6 +40,7 @@ public sealed class ReplayArgumentsTests
                 public static T Generic<T>(T x) => x;
                 public static int ByRef(ref int x) => x;
                 public static int When(System.DateTime d) => 0;
+                public static int Show(System.Windows.Forms.Form f) => 0;
                 [System.Runtime.InteropServices.DllImport("a.dll")] public static extern int Native(int x);
             }
 
@@ -123,6 +131,21 @@ public sealed class ReplayArgumentsTests
         Assert.Null(built.Input);
         Assert.Equal(reason, built.Reason);
     }
+
+    /// <summary>
+    /// Ticket P2-245 criterion 3: a window, as a receiver or a parameter, and the desktop session stay not constructible on
+    /// a replay or probe driver (ADR 0035); differential testing keeps its own rule, a receiver with no public parameterless
+    /// constructor.
+    /// </summary>
+    [Theory]
+    [InlineData("System.Windows.Forms.Application", "Run", true, "needs a live window handle or a message loop")]
+    [InlineData("System.Windows.Forms.Form", "M", true, "needs a live window handle or a message loop")]
+    [InlineData("N.C", "Show", true, "needs a live window handle or a message loop")]
+    [InlineData("N.P", "M", false, "N.P has no public parameterless constructor")]
+    [InlineData("N.P", "M", true, null)]
+    [InlineData("N.A", "M", false, "N.A has no public parameterless constructor")]
+    public void TheCallObstacle_DependsOnWhoReaches(string type, string method, bool reach, string? reason) =>
+        Assert.Equal(reason, ReplayArguments.CallObstacle(Method(Project, type, method), reach));
 
     /// <summary>Ticket P2-052 criterion 2: the driver is the emitted project's friend, so what a friend sees is callable.</summary>
     [Theory]

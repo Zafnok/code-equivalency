@@ -119,19 +119,34 @@ internal static class ProbeArguments
             _ => "value",
         };
 
-        private string? Value(ITypeSymbol type, JsonElement value, string name) => type switch
+        private string? Value(ITypeSymbol type, JsonElement value, string name)
         {
-            _ when DriverFactory.Classify(type) is >= ExecutionTypeKind.Boolean and <= ExecutionTypeKind.Enum
-                => Scalar(type, value) ?? Fail($"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}"),
-            _ when string.Equals(type.ToDisplayString(), "System.Threading.CancellationToken", StringComparison.Ordinal) => Token(value, name),
-            _ when DriverFactory.IsWindow(type) => Fail($"{name}: {DriverFactory.NeedsWindow}"),
-            _ when value.ValueKind == JsonValueKind.Null && !type.IsValueType => "null",
-            IArrayTypeSymbol { IsSZArray: true } array when value.ValueKind == JsonValueKind.Array => Array(array, value, name),
-            INamedTypeSymbol { TypeKind: TypeKind.Delegate } @delegate when value.ValueKind == JsonValueKind.Object => Delegate(@delegate, value, name),
-            { IsValueType: true } when value.ValueKind == JsonValueKind.Object => Struct(type, value, name),
-            INamedTypeSymbol { IsReferenceType: true } named when value.ValueKind == JsonValueKind.Object => Object(named, value, name),
-            _ => Fail($"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}"),
-        };
+            if (DriverFactory.Classify(type) is >= ExecutionTypeKind.Boolean and <= ExecutionTypeKind.Enum)
+            {
+                return Scalar(type, value) ?? Fail($"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}");
+            }
+
+            if (string.Equals(type.ToDisplayString(), "System.Threading.CancellationToken", StringComparison.Ordinal))
+            {
+                return Token(value, name);
+            }
+
+            if (DriverFactory.IsWindow(type))
+            {
+                return Fail($"{name}: {DriverFactory.NeedsWindow}");
+            }
+
+            // A named type that is not a value type is a class, an interface or a delegate.
+            return (value.ValueKind, type) switch
+            {
+                (JsonValueKind.Null, { IsValueType: false }) => "null",
+                (JsonValueKind.Array, IArrayTypeSymbol { IsSZArray: true } array) => Array(array, value, name),
+                (JsonValueKind.Object, INamedTypeSymbol { TypeKind: TypeKind.Delegate } @delegate) => Delegate(@delegate, value, name),
+                (JsonValueKind.Object, INamedTypeSymbol { IsValueType: true }) => Struct(type, value, name),
+                (JsonValueKind.Object, INamedTypeSymbol named) => Object(named, value, name),
+                _ => Fail($"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}"),
+            };
+        }
 
         private string? Token(JsonElement value, string name) => value.ValueKind == JsonValueKind.String ? value.GetString() switch
         {
@@ -194,7 +209,7 @@ internal static class ProbeArguments
                 return built;
             }
 
-            if (!IsSolution(type) || type is INamedTypeSymbol { IsGenericType: true })
+            if (!IsSolution(type) || ((INamedTypeSymbol)type).IsGenericType)
             {
                 return Fail($"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}");
             }
@@ -236,12 +251,14 @@ internal static class ProbeArguments
         /// <summary>An object by a visible constructor (<c>constructor</c>, <c>arguments</c>) or by its fields (<c>fields</c>), of <c>type</c> when it names one.</summary>
         private string? Object(INamedTypeSymbol type, JsonElement value, string name)
         {
-            INamedTypeSymbol? target = value.TryGetProperty("type", out JsonElement named)
-                ? named.ValueKind == JsonValueKind.String ? assembly.GetTypeByMetadataName(named.GetString()!) : null
+            // Without a type the object is of the parameter's own, which is always a type of it.
+            JsonElement? named = value.TryGetProperty("type", out JsonElement given) ? given : null;
+            INamedTypeSymbol? target = named is { } spelled
+                ? spelled.ValueKind == JsonValueKind.String ? assembly.GetTypeByMetadataName(spelled.GetString()!) : null
                 : type;
             if (target is null || !Is(target, type))
             {
-                return Fail($"{name}: {(value.TryGetProperty("type", out JsonElement t) ? t.GetRawText() : "its type")} is no {type.ToDisplayString()} this side declares");
+                return Fail($"{name}: {named!.Value.GetRawText()} is no {type.ToDisplayString()} this side declares");
             }
 
             if (DriverFactory.IsWindow(target))
@@ -262,10 +279,13 @@ internal static class ProbeArguments
             IMethodSymbol? chosen = type.IsAbstract ? null : type.InstanceConstructors.FirstOrDefault(c => ReplayArguments.Hidden(c) is null
                 && string.Equals(string.Join(", ", c.Parameters.Select(static p => p.Type.ToDisplayString())), wanted, StringComparison.Ordinal));
             JsonElement[] arguments = value.TryGetProperty("arguments", out JsonElement given) && given.ValueKind == JsonValueKind.Array ? [.. given.EnumerateArray()] : [];
-            if (chosen is null || arguments.Length != chosen.Parameters.Length || Heap.Constructor(chosen) is not { } maker)
+            if (chosen is null || arguments.Length != chosen.Parameters.Length)
             {
                 return Fail($"{name}: {type.ToDisplayString()} has no visible constructor ({wanted}) taking {arguments.Length} argument(s)");
             }
+
+            // A constructor a friend can see is of a type it can name, so it is always a maker.
+            int maker = (int)Heap.Constructor(chosen)!;
 
             constructors.Add(chosen.ToDisplayString());
             List<string> wires = [];

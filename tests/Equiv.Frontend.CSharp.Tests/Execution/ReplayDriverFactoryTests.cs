@@ -237,6 +237,30 @@ public sealed class ReplayDriverFactoryTests : IDisposable
     }
 
     [Fact]
+    public void AModernSideWhoseArgumentCannotBeBuilt_IsNotConstructible()
+    {
+        CSharpCompilation project = Compile(Greeter, "Greeter");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, Method(project, "N.Greeter", "Greet"), GreetIr, project, Method(project, "N.Kinds", "When"), GreetIr);
+
+        Counterexample model = Counterexample(new IrSortValue("System.String", 4), new IrSortValue("N.Greeter", 1), Nulls("System.String"));
+
+        Assert.Equal("modern: no System.DateTime argument can be built for at from the model", factory.Create(pair, model, directory).Reason);
+    }
+
+    /// <summary>Ticket P2-245 criterion 1: a member reached by reflection on either side must be bound by its exact signature on both.</summary>
+    [Theory]
+    [InlineData("Rawer", "Rawer")]
+    [InlineData("Raw", "Rawer")]
+    public void AMemberNotBoundByItsExactSignature_IsNotConstructible(string legacyMember, string modernMember)
+    {
+        CSharpCompilation project = Compile("namespace N { public class Greeter { private static int Raw() => 0; private static unsafe int* Rawer() => null; } }", "Greeter");
+        const string ir = "proc \"X\" () entry B0 B0: ret";
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, Method(project, "N.Greeter", legacyMember), ir, project, Method(project, "N.Greeter", modernMember), ir);
+
+        Assert.Equal("N.Greeter.Rawer() is not bound by its exact signature: no driver can name int*", factory.Create(pair, Counterexample(), directory).Reason);
+    }
+
+    [Fact]
     public void APrivateModernSide_BindsBothSidesByOneDelegate()
     {
         CSharpCompilation legacy = Compile(Greeter, "Greeter");

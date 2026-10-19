@@ -271,9 +271,8 @@ internal sealed class ModelObjects
         return type switch
         {
             IArrayTypeSymbol { IsSZArray: true } array => Array(array, element, name),
-            { IsValueType: true } => Struct(type, element, name),
             { IsReferenceType: true } => Object(element, name),
-            _ => Fail($"no {type.ToDisplayString()} argument can be built for {name} from the model"),
+            _ => Struct(type, element, name),
         };
     }
 
@@ -309,11 +308,12 @@ internal sealed class ModelObjects
 
     /// <summary>
     /// A struct: a solution one created without a constructor and given the fields the model gives its element, any other
-    /// <see cref="DriverStruct"/> from all its fields' values, the model's or, where it gives none, their defaults.
+    /// <see cref="DriverStruct"/> from all its fields' values, the model's or, where it gives none, their defaults; any other
+    /// value type (a pointer among them) is not constructible.
     /// </summary>
     private string? Struct(ITypeSymbol type, IrSortValue element, string name)
     {
-        if (IsSolution(type) && type is INamedTypeSymbol { IsGenericType: false })
+        if (IsSolution(type) && !((INamedTypeSymbol)type).IsGenericType)
         {
             open.Peek().Uninitialized = true;
             return Written(Fields(element), element, name) is { } written ? heap.Struct(type, written) : null;
@@ -535,20 +535,10 @@ internal sealed class ModelObjects
     private List<(ITypeSymbol To, bool Passes)> Tests(IrSortValue element)
     {
         string prefix = $"istype.{HeapInputs.Part(element.Sort)}.";
-        List<(ITypeSymbol, bool)> tests = [];
-        foreach ((string name, IrValue value) in maps.Where(m => m.Key.StartsWith(prefix, StringComparison.Ordinal)))
-        {
-            if (Tested(name[prefix.Length..]) is { } to)
-            {
-                tests.Add((to, ((IrBoolValue)((IrMapValue)value).Read(element)).Value));
-            }
-            else
-            {
-                Fail($"the model's {name} tests a type this side does not resolve");
-            }
-        }
-
-        return tests;
+        List<(string Name, IrValue Map, INamedTypeSymbol? To)> tests =
+            [.. maps.Where(m => m.Key.StartsWith(prefix, StringComparison.Ordinal)).Select(m => (m.Key, m.Value, Tested(m.Key[prefix.Length..])))];
+        tests.FindAll(static t => t.To is null).ForEach(t => Fail($"the model's {t.Name} tests a type this side does not resolve"));
+        return [.. tests.Where(static t => t.To is not null).Select(t => ((ITypeSymbol)t.To!, ((IrBoolValue)((IrMapValue)t.Map).Read(element)).Value))];
     }
 
     /// <summary>

@@ -328,8 +328,7 @@ internal static class DriverSource
         {
             string name = $"p{(slot - 1).ToString(CultureInfo.InvariantCulture)}";
             string wire = $"a[{slot.ToString(CultureInfo.InvariantCulture)}]";
-            string value = Decode(type, wire, builds)
-                ?? (DriverStruct.Of(type) is { Buildable: true } flat && DriverHeap.Nameable(type) ? FromFields(type.ToDisplayString(Qualified), flat, wire) : Built(type, wire));
+            string value = Decode(type, wire, builds) ?? (DriverStruct.Of(type) is { Buildable: true } flat ? FromFields(type.ToDisplayString(Qualified), flat, wire) : Built(type, wire));
             declarations.Add($"{Variable(type)} {name} = {value};");
             return name;
         }
@@ -354,10 +353,9 @@ internal static class DriverSource
                 : $"new {display}({string.Join(", ", fields)})";
         }
 
+        /// <summary>A field of a struct a driver builds, which is therefore a scalar, a buildable struct or a value builder's input.</summary>
         private string Field(ITypeSymbol type, string value) =>
-            Decode(type, value, builds) ?? (DriverStruct.Of(type) is { Buildable: true } nested
-                ? FromFields(type.ToDisplayString(Qualified), nested, value)
-                : Built(type, value));
+            Decode(type, value, builds) ?? (DriverStruct.Of(type) is { } nested ? FromFields(type.ToDisplayString(Qualified), nested, value) : Built(type, value));
 
         /// <summary>
         /// The value builder's reading of <paramref name="wire"/> as <paramref name="type"/>, cast to it where it can be named.
