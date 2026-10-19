@@ -189,6 +189,7 @@ public sealed class ModelObjectsTests
         { "Objects", Objects(("field.N.Node.Owner", Map("N.Node", S("N.Window", 5)))), "n's Node.Owner: needs a live window handle or a message loop" },
         { "Objects", Objects(("field.N.Node.Value", Map("N.Node", S("N.Node", 6)))), "no int argument can be built for n's Node.Value from the model" },
         { "Objects", [.. Objects().Skip(1), ("n", Bv(1))], "no N.Node argument can be built for n from the model" },
+        { "Objects", [.. Objects().Skip(1)], "no N.Node argument can be built for n from the model" },
         { "Objects", [.. Objects().Where(static v => !v.Item1.StartsWith("istype.N.Shape", StringComparison.Ordinal))], "s is of N.Shape, which no instance is created of without a constructor" },
         { "Objects", [.. Objects().Where(static v => !v.Item1.Contains("N.Thing", StringComparison.Ordinal))], "t is of N.IThing, which no instance is created of without a constructor" },
         {

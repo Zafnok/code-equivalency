@@ -241,40 +241,18 @@ internal sealed class ModelObjects
         }
     }
 
-    private string? Value(ITypeSymbol type, IrValue? value, string name)
+    private string? Value(ITypeSymbol type, IrValue? value, string name) => (value, type) switch
     {
-        if (IsScalar(type))
-        {
-            return value is null ? Fail($"the model gives no value for {name}") : ReplayArguments.Wire(type, value, maps) ?? Fail($"no {type.ToDisplayString()} argument can be built for {name} from the model");
-        }
-
-        if (string.Equals(type.ToDisplayString(), CancellationToken, StringComparison.Ordinal))
-        {
-            return DriverHeap.Token(Cancelled());
-        }
-
-        if (DriverFactory.IsWindow(type))
-        {
-            return Fail($"{name}: {DriverFactory.NeedsWindow}");
-        }
-
-        if (value is not IrSortValue element)
-        {
-            return Fail($"no {type.ToDisplayString()} argument can be built for {name} from the model");
-        }
-
-        if (IsNull(element))
-        {
-            return type.IsValueType ? Fail($"the model's {name} is null") : "null";
-        }
-
-        return type switch
-        {
-            IArrayTypeSymbol { IsSZArray: true } array => Array(array, element, name),
-            { IsReferenceType: true } => Object(element, name),
-            _ => Struct(type, element, name),
-        };
-    }
+        (null, _) when IsScalar(type) => Fail($"the model gives no value for {name}"),
+        ({ } scalar, _) when IsScalar(type) => ReplayArguments.Wire(type, scalar, maps) ?? Fail($"no {type.ToDisplayString()} argument can be built for {name} from the model"),
+        _ when string.Equals(type.ToDisplayString(), CancellationToken, StringComparison.Ordinal) => DriverHeap.Token(Cancelled()),
+        _ when DriverFactory.IsWindow(type) => Fail($"{name}: {DriverFactory.NeedsWindow}"),
+        (not IrSortValue, _) => Fail($"no {type.ToDisplayString()} argument can be built for {name} from the model"),
+        (IrSortValue element, _) when IsNull(element) => type.IsValueType ? Fail($"the model's {name} is null") : "null",
+        (IrSortValue element, IArrayTypeSymbol { IsSZArray: true } array) => Array(array, element, name),
+        (IrSortValue element, { IsReferenceType: true }) => Object(element, name),
+        (IrSortValue element, _) => Struct(type, element, name),
+    };
 
     /// <summary>An array from the model's length and elements; one with no element map has default elements, which the model allows.</summary>
     private string? Array(IArrayTypeSymbol array, IrSortValue element, string name)
@@ -343,24 +321,14 @@ internal sealed class ModelObjects
     private string? Object(IrSortValue element, string name)
     {
         IrSortValue root = Find(element);
-        if (built.TryGetValue(root, out Instance? done))
+        return built.TryGetValue(root, out Instance? done) ? Refer(done) : Concrete(root) switch
         {
-            return Refer(done);
-        }
-
-        if (Concrete(root) is not { } concrete)
-        {
-            return Fail($"the model names no type {name} can be built as");
-        }
-
-        if (DriverFactory.IsWindow(concrete))
-        {
-            return Fail($"{name}: {DriverFactory.NeedsWindow}");
-        }
-
-        return concrete.TypeKind == TypeKind.Delegate
-            ? Delegate(concrete, root, name)
-            : IsSolution(concrete) ? Uninitialized(concrete, root, name) : Constructed(concrete, root, name);
+            null => Fail($"the model names no type {name} can be built as"),
+            var concrete when DriverFactory.IsWindow(concrete) => Fail($"{name}: {DriverFactory.NeedsWindow}"),
+            { TypeKind: TypeKind.Delegate } concrete => Delegate(concrete, root, name),
+            var concrete when IsSolution(concrete) => Uninitialized(concrete, root, name),
+            var concrete => Constructed(concrete, root, name),
+        };
     }
 
     /// <summary>A solution object created without a constructor, given every field the model gives any element of it.</summary>

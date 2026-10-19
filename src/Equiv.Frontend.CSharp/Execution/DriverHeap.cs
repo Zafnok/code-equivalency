@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text;
 
+using Equiv.Frontend.CSharp.Lowering;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-
-using Equiv.Frontend.CSharp.Lowering;
 
 namespace Equiv.Frontend.CSharp.Execution;
 

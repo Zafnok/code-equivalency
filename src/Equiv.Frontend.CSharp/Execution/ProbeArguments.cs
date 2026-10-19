@@ -256,21 +256,15 @@ internal static class ProbeArguments
             INamedTypeSymbol? target = named is { } spelled
                 ? spelled.ValueKind == JsonValueKind.String ? assembly.GetTypeByMetadataName(spelled.GetString()!) : null
                 : type;
-            if (target is null || !Is(target, type))
+            return target switch
             {
-                return Fail($"{name}: {named!.Value.GetRawText()} is no {type.ToDisplayString()} this side declares");
-            }
-
-            if (DriverFactory.IsWindow(target))
-            {
-                return Fail($"{name}: {DriverFactory.NeedsWindow}");
-            }
-
-            return value.TryGetProperty("constructor", out JsonElement signature)
-                ? Constructed(target, signature, value, name)
-                : value.TryGetProperty("fields", out JsonElement fields) && fields.ValueKind == JsonValueKind.Object
-                    ? Uninitialized(target, fields, name)
-                    : Fail($"{name} is an object: null, {{\"constructor\": \"<parameter types>\", \"arguments\": [...]}} or {{\"fields\": {{...}}}}, not {value.GetRawText()}");
+                null => Fail($"{name}: {named!.Value.GetRawText()} is no {type.ToDisplayString()} this side declares"),
+                _ when !Is(target, type) => Fail($"{name}: {named!.Value.GetRawText()} is no {type.ToDisplayString()} this side declares"),
+                _ when DriverFactory.IsWindow(target) => Fail($"{name}: {DriverFactory.NeedsWindow}"),
+                _ when value.TryGetProperty("constructor", out JsonElement signature) => Constructed(target, signature, value, name),
+                _ when value.TryGetProperty("fields", out JsonElement fields) && fields.ValueKind == JsonValueKind.Object => Uninitialized(target, fields, name),
+                _ => Fail($"{name} is an object: null, {{\"constructor\": \"<parameter types>\", \"arguments\": [...]}} or {{\"fields\": {{...}}}}, not {value.GetRawText()}"),
+            };
         }
 
         private string? Constructed(INamedTypeSymbol type, JsonElement signature, JsonElement value, string name)
