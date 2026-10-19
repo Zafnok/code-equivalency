@@ -7,11 +7,14 @@ namespace Equiv.Execute;
 /// <summary>
 /// Starts real driver processes (ticket M3-032): a <c>.exe</c> directly, a <c>.dll</c> through <c>dotnet</c>. While a
 /// case runs, the process is polled, and killed when it outlives the case timeout or its private memory passes
-/// <paramref name="memoryLimitBytes"/>. With a <paramref name="workingRoot"/>, every process starts in a fresh folder under
-/// it (ticket P2-040); without one it inherits the caller's working directory.
+/// <paramref name="memoryLimitBytes"/>. A host bound by <see cref="Within"/> starts every process in one folder under the
+/// bound directory (ticket P2-040), so both drivers of a replay or <c>probe</c> case see the same working directory and an
+/// outcome that holds it is the runtimes' own (ticket P2-254). The folder is emptied whenever a process starts in it while
+/// no other runs there, so a replay's modern side never sees what its legacy side wrote. An unbound host's processes
+/// inherit the caller's working directory.
 /// </summary>
-[ExcludeFromCodeCoverage(Justification = "M3-032: starts the real driver processes; covered by RuntimeDiffTests and (P2-040) DriverWorkingDirectoryTests in Equiv.Tests.Integration")]
-public sealed class ChildProcessHost(long memoryLimitBytes, string? workingRoot = null) : IDriverHost
+[ExcludeFromCodeCoverage(Justification = "M3-032: starts the real driver processes; covered by RuntimeDiffTests, (P2-040) DriverWorkingDirectoryTests and (P2-254) ProbeTests in Equiv.Tests.Integration")]
+public sealed class ChildProcessHost(long memoryLimitBytes) : IDriverHost
 {
     public const long DefaultMemoryLimitBytes = 1L << 30;
 
@@ -37,23 +40,83 @@ public sealed class ChildProcessHost(long memoryLimitBytes, string? workingRoot 
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        if (workingRoot is not null)
-        {
-            info.WorkingDirectory = Directory.CreateDirectory(Path.Combine(workingRoot, "cwd-" + Path.GetRandomFileName())).FullName;
-        }
-
         if (modern)
         {
             info.ArgumentList.Add(driver);
         }
 
-        return new Session(Process.Start(info) ?? throw new InvalidOperationException($"could not start {driver}"), memoryLimitBytes);
+        WorkingDirectory? working = Working;
+        if (working is not null)
+        {
+            info.WorkingDirectory = working.Enter();
+        }
+
+        try
+        {
+            return new Session(Process.Start(info) ?? throw new InvalidOperationException($"could not start {driver}"), memoryLimitBytes, working);
+        }
+        catch
+        {
+            working?.Leave();
+            throw;
+        }
     }
 
-    public IDriverHost Within(string directory) => new ChildProcessHost(memoryLimitBytes, directory);
+    public IDriverHost Within(string directory) => new ChildProcessHost(memoryLimitBytes) { Working = new WorkingDirectory(directory) };
 
-    private sealed class Session(Process process, long memoryLimitBytes) : IDriverSession
+    /// <summary>The folder a bound host's processes start in; null for an unbound host.</summary>
+    private WorkingDirectory? Working { get; init; }
+
+    /// <summary>A bound host's one <c>cwd-&lt;random&gt;</c> folder under its directory, and how many processes run in it.</summary>
+    private sealed class WorkingDirectory(string directory)
     {
+        private readonly Lock gate = new();
+
+        private readonly string path = Path.Combine(directory, "cwd-" + Path.GetRandomFileName());
+
+        private int running;
+
+        /// <summary>The folder's full path, emptied first when no process runs in it.</summary>
+        public string Enter()
+        {
+            lock (gate)
+            {
+                if (running == 0 && Directory.Exists(path))
+                {
+                    Empty(path);
+                }
+
+                running++;
+                return Directory.CreateDirectory(path).FullName;
+            }
+        }
+
+        public void Leave()
+        {
+            lock (gate)
+            {
+                running--;
+            }
+        }
+
+        private static void Empty(string folder)
+        {
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // A file a killed process tree still holds outlives it; what is left stays, as it did in the caller's
+                // directory before ticket P2-040, rather than end the run.
+            }
+        }
+    }
+
+    private sealed class Session(Process process, long memoryLimitBytes, WorkingDirectory? working) : IDriverSession
+    {
+        private bool disposed;
+
         public string? Exchange(string line, TimeSpan timeout)
         {
             // Writing is inside the deadline too: a driver that never reads stdin fills the pipe (4 KB on Windows), and a
@@ -82,12 +145,19 @@ public sealed class ChildProcessHost(long memoryLimitBytes, string? workingRoot 
 
         public void Dispose()
         {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
             Kill();
 
             // Kill only signals: until the process is gone it still holds the driver's files, so a caller that deletes
             // the driver's folder next can fail with UnauthorizedAccessException (seen once in RuntimeDiffTests, PR #291).
             process.WaitForExit(ExitWait);
             process.Dispose();
+            working?.Leave();
         }
 
         /// <summary>Writes one case and reads one answer; null when the pipe broke, as when the driver died.</summary>

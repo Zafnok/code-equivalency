@@ -647,8 +647,8 @@ internal static class CompareCommand
         Dictionary<string, (ProcedurePair Pair, IrProcedure Old, IrProcedure New)> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, StringComparer.Ordinal);
         string directory = Directory.CreateTempSubdirectory("equiv-execute-").FullName;
 
-        // Every driver runs in a fresh folder under the temporary one, so a relative write by the solution's code is
-        // deleted with it instead of landing next to the caller (ticket P2-040).
+        // Every driver runs in one folder under the temporary one, so a relative write by the solution's code is deleted
+        // with it instead of landing next to the caller (ticket P2-040), and both sides see one working directory (P2-254).
         IDriverHost host = execution.Host.Within(directory);
         Replayer replayer = new(host);
         DifferentialTester tester = new(host, testing, execution.Time);
