@@ -1,0 +1,461 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ007",
+              "name": "RuntimeExposure",
+              "shortDescription": {
+                "text": "An unedited body a runtime change reaches: the texts are equal, and only a member or rule whose behaviour differs between the two sides' runtimes can make them disagree."
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FrameworkStaticFields.Audit::Record(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Labels.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 28,
+                  "endLine": 9,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FrameworkStaticFields.Audit::Record(string)",
+            "resultFingerprint/v1": "0f0f754470dcbc6e8ecd91a50df3f4bd116e62cffcdbdc593692d8e956027d75"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FrameworkStaticFields.Labels::Describe(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Labels.cs"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 30,
+                  "endLine": 17,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FrameworkStaticFields.Labels::Describe(string)",
+            "resultFingerprint/v1": "485f5c09d2d785b73d1ec6639497daf162e0fca2a7f9bc1a7cc7b4545a7a27ae"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "assumedCallees": [
+              "Equiv.Samples.FrameworkStaticFields.Audit::Record(string)"
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "VariableDeclarationGroup"
+            }
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FrameworkStaticFields.Labels::Trimmed(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Labels.cs"
+                },
+                "region": {
+                  "startLine": 24,
+                  "startColumn": 30,
+                  "endLine": 24,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FrameworkStaticFields.Labels::Trimmed(string)",
+            "resultFingerprint/v1": "d84262c3a7b19bb000194d7e2533da32524ae915659dfe95ce036bf226170fe1"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "FieldReference"
+            }
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FrameworkStaticFields.Labels::Release(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Labels.cs"
+                },
+                "region": {
+                  "startLine": 34,
+                  "startColumn": 30,
+                  "endLine": 34,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FrameworkStaticFields.Labels::Release(string)",
+            "resultFingerprint/v1": "12c7fe1dfad060bcb7e648518e389e523334edc5217dfe7afbb87abf54615ada"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "assumedCallees": [
+              "Equiv.Samples.FrameworkStaticFields.Audit::Record(string)"
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "VariableDeclarationGroup"
+            }
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FrameworkStaticFields.Labels::Forever(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Labels.cs"
+                },
+                "region": {
+                  "startLine": 41,
+                  "startColumn": 32,
+                  "endLine": 41,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FrameworkStaticFields.Labels::Forever(string)",
+            "resultFingerprint/v1": "84a4001d57475ff90b82cc978a81ebc401a52224276ee36d79e2622e1a5c6c5c"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "assumedCallees": [
+              "Equiv.Samples.FrameworkStaticFields.Audit::Record(string)"
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "VariableDeclarationGroup"
+            }
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.FrameworkStaticFields.Labels::Blank(string) diverges: inputs(sort \"System.String\" 621580160, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 18652613 outs() trace(\"Equiv.Samples.FrameworkStaticFields.Audit::Record(string)\"(sort \"System.String\" 621580160))) new(returned sort \"System.String\" 621580159 outs() trace(\"Equiv.Samples.FrameworkStaticFields.Audit::Record(string)\"(sort \"System.String\" 621580160)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Labels.cs"
+                },
+                "region": {
+                  "startLine": 48,
+                  "startColumn": 30,
+                  "endLine": 48,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FrameworkStaticFields.Labels::Blank(string)",
+            "resultFingerprint/v1": "ea38ad1a3cad31ed169b5ffd48b1486cede94be507f3c9302216a943d58e4819"
+          },
+          "baselineState": "new",
+          "rank": 64.002,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 621580160, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 18652613 outs() trace(\"Equiv.Samples.FrameworkStaticFields.Audit::Record(string)\"(sort \"System.String\" 621580160))) new(returned sort \"System.String\" 621580159 outs() trace(\"Equiv.Samples.FrameworkStaticFields.Audit::Record(string)\"(sort \"System.String\" 621580160)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 621580160, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 18652613 outs() trace(\"Equiv.Samples.FrameworkStaticFields.Audit::Record(string)\"(sort \"System.String\" 621580160))) new(returned sort \"System.String\" 621580159 outs() trace(\"Equiv.Samples.FrameworkStaticFields.Audit::Record(string)\"(sort \"System.String\" 621580160)))"
+              }
+            },
+            "divergenceKind": "result-changed",
+            "assumedCallees": [
+              "Equiv.Samples.FrameworkStaticFields.Audit::Record(string)"
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "FieldReference"
+            },
+            "reviewGroup": "proofMethod:none"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 6,
+            "modern": 6
+          },
+          "matchedPairs": 6,
+          "pairsWithoutOpaque": 6,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 1,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 5,
+          "changedPairsWithoutOpaque": 5,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 5
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.String::Trim()",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.String::Trim()",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 0,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 63,
+          "modern": 55
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.FrameworkStaticFields",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.FrameworkStaticFields",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "proofMethod:none",
+            "ruleId": "EQ002",
+            "rank": 64.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.FrameworkStaticFields.Labels::Blank(string)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

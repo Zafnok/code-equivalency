@@ -411,6 +411,20 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal((legacy, modern), (rebound["legacy"], rebound["modern"]));
     }
 
+    /// <summary>
+    /// Ticket P2-250 criterion 1: a framework <c>static readonly</c> field read the same way on both sides, before a call on
+    /// one and after it on the other, or <c>string.Empty</c> against <c>""</c>, is one value, so the pair is Equivalent; another
+    /// constant in its place is still Divergent.
+    /// </summary>
+    [Theory]
+    [InlineData("::Describe(", "EQ001")]
+    [InlineData("::Trimmed(", "EQ001")]
+    [InlineData("::Release(", "EQ001")]
+    [InlineData("::Forever(", "EQ001")]
+    [InlineData("::Blank(", "EQ002")]
+    public void FrameworkStaticFields_AFrameworkStaticFieldIsOneValueOnBothSides(string member, string rule) =>
+        Assert.Equal(rule, Single("framework-static-fields", member).RuleId);
+
     /// <summary>Ticket P2-142 criterion 4: the entry does not hide an edit. Another constant on the modern side stays Divergent.</summary>
     [Fact]
     public void TimeSpanIntegerOverloads_AnotherConstantOnTheModernSideIsDivergent()
