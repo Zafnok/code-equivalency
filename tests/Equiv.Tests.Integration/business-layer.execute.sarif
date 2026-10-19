@@ -752,7 +752,29 @@
             },
             "divergenceKind": "result-changed",
             "replay": "not-constructible",
-            "replayReason": "legacy: the model constrains cast.System.Int32.System.Object, cast.System.String.System.Object, field.Equiv.Samples.BusinessLayer.Order.CustomerName, field.Equiv.Samples.BusinessLayer.Order.Id",
+            "replayReason": "the call traces differ, and the model's outcomes rest on call answers chosen after they split, which replay does not observe",
+            "replayInputs": {
+              "legacy": [
+                {
+                  "name": "this",
+                  "built": "constructor Equiv.Samples.BusinessLayer.OrderService.OrderService()"
+                },
+                {
+                  "name": "order",
+                  "built": "uninitialized Order.CustomerName, Order.Id"
+                }
+              ],
+              "modern": [
+                {
+                  "name": "this",
+                  "built": "constructor Equiv.Samples.BusinessLayer.OrderService.OrderService()"
+                },
+                {
+                  "name": "order",
+                  "built": "uninitialized Order.CustomerName, Order.Id"
+                }
+              ]
+            },
             "notCongruent": {
               "component": "context",
               "identity": "InterpolatedString"
