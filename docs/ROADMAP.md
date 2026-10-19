@@ -1430,6 +1430,9 @@ driver can call and the 10 whose argument no driver builds, of the 71, and every
 `not-constructible`.
 P2-246 (S, filed 2026-10-18 by P2-242's size guard) reads and builds the struct shapes P2-242 left out: state in
 auto-properties, and fields that are flat structs.
+P2-249 (M, filed 2026-10-19 by P2-245's size guard) carries the model's answers to a delegate argument's calls in the
+counterexample, so that a replay builds a delegate the model's runs call, as ADR 0062 decision 3 says; P2-245 builds one
+only where no run calls it.
 
 P2-247 (L, filed 2026-10-18) is the second execution re-adjudication, after P2-240, P2-241, P2-242, P2-245 and
 P2-246: the five large pairs in `full --execute` at one commit, every EQ002 and EQ006 adjudicated (68 at `b0f56ff8`, no

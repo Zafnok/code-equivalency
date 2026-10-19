@@ -1,5 +1,5 @@
 # P2-245 Execution reach: a replay or `probe` driver calls a private member, builds a receiver with no public parameterless constructor from the model's fields, and builds the arguments the model determines
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-240, P2-242
@@ -141,3 +141,46 @@ structs (P2-242). The second execution re-adjudication of all 71 (after this gro
   counts as confirmed without a trace).
 - Decision (filing): Depends on P2-240 as well as P2-242: a `reproduced` caused by a missing package implementation would
   be miscounted in criterion 6. Alternative: depend on P2-242 only and recheck. Rule: soundness first.
+- Deviation: ADR 0062 decision 3's delegate "answers each invocation with the model's interpretation of that open call".
+  The `Counterexample` a replay gets holds no call answers; they exist only in `Equiv.Verify.Z3`'s `ModelOracle`, and
+  the size guard forbids any change in `Equiv.Verify.*`. A replay builds a delegate where neither of the model's runs
+  calls through it (a fixed exception if called, which no model run does) and is `not-constructible` ("the model's runs
+  call ...") where one does. ADR 0062's decision 3 says so as accepted; P2-249 (new) carries the answers. `probe`'s
+  delegate is the constant answer decision 4 names.
+- Deviation: decision 3's "a cancelled token when the model's run observes cancellation": the counterexample shows
+  cancellation only as an outcome, so a token is cancelled exactly when a model run ends in
+  `OperationCanceledException`, else `default`. ADR 0062 says so as accepted.
+- Decision: `replayInputs` is `{legacy: [{name, built}], modern: [...]}` on every replay whose drivers ran, and absent
+  when the plan built no input (not constructible before any driver). Alternatives: one flat list with a side field; an
+  empty object on every replay. Rule: 1 (mirror `replayOutcomes`, the property beside it).
+- Decision: heap inputs travel as tagged JSON arrays (`@u`, `@s`, `@a`, `@c`, `@r`, `@t`) read by a generated value
+  builder `V.Value(wire, Type)`, with a per-driver type table and maker table (`DriverHeap`). Alternative: bake each
+  replay's values into its driver's source. Rule: 2 (one decoder shared by replay and `probe`, the driver's protocol
+  unchanged). The helpers (`D`, `H`, `V`) are emitted only into a driver that uses them, so a runtime-diff, testing or
+  plain replay driver carries no reflection (P2-052's assertion holds).
+- Decision: both sides' inputs are built from the union of both sides' synthesised inputs, so they get one state; a
+  field map a side does not declare is `the model constrains ...` there, never a skipped write. The receiver is `new
+  T()` only when on both sides the model gives its object no field, names no type derived from `T`, and no other input
+  refers to it, and `T` has a public parameterless constructor; otherwise both receivers are constructor-free. Rule:
+  soundness first.
+- Decision: an element and the elements its upcasts and its passing type tests yield are one object of the one type
+  each is; casts joining two references of one sort, a type test of a type the side does not resolve, and a `new.*`
+  that names an input's reference are `not-constructible`. Alternative: ignore an unresolvable test (found while testing:
+  `istype.<From>.System.Collections.Generic.List_1` did not resolve, and ignoring it would build the wrong type). Rule:
+  soundness first.
+- Decision: the access mechanism is one per pair (`DriverSource.Reach`): direct when a friend sees both members, a
+  typed delegate when both allow one, else `MethodInfo.Invoke`; the exact-signature check runs in the factory only when
+  the access is reflective, so a public member with a pointer still says what it said. Rule: ADR 0062 decision 1.
+- Decision: differential testing of Unknowns keeps its own call rules (`CallObstacle(reach: false)`: not public, no
+  public parameterless constructor), so no new observed Divergent can appear: the ticket changes no verdict. Rule:
+  ticket Goal ("Nothing here changes a verdict").
+- Decision: `DriverStruct` gains `Comparable`: a struct with an array or reference field is built but never compared,
+  so a runtime-diff driver's result comparison is unchanged. Rule: soundness first (no new observed difference).
+- Decision: a driver creates an instance without a constructor by `RuntimeHelpers.GetUninitializedObject` when its
+  project's references have it (.NET 5 and later), else `FormatterServices.GetUninitializedObject`. Alternative: by the
+  side's runtime family. Rule: 2 (what the driver compiles against decides what compiles).
+- Decision: four new files under `src/` (Core `ReplayInput.cs`, `ReplayInputs.cs`; frontend `DriverHeap.cs`,
+  `ModelObjects.cs`), the size guard's limit; CA1034 forbids nesting `ReplayInput` in Core. `HeapInputs.Part` became
+  `internal` (one word, in `Lowering/`) so that the builder spells map names as lowering does.
+- Decision: the corpus runs reuse P2-237's checkouts and restores (`.corpus/` of its worktree, linked into this one by a
+  directory junction), so the three pairs ran on the same inputs P2-237's did.
