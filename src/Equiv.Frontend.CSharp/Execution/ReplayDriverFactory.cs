@@ -138,7 +138,7 @@ internal sealed class ReplayDriverFactory(
 
         ReplayTarget old = legacy[pair.Old];
         ReplayTarget @new = modern[pair.New];
-        return Runnable(old, @new, ProbeArguments.Case(old.Method, arguments, receiver), ProbeArguments.Case(@new.Method, arguments, receiver), directory, uninitializes: false);
+        return Runnable(old, @new, ProbeArguments.Case(old.Method, old.Compilation, arguments, receiver), ProbeArguments.Case(@new.Method, @new.Compilation, arguments, receiver), directory, uninitializes: false);
     }
 
     /// <summary>A differential-testing driver's shape: <c>new T()</c>, the member called directly, inputs from the generators.</summary>

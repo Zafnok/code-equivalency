@@ -45,11 +45,20 @@ public sealed class ReachIntegrationTests : IDisposable
                 protected int Twice(int x) => checked(x * 2);
                 private class Ledger
                 {
+                    private readonly int size;
+                    public Ledger(int size)
+                    {
+                        if (size < 0) { throw new System.ArgumentOutOfRangeException("size"); }
+                        this.size = size;
+                    }
+
                     public static int Check(int x)
                     {
                         if (x < 0) { throw new System.InvalidOperationException(); }
                         return x;
                     }
+
+                    public int Twice() => 2 * size;
                 }
             }
 
@@ -91,6 +100,7 @@ public sealed class ReachIntegrationTests : IDisposable
                 public static int Call(System.Func<int, int> f) => f(2);
                 public static int Size(Packet p) => p.Data.Length + p.Name.Length;
                 public static string Cancelled(System.Threading.CancellationToken token) => token.IsCancellationRequested ? "yes" : "no";
+                public static long Length(System.IO.Stream s) => s.Length;
             }
         }
         """;
@@ -111,6 +121,9 @@ public sealed class ReachIntegrationTests : IDisposable
     [InlineData("N.Account", "Twice", null, "[2147483647]", "Threw \"System.OverflowException\"", "CreateDelegate")]
     [InlineData("N.Account+Ledger", "Check", null, "[-1]", "Threw \"System.InvalidOperationException\"", "H.Call(m")]
     [InlineData("N.Account+Ledger", "Check", null, "[4]", "Returned 4", "H.Call(m")]
+    [InlineData("N.Account+Ledger", ".ctor", null, "[-1]", "Threw \"System.ArgumentOutOfRangeException\"", "H.Ctor(")]
+    [InlineData("N.Account+Ledger", "Twice", "{\"constructor\":\"int\",\"arguments\":[4]}", "[]", "Returned 8", "H.Ctor(")]
+    [InlineData("N.Kinds", "Length", null, "[{\"type\":\"System.IO.MemoryStream\",\"constructor\":\"byte[]\",\"arguments\":[[1,2,3]]}]", "Returned 3", "new global::System.IO.MemoryStream(")]
     public void AHiddenMember_IsCalledOnBothRuntimesWithItsOwnException(string type, string member, string? receiver, string arguments, string outcome, string mechanism)
     {
         (ExecutionOutcome legacy, ExecutionOutcome modern, ReplayPlan plan) = Probe(type, member, receiver, arguments);

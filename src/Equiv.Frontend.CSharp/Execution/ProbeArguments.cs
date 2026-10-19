@@ -26,7 +26,7 @@ namespace Equiv.Frontend.CSharp.Execution;
 internal static class ProbeArguments
 {
     /// <summary>The case for <paramref name="method"/> with <paramref name="arguments"/> and, for an instance member, <paramref name="receiver"/>.</summary>
-    public static ReplayArguments.SideCase Case(IMethodSymbol method, IReadOnlyList<JsonElement> arguments, JsonElement? receiver = null)
+    public static ReplayArguments.SideCase Case(IMethodSymbol method, Compilation compilation, IReadOnlyList<JsonElement> arguments, JsonElement? receiver = null)
     {
         if (ReplayArguments.CallObstacle(method, reach: true) is { } obstacle)
         {
@@ -38,7 +38,7 @@ internal static class ProbeArguments
             return new ReplayArguments.SideCase(Input: null, $"expected {method.Parameters.Length} argument(s), got {arguments.Count}");
         }
 
-        Builder builder = new(method.ContainingAssembly, new DriverHeap());
+        Builder builder = new(compilation, new DriverHeap());
         (ModelObjects.Built? self, string? newReceiver) = (null, null);
         if (DriverFactory.HasReceiver(method))
         {
@@ -64,7 +64,7 @@ internal static class ProbeArguments
     }
 
     /// <summary>One side's inputs from JSON, into one driver's heap, with how each was built.</summary>
-    private sealed class Builder(IAssemblySymbol assembly, DriverHeap heap)
+    private sealed class Builder(Compilation compilation, DriverHeap heap)
     {
         private readonly List<string> written = [];
 
@@ -142,6 +142,7 @@ internal static class ProbeArguments
                 (JsonValueKind.Null, { IsValueType: false }) => "null",
                 (JsonValueKind.Array, IArrayTypeSymbol { IsSZArray: true } array) => Array(array, value, name),
                 (JsonValueKind.Object, INamedTypeSymbol { TypeKind: TypeKind.Delegate } @delegate) => Delegate(@delegate, value, name),
+                (JsonValueKind.Object, INamedTypeSymbol { IsValueType: true } built) when value.TryGetProperty("constructor", out _) => Object(built, value, name),
                 (JsonValueKind.Object, INamedTypeSymbol { IsValueType: true }) => Struct(type, value, name),
                 (JsonValueKind.Object, INamedTypeSymbol named) => Object(named, value, name),
                 _ => Fail($"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}"),
@@ -254,7 +255,7 @@ internal static class ProbeArguments
             // Without a type the object is of the parameter's own, which is always a type of it.
             JsonElement? named = value.TryGetProperty("type", out JsonElement given) ? given : null;
             INamedTypeSymbol? target = named is { } spelled
-                ? spelled.ValueKind == JsonValueKind.String ? assembly.GetTypeByMetadataName(spelled.GetString()!) : null
+                ? spelled.ValueKind == JsonValueKind.String ? Resolve(spelled.GetString()!) : null
                 : type;
             return target switch
             {
@@ -267,19 +268,23 @@ internal static class ProbeArguments
             };
         }
 
+        /// <summary>The type a metadata name names: the solution's own, else a unique one among its references (a framework type).</summary>
+        private INamedTypeSymbol? Resolve(string name) => compilation.Assembly.GetTypeByMetadataName(name) ?? compilation.GetTypeByMetadataName(name);
+
+        /// <summary>
+        /// An object or struct by the constructor its parameter types name (as C# spells them, without nullable annotations),
+        /// visible or not: one a friend cannot see is bound by its exact signature (ADR 0062 decision 1).
+        /// </summary>
         private string? Constructed(INamedTypeSymbol type, JsonElement signature, JsonElement value, string name)
         {
             string? wanted = signature.ValueKind == JsonValueKind.String ? signature.GetString() : null;
-            IMethodSymbol? chosen = type.IsAbstract ? null : type.InstanceConstructors.FirstOrDefault(c => ReplayArguments.Hidden(c) is null
-                && string.Equals(string.Join(", ", c.Parameters.Select(static p => p.Type.ToDisplayString())), wanted, StringComparison.Ordinal));
+            IMethodSymbol? chosen = type.IsAbstract ? null : type.InstanceConstructors.FirstOrDefault(c =>
+                string.Equals(string.Join(", ", c.Parameters.Select(static p => p.Type.ToDisplayString(Lowering.TypeMapper.Unannotated))), wanted, StringComparison.Ordinal));
             JsonElement[] arguments = value.TryGetProperty("arguments", out JsonElement given) && given.ValueKind == JsonValueKind.Array ? [.. given.EnumerateArray()] : [];
-            if (chosen is null || arguments.Length != chosen.Parameters.Length)
+            if (chosen is null || arguments.Length != chosen.Parameters.Length || Heap.Constructor(chosen) is not { } maker)
             {
-                return Fail($"{name}: {type.ToDisplayString()} has no visible constructor ({wanted}) taking {arguments.Length} argument(s)");
+                return Fail($"{name}: {type.ToDisplayString()} has no constructor ({wanted}) a driver binds taking {arguments.Length} argument(s)");
             }
-
-            // A constructor a friend can see is of a type it can name, so it is always a maker.
-            int maker = (int)Heap.Constructor(chosen)!;
 
             constructors.Add(chosen.ToDisplayString());
             List<string> wires = [];

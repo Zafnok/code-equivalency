@@ -65,7 +65,7 @@ public sealed class ProbeArgumentsTests
     private static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement;
 
     private static ReplayArguments.SideCase Case(string type, string member, params string[] json) =>
-        ProbeArguments.Case(Method(Project, type, member), [.. json.Select(Json)]);
+        ProbeArguments.Case(Method(Project, type, member), Project, [.. json.Select(Json)]);
 
     private static ReplayArguments.SideCase AllCase(int replaceIndex, string replacement)
     {
@@ -210,7 +210,7 @@ public sealed class ProbeArgumentsTests
     [Fact]
     public void UnsupportedValueType_IsAlwaysUnconstructible()
     {
-        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "When"), [Json("1")]);
+        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "When"), Project, [Json("1")]);
 
         Assert.Null(result.Input);
         Assert.Contains("at", result.Reason, StringComparison.Ordinal);
@@ -219,7 +219,7 @@ public sealed class ProbeArgumentsTests
     [Fact]
     public void UncallableMethod_IsAlwaysUnconstructible()
     {
-        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "ByRef"), [Json("1")]);
+        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "ByRef"), Project, [Json("1")]);
 
         Assert.Null(result.Input);
         Assert.Equal("x is passed by reference", result.Reason);
@@ -238,7 +238,7 @@ public sealed class ProbeArgumentsTests
     [Fact]
     public void NotPublic_IsReached()
     {
-        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "Hidden"), []);
+        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "Hidden"), Project, []);
 
         Assert.Empty(result.Reason);
         Assert.Empty(result.Input!.Arguments);
@@ -247,7 +247,7 @@ public sealed class ProbeArgumentsTests
     [Fact]
     public void Generic_IsUnconstructible()
     {
-        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "Generic"), [Json("1")]);
+        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "Generic"), Project, [Json("1")]);
 
         Assert.Equal("generic", result.Reason);
     }
@@ -256,7 +256,7 @@ public sealed class ProbeArgumentsTests
     [Fact]
     public void NoPublicParameterlessConstructor_IsCreatedWithoutOne()
     {
-        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.Q", "M"), []);
+        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.Q", "M"), Project, []);
 
         Assert.Empty(result.Reason);
         Assert.Equal(["[\"@u\",\"1\",0,[]]"], result.Input!.Arguments);
@@ -267,7 +267,7 @@ public sealed class ProbeArgumentsTests
     [Fact]
     public void Constructor_BuildsItsParameters()
     {
-        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.Q", ".ctor"), [Json("7")]);
+        ReplayArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.Q", ".ctor"), Project, [Json("7")]);
 
         Assert.Empty(result.Reason);
         Assert.Equal(["7"], result.Input!.Arguments);

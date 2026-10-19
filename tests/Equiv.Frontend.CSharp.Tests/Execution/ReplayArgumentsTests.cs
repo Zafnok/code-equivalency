@@ -17,7 +17,7 @@ public sealed class ReplayArgumentsTests
         {
             public interface IWin32Window { }
             public static class Application { public static void Run() { } }
-            public class Form : IWin32Window { public int M() => 0; }
+            public class Form : IWin32Window { public int M() => 0; private static int Build(int x) => x; }
         }
 
         namespace N
@@ -140,6 +140,7 @@ public sealed class ReplayArgumentsTests
     [Theory]
     [InlineData("System.Windows.Forms.Application", "Run", true, "needs a live window handle or a message loop")]
     [InlineData("System.Windows.Forms.Form", "M", true, "needs a live window handle or a message loop")]
+    [InlineData("System.Windows.Forms.Form", "Build", true, null)]
     [InlineData("N.C", "Show", true, "needs a live window handle or a message loop")]
     [InlineData("N.P", "M", false, "N.P has no public parameterless constructor")]
     [InlineData("N.P", "M", true, null)]

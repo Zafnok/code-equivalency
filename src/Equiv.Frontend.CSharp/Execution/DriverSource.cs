@@ -154,11 +154,13 @@ internal static class DriverSource
             : null;
 
     /// <summary>
-    /// Whether a typed delegate can call <paramref name="method"/>: every type in its signature can be named, its receiver,
-    /// if any, is a class (an open delegate over a struct takes it by reference), and it has at most sixteen inputs.
+    /// Whether a typed delegate can call <paramref name="method"/>: it is not a constructor, every type in its signature can
+    /// be named, its receiver, if any, is a class (an open delegate over a struct takes it by reference), and it has at most
+    /// sixteen inputs.
     /// </summary>
     internal static bool Delegable(IMethodSymbol method) =>
-        DriverHeap.Nameable(method.ContainingType)
+        method.MethodKind != MethodKind.Constructor
+        && DriverHeap.Nameable(method.ContainingType)
         && method.Parameters.All(static p => DriverHeap.Nameable(p.Type))
         && (method.ReturnsVoid || DriverHeap.Nameable(method.ReturnType))
         && !(DriverFactory.HasReceiver(method) && method.ContainingType.IsValueType)
@@ -396,10 +398,12 @@ internal static class DriverSource
             UsesHelpers = true;
             string owner = DriverHeap.TypeOf(method.ContainingType)!;
             string parameters = string.Join(", ", method.Parameters.Select(static p => DriverHeap.TypeOf(p.Type)!));
-            string bound = $"H.Method({owner}, {DriverHeap.Literal(method.MetadataName)}, {(method.IsStatic ? "true" : "false")}, new System.Type[] {{ {parameters} }})";
+            string bound = method.MethodKind == MethodKind.Constructor
+                ? $"H.Ctor({owner}, new System.Type[] {{ {parameters} }})"
+                : $"H.Method({owner}, {DriverHeap.Literal(method.MetadataName)}, {(method.IsStatic ? "true" : "false")}, new System.Type[] {{ {parameters} }})";
             if (access == Access.Invoke)
             {
-                declarations.Add($"System.Reflection.MethodInfo m = {bound};");
+                declarations.Add($"System.Reflection.MethodBase m = {bound};");
                 return $"H.Call(m, {receiver ?? "null"}, new object[] {{ {string.Join(", ", arguments)} }})";
             }
 
@@ -625,9 +629,9 @@ internal static class DriverSource
 
     /// <summary>
     /// The reflection a replay or <c>probe</c> driver may use (ADR 0062 decision 1), and nothing else: <c>H.Method</c> binds a
-    /// member by name and exact parameter types, refusing a miss or an ambiguity rather than taking a nearest match;
-    /// <c>H.Call</c> invokes it and rethrows the member's own exception; <c>H.Construct</c> calls a parameterless constructor
-    /// the driver cannot name; <c>H.New</c> creates an instance without a constructor and <c>H.Set</c> writes one of its
+    /// member by name and exact parameter types, refusing a miss or an ambiguity rather than taking a nearest match, and
+    /// <c>H.Ctor</c> a constructor by its exact parameter types; <c>H.Call</c> invokes either and rethrows the member's own
+    /// exception; <c>H.Construct</c> calls a parameterless constructor the driver cannot name; <c>H.New</c> creates an instance without a constructor and <c>H.Set</c> writes one of its
     /// fields, <c>readonly</c> ones included. <c>V.Value</c> reads <see cref="DriverHeap"/>'s wire forms against the type
     /// being built; <c>D</c> holds the driver's type table and makers.
     /// </summary>
@@ -683,11 +687,19 @@ internal static class DriverSource
                 }
             }
 
+            public static System.Reflection.ConstructorInfo Ctor(Type owner, Type[] parameters)
+            {
+                foreach (System.Reflection.ConstructorInfo c in owner.GetConstructors(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                {
+                    if (Same(c.GetParameters(), parameters)) { return c; }
+                }
+
+                throw new MissingMethodException(owner.FullName, ".ctor");
+            }
+
             public static object Construct(Type type)
             {
-                System.Reflection.ConstructorInfo c = type.GetConstructor(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, null, Type.EmptyTypes, null);
-                if (c == null) { throw new MissingMethodException(type.FullName, ".ctor"); }
-                return Call(c, null, new object[0]);
+                return Call(Ctor(type, Type.EmptyTypes), null, new object[0]);
             }
 
             public static object New(Type type)

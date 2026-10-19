@@ -26,6 +26,7 @@ public sealed class DriverReachTests
                 private void Note(int x) { }
                 private static Secret Make(Secret s) => s;
                 private static Secret[] Many(Secret[] s) => s;
+                private static Secret Fresh(int x) => null;
                 private static unsafe int Pointer(int* p) => 0;
                 private static int Generic(System.Collections.Generic.List<Secret> s) => 0;
                 private static int Grid(Secret[,] s) => 0;
@@ -74,7 +75,8 @@ public sealed class DriverReachTests
     [InlineData("N.C", "Count", "Delegate", "global::System.Func<int> f = (global::System.Func<int>)System.Delegate.CreateDelegate(typeof(global::System.Func<int>), H.Method(typeof(global::N.C), \"Count\", true, new System.Type[] {  }));", "r = f();")]
     [InlineData("N.C", "Touch", "Delegate", "global::System.Action f = (global::System.Action)System.Delegate.CreateDelegate(", "f();")]
     [InlineData("N.C", "Note", "Delegate", "global::System.Action<global::N.C, int> f =", "f(self, p0);")]
-    [InlineData("N.C", "Note", "Invoke", "System.Reflection.MethodInfo m = H.Method(typeof(global::N.C), \"Note\", false, new System.Type[] { typeof(int) });", "H.Call(m, self, new object[] { p0 });")]
+    [InlineData("N.C", "Note", "Invoke", "System.Reflection.MethodBase m = H.Method(typeof(global::N.C), \"Note\", false, new System.Type[] { typeof(int) });", "H.Call(m, self, new object[] { p0 });")]
+    [InlineData("N.C+Secret", ".ctor", "Invoke", "System.Reflection.MethodBase m = H.Ctor(System.Type.GetType(", "r = H.Call(m, null, new object[] {  });")]
     [InlineData("N.C", "Make", "Invoke", "object p0 = V.Value(a[1], D.Ty[0]);", "r = H.Call(m, null, new object[] { p0 });")]
     [InlineData("N.C", "Many", "Invoke", "System.Type.GetType(\"N.C+Secret, Project, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null\", true).MakeArrayType()", "NotComparable(\"N.C.Secret[]\")")]
     [InlineData("N.C+Secret", "M", "Invoke", "object self = H.Construct(D.Ty[0]);", "r = (int)H.Call(m, self, new object[] {  });")]
@@ -119,6 +121,10 @@ public sealed class DriverReachTests
     [InlineData("N.C", "Count", "N.S", "Peek", "Invoke")]
     [InlineData("N.C", "Count", "N.C+Value", "Peek", "Invoke")]
     [InlineData("N.C", "Count", "N.C", "Dynamic", "Delegate")]
+    [InlineData("N.C+Secret", ".ctor", "N.C+Secret", ".ctor", "Invoke")]
+    [InlineData("N.C", "Count", "N.C+Secret", ".ctor", "Invoke")]
+    [InlineData("N.C", "Count", "N.C", "Fresh", "Invoke")]
+    [InlineData("N.C", "Count", "N.C", "Touch", "Delegate")]
     public void BothSides_AreReachedByOneMechanism(string oldType, string oldMember, string newType, string newMember, string access) =>
         Assert.Equal(Enum.Parse<DriverSource.Access>(access), DriverSource.Reach(Member(oldType, oldMember), Member(newType, newMember)));
 

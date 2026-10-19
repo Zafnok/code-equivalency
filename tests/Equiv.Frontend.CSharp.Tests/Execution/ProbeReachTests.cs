@@ -61,7 +61,8 @@ public sealed class ProbeReachTests
                 public static int Windows(Window[] ws) => 0;
                 public static int Grid(int[,] g) => 0;
                 private static int Hidden(Secret s, Hush h) => 0;
-                private class Secret { public Secret(int x) { } }
+                public static int Framework(System.IO.Stream s, System.TimeSpan t, string? x) => 0;
+                private class Secret { public Secret(int x) { } public Secret(string? a, string b) { } public unsafe Secret(int* p) { } }
                 private delegate int Hush(int x);
             }
         }
@@ -73,7 +74,7 @@ public sealed class ProbeReachTests
     {
         using JsonDocument json = JsonDocument.Parse(arguments);
         using JsonDocument? self = receiver is null ? null : JsonDocument.Parse(receiver);
-        return ProbeArguments.Case(Method(Project, type, member), [.. json.RootElement.EnumerateArray().Select(static e => e.Clone())], self?.RootElement.Clone());
+        return ProbeArguments.Case(Method(Project, type, member), Project, [.. json.RootElement.EnumerateArray().Select(static e => e.Clone())], self?.RootElement.Clone());
     }
 
     private static (string Wire, string How)[] Built(ReplayArguments.SideCase built)
@@ -116,6 +117,28 @@ public sealed class ProbeReachTests
     [InlineData("Take", "[{\"constructor\":\"\",\"arguments\":[]},{\"type\":\"N.Account\",\"fields\":{}},null,null]", "[\"@c\",\"1\",0,[]]", "constructor object.Object()")]
     public void AnArgumentKind_IsBuiltByName(string member, string arguments, string wire, string how) =>
         Assert.Equal((wire, how), Built(Case("N.Kinds", member, arguments))[0]);
+
+    /// <summary>
+    /// A constructor a friend cannot see is bound by its exact signature, a framework object is of the framework type
+    /// <c>type</c> names, a struct is built by its constructor, and a constructor is named without nullable annotations.
+    /// </summary>
+    [Fact]
+    public void Constructors_AreBoundWhereverTheyAre()
+    {
+        (string Wire, string How)[] hidden = Built(Case("N.Kinds", "Hidden", "[{\"constructor\":\"string, string\",\"arguments\":[\"a\",\"b\"]},null]"));
+        (string Wire, string How)[] framework = Built(Case(
+            "N.Kinds", "Framework", "[{\"type\":\"System.IO.MemoryStream\",\"constructor\":\"byte[]\",\"arguments\":[[1,2]]},{\"constructor\":\"long\",\"arguments\":[5]},null]"));
+
+        Assert.Equal(("[\"@c\",\"1\",0,[\"a\",\"b\"]]", "constructor N.Kinds.Secret.Secret(string?, string)"), hidden[0]);
+        Assert.Equal(("[\"@c\",\"2\",0,[[\"@a\",\"1\",0,[1,2]]]]", "constructor System.IO.MemoryStream.MemoryStream(byte[])"), framework[0]);
+        Assert.Equal(("[\"@c\",\"3\",1,[5]]", "constructor System.TimeSpan.TimeSpan(long)"), framework[1]);
+        Assert.Equal(
+            ("[\"@c\",\"1\",0,[]]", "constructor N.Account.Account()"),
+            Built(Case("N.Kinds", "Take", "[null,null,null,{\"constructor\":\"\",\"arguments\":[]}]"))[3]);
+        Assert.Equal(
+            "s: N.Kinds.Secret has no constructor (int*) a driver binds taking 1 argument(s)",
+            Case("N.Kinds", "Hidden", "[{\"constructor\":\"int*\",\"arguments\":[1]},null]").Reason);
+    }
 
     [Fact]
     public void Delegates_AnswerWithTheirValue() =>
@@ -160,15 +183,14 @@ public sealed class ProbeReachTests
     [InlineData("Take", "[null,{\"type\":\"N.Window\",\"fields\":{}},null,null]", "s: \"N.Window\" is no N.IShape this side declares")]
     [InlineData("Take", "[{\"type\":\"N.Window\",\"fields\":{}},null,null,null]", "o: needs a live window handle or a message loop")]
     [InlineData("Take", "[null,null,{\"fields\":{}},null]", "b: N.Base is not a solution class an instance is created of without a constructor")]
-    [InlineData("Take", "[null,null,{\"constructor\":\"\"},null]", "b: N.Base has no visible constructor () taking 0 argument(s)")]
-    [InlineData("Take", "[null,null,null,{\"constructor\":5}]", "a: N.Account has no visible constructor () taking 0 argument(s)")]
-    [InlineData("Take", "[null,null,null,{\"constructor\":\"string\"}]", "a: N.Account has no visible constructor (string) taking 0 argument(s)")]
-    [InlineData("Take", "[null,null,null,{\"constructor\":\"string\",\"arguments\":5}]", "a: N.Account has no visible constructor (string) taking 0 argument(s)")]
+    [InlineData("Take", "[null,null,{\"constructor\":\"\"},null]", "b: N.Base has no constructor () a driver binds taking 0 argument(s)")]
+    [InlineData("Take", "[null,null,null,{\"constructor\":5}]", "a: N.Account has no constructor () a driver binds taking 0 argument(s)")]
+    [InlineData("Take", "[null,null,null,{\"constructor\":\"string\"}]", "a: N.Account has no constructor (string) a driver binds taking 0 argument(s)")]
+    [InlineData("Take", "[null,null,null,{\"constructor\":\"string\",\"arguments\":5}]", "a: N.Account has no constructor (string) a driver binds taking 0 argument(s)")]
     [InlineData("Take", "[null,null,null,{\"constructor\":\"string\",\"arguments\":[1]}]", "no string argument can be built for a's owner from 1")]
     [InlineData("Take", "[null,null,null,{\"fields\":{\"Host\":{\"fields\":{}}}}]", "a.Host: needs a live window handle or a message loop")]
     [InlineData("Take", "[null,null,null,{\"fields\":{\"Id2\":1}}]", "a: N.Account has no field Id2")]
     [InlineData("Take", "[null,null,null,{\"fields\":{\"Id3\":1}}]", "a: N.Account has no field Id3")]
-    [InlineData("Hidden", "[{\"constructor\":\"int\",\"arguments\":[1]},null]", "s: N.Kinds.Secret has no visible constructor (int) taking 1 argument(s)")]
     [InlineData("Hidden", "[null,{\"returns\":1}]", "no N.Kinds.Hush delegate can be built for h")]
     public void AValueThatDoesNotFit_IsNotConstructible(string member, string arguments, string reason) =>
         Assert.Equal(reason, Case("N.Kinds", member, arguments).Reason);

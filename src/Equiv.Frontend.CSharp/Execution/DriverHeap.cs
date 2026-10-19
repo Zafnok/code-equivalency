@@ -84,19 +84,23 @@ internal sealed class DriverHeap
     private string Index(ITypeSymbol type) => Type(type).ToString(CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// A maker that calls <paramref name="constructor"/>, which a friend can see, with its wire arguments, each read against
-    /// its parameter's type. A constructor of a type the friend assembly cannot name is not a maker (null).
+    /// A maker that calls <paramref name="constructor"/> with its wire arguments, each read against its parameter's type: in
+    /// source where a friend can see it, else bound by its exact signature and invoked as a hidden member is (ADR 0062
+    /// decision 1). A constructor whose signature names a type no driver can name is not a maker (null).
     /// </summary>
     public int? Constructor(IMethodSymbol constructor)
     {
-        if (!Nameable(constructor.ContainingType))
+        string?[] parameters = [.. constructor.Parameters.Select(static p => TypeOf(p.Type))];
+        string? owner = TypeOf(constructor.ContainingType);
+        if (owner is null || parameters.Any(static t => t is null))
         {
             return null;
         }
 
-        IEnumerable<string> arguments = constructor.Parameters.Select(static (p, i) =>
-            $"({p.Type.ToDisplayString(Qualified)})V.Value(w[{i.ToString(CultureInfo.InvariantCulture)}], typeof({p.Type.ToDisplayString(Qualified)}))");
-        return Maker($"new {constructor.ContainingType.ToDisplayString(Qualified)}({string.Join(", ", arguments)})");
+        IEnumerable<string> values = parameters.Select(static (t, i) => $"V.Value(w[{i.ToString(CultureInfo.InvariantCulture)}], {t})");
+        return Maker(Nameable(constructor.ContainingType) && ReplayArguments.Hidden(constructor) is null
+            ? $"new {constructor.ContainingType.ToDisplayString(Qualified)}({string.Join(", ", constructor.Parameters.Zip(values, static (p, v) => $"({p.Type.ToDisplayString(Qualified)}){v}"))})"
+            : $"H.Call(H.Ctor({owner}, new System.Type[] {{ {string.Join(", ", parameters)} }}), null, new object[] {{ {string.Join(", ", values)} }})");
     }
 
     /// <summary>

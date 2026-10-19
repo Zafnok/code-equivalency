@@ -196,14 +196,14 @@ internal static class ReplayArguments
     /// abstract. The driver is a friend of the emitted project (<see cref="ProjectEmitter"/>; ticket P2-052), so an
     /// <c>internal</c> or <c>protected internal</c> member is called like a public one. A <c>private</c>, <c>protected</c>
     /// or <c>private protected</c> member, or a member of such a type, is <c>not public</c>, with the accessibility that hides
-    /// it in brackets, unless <paramref name="reach"/> is set: a replay or <c>probe</c> driver then reaches a method or
-    /// getter by its exact signature (ADR 0062 decision 1), builds a receiver with no public parameterless constructor
+    /// it in brackets, unless <paramref name="reach"/> is set: a replay or <c>probe</c> driver then reaches a method, a
+    /// getter or a constructor by its exact signature (ADR 0062 decision 1), builds a receiver with no public parameterless constructor
     /// (decision 2), and refuses a window, as a runtime-diff driver does (ADR 0035). An <c>extern</c> method is never called
     /// (ADR 0054 decision 6; ticket P2-145): a driver would hand made-up handles, pointers and lengths straight to native code.
     /// </summary>
     public static string? CallObstacle(IMethodSymbol method, bool reach = false)
     {
-        if (Hidden(method) is { } accessibility && (!reach || method.MethodKind == MethodKind.Constructor))
+        if (Hidden(method) is { } accessibility && !reach)
         {
             return $"not public ({accessibility})";
         }
@@ -238,9 +238,14 @@ internal static class ReplayArguments
         };
     }
 
-    /// <summary>Whether <paramref name="method"/> drives the desktop session, or its receiver or a parameter is a window (ADR 0035).</summary>
+    /// <summary>
+    /// Whether <paramref name="method"/> drives the desktop session, or its receiver or a parameter is a window (ADR 0035), as
+    /// a runtime-diff driver refuses one: a static member of a window type takes no window.
+    /// </summary>
     private static bool Windowed(IMethodSymbol method) =>
-        DriverFactory.IsDesktopSession(method.ContainingType) || method.Parameters.Select(static p => p.Type).Prepend(method.ContainingType).Any(DriverFactory.IsWindow);
+        DriverFactory.IsDesktopSession(method.ContainingType)
+        || (DriverFactory.HasReceiver(method) && DriverFactory.IsWindow(method.ContainingType))
+        || method.Parameters.Any(static p => DriverFactory.IsWindow(p.Type));
 
     private static bool Constructible(INamedTypeSymbol type) => !type.IsAbstract && (type.IsValueType || PublicParameterless(type) is not null);
 
