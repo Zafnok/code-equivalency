@@ -16,7 +16,8 @@ namespace Equiv.Execute;
 /// Otherwise equal outcomes of an EQ006 Divergent (a runtime-changed callee in the model's call trace) are not applicable,
 /// since EQ006 claims the member differs, not that the model's input shows it. A side that gives no comparable outcome (a
 /// result with no canonical form, no answer in time, or arguments or a culture its driver could not build) makes the
-/// replay not constructible. The verdict is never changed here.
+/// replay not constructible. Every result whose drivers ran carries how they built each side's inputs (ADR 0062 decision 5;
+/// ticket P2-245). The verdict is never changed here.
 /// </summary>
 public sealed class Replayer(IDriverHost host)
 {
@@ -40,6 +41,12 @@ public sealed class Replayer(IDriverHost host)
         IReadOnlyList<string> cultures = DifferentialTester.Cultures(old, @new);
         List<ExecutionOutcome> legacy = runner.Side(drivers.Legacy, new ExecutionRequest(new CallIdentity(drivers.Legacy), [plan.Legacy], cultures));
         List<ExecutionOutcome> modern = runner.Side(drivers.Modern, new ExecutionRequest(new CallIdentity(drivers.Modern), [plan.Modern], cultures));
+        return Judge(plan, model, legacy, modern) with { Inputs = plan.Inputs };
+    }
+
+    /// <summary>What the two sides' outcomes say about the model, once both drivers ran.</summary>
+    private static ReplayResult Judge(ReplayPlan plan, Counterexample model, List<ExecutionOutcome> legacy, List<ExecutionOutcome> modern)
+    {
         if ((Obstacle("legacy", legacy) ?? Obstacle("modern", modern)) is { } reason)
         {
             return ReplayResult.NotConstructible(reason);

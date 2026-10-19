@@ -14,6 +14,9 @@ public sealed record ReplayPlan(ExecutionDrivers? Drivers, ExecutionInput Legacy
     /// </summary>
     public string? AlikeReason { get; init; }
 
+    /// <summary>How each side's receiver and arguments were built (ADR 0062 decision 5; ticket P2-245); null when no input was built.</summary>
+    public ReplayInputs? Inputs { get; init; }
+
     public static ReplayPlan Runnable(ExecutionDrivers drivers, ExecutionInput legacy, ExecutionInput modern) => new(drivers, legacy, modern, string.Empty);
 
     public static ReplayPlan NotConstructible(string reason) => new(Drivers: null, new ExecutionInput([]), new ExecutionInput([]), reason);

@@ -61,7 +61,7 @@ public sealed class ReplayArgumentsTests
     private static IrBitVecValue Bv(int width, long value) => IrBitVecValue.FromSigned(width, value);
 
     private static ReplayArguments.SideCase Case(string type, string method, string ir, Dictionary<string, IrValue> values) =>
-        ReplayArguments.Case(Method(Project, type, method), IrText.Parse(ir), values, ReplayArguments.Nullness(values));
+        ReplayArguments.Case(Method(Project, type, method), Project, IrText.Parse(ir), values, ReplayArguments.Heap(values));
 
     [Fact]
     public void EveryBuildableTypeBecomesItsWireValue()
@@ -115,14 +115,7 @@ public sealed class ReplayArgumentsTests
     [InlineData("N.C", "Native", "proc \"X\" (%x: bv32) entry B0 B0: ret", "extern")]
     [InlineData("N.G`1", "M", Empty, "generic")]
     [InlineData("N.C", "ByRef", "proc \"X\" (ref %x: bv32) entry B0 B0: ret", "x is passed by reference")]
-    [InlineData("N.A", "M", "proc \"X\" (%this: sort \"N.A\") entry B0 B0: ret", "N.A has no public parameterless constructor")]
-    [InlineData("N.P", "M", "proc \"X\" (%this: sort \"N.P\") entry B0 B0: ret", "N.P has no public parameterless constructor")]
-    [InlineData("N.Q", "M", "proc \"X\" (%this: sort \"N.Q\") entry B0 B0: ret", "N.Q has no public parameterless constructor")]
-    [InlineData(
-        "N.C",
-        "Instance",
-        "proc \"X\" (%x: bv32, %field.N.C.f: map<sort \"N.C\", bv32>, %cast.N.C.System.Object: map<sort \"N.C\", sort \"System.Object\">, %this: sort \"N.C\") entry B0 B0: ret",
-        "the model constrains field.N.C.f, cast.N.C.System.Object")]
+    [InlineData("N.A", "M", "proc \"X\" (%this: sort \"N.A\") entry B0 B0: ret", "this is of N.A, which no instance is created of without a constructor")]
     public void AMethodGeneratedSourceCannotCallWithTheModelIsNotConstructible(string type, string method, string ir, string reason)
     {
         ReplayArguments.SideCase built = Case(type, method, ir, NoValues);
@@ -141,7 +134,10 @@ public sealed class ReplayArgumentsTests
     public void InternalMethod_HasNoCallObstacle(string type, string method) =>
         Assert.Null(ReplayArguments.CallObstacle(Method(Project, type, method)));
 
-    /// <summary>Ticket P2-052 criteria 2 and 4: what a friend cannot see is not public, and the reason says which accessibility hides it.</summary>
+    /// <summary>
+    /// Ticket P2-052 criteria 2 and 4: what a friend cannot see is not public, and the reason says which accessibility hides
+    /// it, to differential testing; ticket P2-245 criterion 1: a replay reaches it by its exact signature.
+    /// </summary>
     [Theory]
     [InlineData("N.C", "Secret", "not public (private)")]
     [InlineData("N.C", "Derived", "not public (protected)")]
@@ -151,7 +147,8 @@ public sealed class ReplayArgumentsTests
     public void PrivateMethod_IsNotPublic(string type, string method, string reason)
     {
         Assert.Equal(reason, ReplayArguments.CallObstacle(Method(Project, type, method)));
-        Assert.Equal(reason, Case(type, method, Empty, NoValues).Reason);
+        Assert.Null(ReplayArguments.CallObstacle(Method(Project, type, method), reach: true));
+        Assert.Empty(Case(type, method, Empty, NoValues).Reason);
     }
 
     [Fact]
@@ -214,7 +211,7 @@ public sealed class ReplayArgumentsTests
             string ir = $"proc \"X\" (%{parameter}: {irType}) entry B0 B0: ret";
             Dictionary<string, IrValue> values = new(StringComparer.Ordinal) { [parameter] = value };
 
-            ReplayArguments.SideCase built = ReplayArguments.Case(Method(Project, type, method), IrText.Parse(ir), values, ReplayArguments.Nullness(values));
+            ReplayArguments.SideCase built = ReplayArguments.Case(Method(Project, type, method), Project, IrText.Parse(ir), values, ReplayArguments.Heap(values));
 
             if (built.Input is null)
             {
@@ -244,11 +241,13 @@ public sealed class ReplayArgumentsTests
                 values["null.System.String"] = nullMap;
             }
 
+            Compilation project = Compile("public static class K { public static int M(string s) => 0; }");
             ReplayArguments.SideCase built = ReplayArguments.Case(
-                ReplayCompilations.Method(Compile("public static class K { public static int M(string s) => 0; }"), "K", "M"),
+                ReplayCompilations.Method(project, "K", "M"),
+                project,
                 IrText.Parse("proc \"X\" (%s: sort \"System.String\") entry B0 B0: ret"),
                 values,
-                ReplayArguments.Nullness(values));
+                ReplayArguments.Heap(values));
             return built.Input!.Arguments;
         }
     }

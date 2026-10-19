@@ -1,0 +1,191 @@
+using System.Globalization;
+using System.Text;
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
+using Equiv.Frontend.CSharp.Lowering;
+
+namespace Equiv.Frontend.CSharp.Execution;
+
+/// <summary>
+/// What one replay or <c>probe</c> driver's generated source holds besides its call (ADR 0062; ticket P2-245): the types its
+/// wire names by index, as <c>typeof</c> where the friend assembly can name them and by metadata name where it cannot, and
+/// its makers, each a source expression the wire calls by index with its own wire arguments (a public constructor, a
+/// delegate). The wire forms it writes are JSON arrays that the driver's <c>V.Value</c> reads against the type it is
+/// building: <c>["@u",id,type,[[owner,field,value],...]]</c> an instance created without a constructor whose fields are
+/// then written, <c>["@s",type,fields]</c> the same for a struct, <c>["@a",id,element,[values]]</c> an array,
+/// <c>["@c",id,maker,[arguments]]</c> what a maker returns, <c>["@r",id]</c> the instance built earlier under that id, and
+/// <c>["@t",cancelled]</c> a <c>CancellationToken</c>. One id is one instance in one case, so a model element reached twice
+/// is one object, and a cycle closes because an instance is registered before its fields are written.
+/// </summary>
+internal sealed class DriverHeap
+{
+    private static readonly SymbolDisplayFormat Qualified = SymbolDisplayFormat.FullyQualifiedFormat;
+
+    private readonly List<ITypeSymbol> types = [];
+
+    private readonly List<string> makers = [];
+
+    private int ids;
+
+    /// <summary>The types the wire names, by index.</summary>
+    public IReadOnlyList<ITypeSymbol> Types => types;
+
+    /// <summary>Each maker's source: an expression of the wire arguments <c>w</c> that builds one value.</summary>
+    public IReadOnlyList<string> Makers => makers;
+
+    /// <summary>Whether the driver's source needs the value builder: some input is not a plain wire value.</summary>
+    public bool Used => types.Count > 0 || makers.Count > 0;
+
+    /// <summary><paramref name="type"/>'s index in the driver's type table, added on first use.</summary>
+    public int Type(ITypeSymbol type)
+    {
+        int index = types.FindIndex(t => SymbolEqualityComparer.Default.Equals(t, type));
+        if (index >= 0)
+        {
+            return index;
+        }
+
+        types.Add(type);
+        return types.Count - 1;
+    }
+
+    /// <summary>A new maker; returns its index.</summary>
+    public int Maker(string source)
+    {
+        makers.Add(source);
+        return makers.Count - 1;
+    }
+
+    /// <summary>A fresh instance id for this case.</summary>
+    public string Id() => (++ids).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>An instance of <paramref name="type"/> created without a constructor, then given <paramref name="fields"/>.</summary>
+    public string Uninitialized(string id, ITypeSymbol type, IEnumerable<string> fields) =>
+        $"[\"@u\",\"{id}\",{Index(type)},[{string.Join(',', fields)}]]";
+
+    /// <summary>A struct of <paramref name="type"/> created without a constructor, then given <paramref name="fields"/>.</summary>
+    public string Struct(ITypeSymbol type, IEnumerable<string> fields) => $"[\"@s\",{Index(type)},[{string.Join(',', fields)}]]";
+
+    /// <summary>One field write: the type that declares <paramref name="field"/>, its runtime name, and its wire value.</summary>
+    public string Field(IFieldSymbol field, string value) => $"[{Index(field.ContainingType)},{Text(field.Name)},{value}]";
+
+    /// <summary>An array of <paramref name="element"/> holding <paramref name="values"/>.</summary>
+    public string Array(string id, ITypeSymbol element, IEnumerable<string> values) => $"[\"@a\",\"{id}\",{Index(element)},[{string.Join(',', values)}]]";
+
+    /// <summary>What maker <paramref name="maker"/> returns for <paramref name="arguments"/>, kept as instance <paramref name="id"/>.</summary>
+    public static string Made(string id, int maker, IEnumerable<string> arguments) =>
+        $"[\"@c\",\"{id}\",{maker.ToString(CultureInfo.InvariantCulture)},[{string.Join(',', arguments)}]]";
+
+    /// <summary>The instance built earlier as <paramref name="id"/>.</summary>
+    public static string Reference(string id) => $"[\"@r\",\"{id}\"]";
+
+    /// <summary>A <c>CancellationToken</c>: cancelled, or <c>default</c>.</summary>
+    public static string Token(bool cancelled) => cancelled ? "[\"@t\",true]" : "[\"@t\",false]";
+
+    private string Index(ITypeSymbol type) => Type(type).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// A maker that calls <paramref name="constructor"/> with its wire arguments, each read against its parameter's type. A
+    /// constructor the friend assembly cannot name is not a maker (null).
+    /// </summary>
+    public int? Constructor(IMethodSymbol constructor)
+    {
+        if (!Nameable(constructor.ContainingType) || ReplayArguments.Hidden(constructor) is not null || !constructor.Parameters.All(static p => Nameable(p.Type)))
+        {
+            return null;
+        }
+
+        IEnumerable<string> arguments = constructor.Parameters.Select(static (p, i) =>
+            $"({p.Type.ToDisplayString(Qualified)})V.Value(w[{i.ToString(CultureInfo.InvariantCulture)}], typeof({p.Type.ToDisplayString(Qualified)}))");
+        return Maker($"new {constructor.ContainingType.ToDisplayString(Qualified)}({string.Join(", ", arguments)})");
+    }
+
+    /// <summary>
+    /// A maker for a delegate of <paramref name="type"/> that answers every invocation with its wire argument 0 read against
+    /// the return type, or, with <paramref name="answers"/> false, throws <c>InvalidOperationException</c>: a replay builds
+    /// a delegate only where the model's runs never call it. Null when the type cannot be named or takes a parameter by
+    /// reference.
+    /// </summary>
+    public int? Delegate(INamedTypeSymbol type, bool answers)
+    {
+        if (type.DelegateInvokeMethod is not { } invoke || !Nameable(type) || invoke.Parameters.Any(static p => p.RefKind != RefKind.None) || invoke.ReturnsByRef || invoke.ReturnsByRefReadonly)
+        {
+            return null;
+        }
+
+        string parameters = string.Join(", ", invoke.Parameters.Select(static (_, i) => $"x{i.ToString(CultureInfo.InvariantCulture)}"));
+        string returns = invoke.ReturnType.ToDisplayString(Qualified);
+        string body = (answers, invoke.ReturnsVoid) switch
+        {
+            (false, _) => "{ throw new InvalidOperationException(\"the model's runs never call this delegate\"); }",
+            (true, true) => "{ }",
+            _ => $"({returns})V.Value(c, typeof({returns}))",
+        };
+        return Maker($"Answering(w, c => new {type.ToDisplayString(Qualified)}(({parameters}) => {body}))");
+    }
+
+    /// <summary>
+    /// The C# expression that is <paramref name="type"/>'s <c>System.Type</c> in a driver: <c>typeof</c> where the friend
+    /// assembly can name it, else its metadata name in its assembly, an array of it or a generic over it; null for a type
+    /// no driver can name at all (a pointer, a type parameter).
+    /// </summary>
+    public static string? TypeOf(ITypeSymbol type) => type switch
+    {
+        _ when Nameable(type) => $"typeof({type.ToDisplayString(Qualified)})",
+        IArrayTypeSymbol array => TypeOf(array.ElementType) is { } element
+            ? array.IsSZArray ? $"{element}.MakeArrayType()" : $"{element}.MakeArrayType({array.Rank.ToString(CultureInfo.InvariantCulture)})"
+            : null,
+        INamedTypeSymbol { IsGenericType: true } generic => Generic(generic),
+        INamedTypeSymbol named => $"System.Type.GetType({Literal($"{TypeMapper.MetadataName(named)}, {named.ContainingAssembly.Identity.GetDisplayName()}")}, true)",
+        _ => null,
+    };
+
+    private static string? Generic(INamedTypeSymbol generic)
+    {
+        string?[] arguments = [.. generic.TypeArguments.Select(TypeOf)];
+        string definition = Nameable(generic.ConstructedFrom) && ReplayArguments.Hidden(generic) is null
+            ? $"typeof({generic.ConstructUnboundGenericType().ToDisplayString(Qualified)})"
+            : $"System.Type.GetType({Literal($"{TypeMapper.MetadataName(generic)}, {generic.ContainingAssembly.Identity.GetDisplayName()}")}, true)";
+        return arguments.Any(static a => a is null) ? null : $"{definition}.MakeGenericType({string.Join(", ", arguments)})";
+    }
+
+    /// <summary>Whether generated source can name <paramref name="type"/>: every type it is built from is visible to a friend.</summary>
+    public static bool Nameable(ITypeSymbol type) => type switch
+    {
+        IArrayTypeSymbol array => Nameable(array.ElementType),
+        INamedTypeSymbol named => ReplayArguments.Hidden(named) is null && named.TypeArguments.All(Nameable),
+        IPointerTypeSymbol or IFunctionPointerTypeSymbol or ITypeParameterSymbol or IErrorTypeSymbol => false,
+        _ => true,
+    };
+
+    /// <summary><paramref name="value"/> as a C# string literal.</summary>
+    public static string Literal(string value) => SymbolDisplay.FormatLiteral(value, quote: true);
+
+    /// <summary>
+    /// A string as the driver's own minimal JSON text: only <c>\"</c>, <c>\\</c> and <c>\uXXXX</c> are escapes, so the
+    /// driver's hand-written parser (which does not decode <c>\n</c>-style escapes) reads it back unchanged.
+    /// </summary>
+    public static string Text(string value)
+    {
+        StringBuilder text = new("\"");
+        foreach (char c in value)
+        {
+            if (c is '"' or '\\')
+            {
+                text.Append('\\').Append(c);
+            }
+            else if (c is < ' ' or > '~')
+            {
+                text.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                text.Append(c);
+            }
+        }
+
+        return text.Append('"').ToString();
+    }
+}

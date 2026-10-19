@@ -23,6 +23,9 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
 
     public List<(ProcedurePair Pair, IReadOnlyList<JsonElement> Arguments, string Directory)> Probes { get; } = [];
 
+    /// <summary>The receiver each probe was given, in order (ticket P2-245).</summary>
+    public List<JsonElement?> Receivers { get; } = [];
+
     public List<string> Starts { get; } = [];
 
     /// <summary>Every folder a host was bound to with <see cref="Within"/> (ticket P2-040).</summary>
@@ -48,9 +51,10 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
         return TestingPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), [], []);
     }
 
-    public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, string directory)
+    public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, JsonElement? receiver, string directory)
     {
         Probes.Add((pair, arguments, directory));
+        Receivers.Add(receiver);
         Assert.True(Directory.Exists(directory));
 
         // A real ReplayDriverFactory.Probe leaves the emitted project and driver files behind, so the directory is

@@ -34,6 +34,8 @@ public sealed class DriverStructTests
             public struct Computed { public int A { get => field * 2; set; } }
             public struct WriteOnly { public int A { set => field = value; } }
             public struct Holder { public object O; }
+            public struct Bytes { public byte[] B; }
+            public struct Grid { public int[,] G; }
             public struct Nested { public Open Inner; public Point At { get; set; } }
             public struct Middle { public Pair P { get; } public int N; public Middle(Pair p, int n) { P = p; N = n; } }
             public struct Deep { public Middle M; }
@@ -148,14 +150,26 @@ public sealed class DriverStructTests
     [InlineData("N.WriteOnly")]
     [InlineData("N.Opaque")]
     [InlineData("N.Captured")]
-    [InlineData("N.Holder")]
     [InlineData("N.Empty")]
+    [InlineData("N.Grid")]
     [InlineData("N.G`1")]
     [InlineData("N.Span")]
     [InlineData("N.Reference")]
     [InlineData("N.Outer+Inner")]
     [InlineData("N.E")]
     public void ATypeThatIsNotAFlatStruct_IsNone(string type) => Assert.Null(Of(type));
+
+    /// <summary>Ticket P2-245: a field of a reference type or an array is built by the value builder, so the struct is built but never compared.</summary>
+    [Theory]
+    [InlineData("N.Holder")]
+    [InlineData("N.Bytes")]
+    public void AStructWithAReferenceOrArrayField_IsBuiltButNotCompared(string type)
+    {
+        DriverStruct flat = Of(type)!;
+
+        Assert.True(flat.Buildable);
+        Assert.False(flat.Comparable);
+    }
 
     [Theory]
     [InlineData(SpecialType.System_IntPtr)]

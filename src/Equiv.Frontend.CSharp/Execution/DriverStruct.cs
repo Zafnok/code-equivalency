@@ -17,20 +17,25 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// by an object initializer when every field is writable and every property has a visible, non-<c>init</c> setter, else
 /// by a visible constructor whose parameters are its fields and properties, in order, by type and by name ignoring case
 /// (<c>float2(float x, float y)</c> for <c>X, Y</c>); with neither, or with a nested struct that is not built, it is read
-/// but not built. An array or another reference-typed field is not flat (ticket P2-245), nor is a property with a body.
+/// but not built. A field may also be a one-dimensional array or another reference type (ticket P2-245), which the driver's
+/// value builder reads from its wire form: such a struct is built, by the same rule, but has no comparable form, so a
+/// result of it is not compared. A property with a body is never a field.
 /// </summary>
 /// <param name="Fields">The instance fields, in declaration order, each by the name a driver reads and sets it by.</param>
 /// <param name="Constructor">The constructor that builds it from its fields; null when an object initializer does, or nothing can.</param>
 /// <param name="Buildable">Whether a driver can build it as an argument.</param>
 internal sealed record DriverStruct(IReadOnlyList<DriverStruct.Field> Fields, IMethodSymbol? Constructor, bool Buildable)
 {
+    /// <summary>Whether a result of it has a comparable form: every field is a scalar kind or a comparable struct.</summary>
+    public bool Comparable { get; init; } = true;
+
     private const string BackingSuffix = ">k__BackingField";
 
     /// <summary>One instance field: a visible field by its own name, or an auto-property's backing field by the property's.</summary>
     internal sealed record Field(string Name, ITypeSymbol Type);
 
-    /// <summary>A field, whether an object initializer can set it, and whether a driver can build its value.</summary>
-    private sealed record Member(Field Field, bool Settable, bool Buildable);
+    /// <summary>A field, whether an object initializer can set it, whether a driver can build its value, and whether it compares.</summary>
+    private sealed record Member(Field Field, bool Settable, bool Buildable, bool Comparable = true);
 
     /// <summary><paramref name="type"/> as a flat struct, or null when it is not one.</summary>
     public static DriverStruct? Of(ITypeSymbol type) => Of(type, ImmutableHashSet.Create<ITypeSymbol>(SymbolEqualityComparer.Default));
@@ -63,18 +68,19 @@ internal sealed record DriverStruct(IReadOnlyList<DriverStruct.Field> Fields, IM
         }
 
         Field[] fields = [.. members.Select(static m => m.Field)];
+        bool comparable = members.TrueForAll(static m => m.Comparable);
         if (!members.TrueForAll(static m => m.Buildable))
         {
-            return new DriverStruct(fields, Constructor: null, Buildable: false);
+            return new DriverStruct(fields, Constructor: null, Buildable: false) { Comparable = comparable };
         }
 
         if (members.TrueForAll(static m => m.Settable))
         {
-            return new DriverStruct(fields, Constructor: null, Buildable: true);
+            return new DriverStruct(fields, Constructor: null, Buildable: true) { Comparable = comparable };
         }
 
         IMethodSymbol? constructor = named.InstanceConstructors.FirstOrDefault(c => ReplayArguments.Hidden(c) is null && Builds(c, fields));
-        return new DriverStruct(fields, constructor, Buildable: constructor is not null);
+        return new DriverStruct(fields, constructor, Buildable: constructor is not null) { Comparable = comparable };
     }
 
     /// <summary>
@@ -92,11 +98,16 @@ internal sealed record DriverStruct(IReadOnlyList<DriverStruct.Field> Fields, IM
             ? Kind(property.Name, field.Type, settable: property.SetMethod is { IsInitOnly: false } setter && ReplayArguments.Hidden(setter) is null, enclosing)
             : null;
 
-    /// <summary>A field named <paramref name="name"/> of <paramref name="type"/>: a scalar kind, or a flat struct; else null.</summary>
+    /// <summary>
+    /// A field named <paramref name="name"/> of <paramref name="type"/>: a scalar kind, a flat struct, or (built, never
+    /// compared) a one-dimensional array or another reference type a driver can name; else null.
+    /// </summary>
     private static Member? Kind(string name, ITypeSymbol type, bool settable, ImmutableHashSet<ITypeSymbol> enclosing) => DriverFactory.Classify(type) switch
     {
         >= ExecutionTypeKind.Boolean and <= ExecutionTypeKind.Enum => new Member(new Field(name, type), settable, Buildable: true),
-        _ when Of(type, enclosing) is { } nested => new Member(new Field(name, type), settable, nested.Buildable),
+        _ when Of(type, enclosing) is { } nested => new Member(new Field(name, type), settable, nested.Buildable, nested.Comparable),
+        _ when type is IArrayTypeSymbol { IsSZArray: true } or INamedTypeSymbol { IsReferenceType: true } && DriverHeap.Nameable(type)
+            => new Member(new Field(name, type), settable, Buildable: true, Comparable: false),
         _ => null,
     };
 

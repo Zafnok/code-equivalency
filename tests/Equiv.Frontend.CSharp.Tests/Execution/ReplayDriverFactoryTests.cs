@@ -237,13 +237,21 @@ public sealed class ReplayDriverFactoryTests : IDisposable
     }
 
     [Fact]
-    public void AModernSideItCannotCall_IsNotConstructible()
+    public void APrivateModernSide_BindsBothSidesByOneDelegate()
     {
         CSharpCompilation legacy = Compile(Greeter, "Greeter");
         CSharpCompilation modern = Compile(Greeter.Replace("public string Greet", "private string Greet", StringComparison.Ordinal), "Greeter");
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
 
-        Assert.Equal("modern: not public (private)", factory.Create(pair, NullName(), directory).Reason);
+        ReplayPlan plan = factory.Create(pair, NullName(), directory);
+
+        Assert.Empty(plan.Reason);
+        Assert.All(
+            [plan.Drivers!.Legacy, plan.Drivers.Modern],
+            static driver => Assert.Contains(
+                "global::System.Func<global::N.Greeter, string, string> f = (global::System.Func<global::N.Greeter, string, string>)System.Delegate.CreateDelegate(",
+                File.ReadAllText(Path.ChangeExtension(driver, ".cs")),
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -399,7 +407,7 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         CSharpCompilation modern = Compile(Greeter, "Greeter");
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
 
-        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], directory);
+        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], receiver: null, directory);
 
         Assert.Empty(plan.Reason);
         Assert.Equal(["\"Ada\""], plan.Legacy.Arguments);
@@ -416,7 +424,7 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
 
-        ReplayPlan plan = factory.Probe(pair, [], directory);
+        ReplayPlan plan = factory.Probe(pair, [], receiver: null, directory);
 
         Assert.Null(plan.Drivers);
         Assert.Equal("legacy: expected 1 argument(s), got 0", plan.Reason);
@@ -424,15 +432,18 @@ public sealed class ReplayDriverFactoryTests : IDisposable
     }
 
     [Fact]
-    public void Probe_AModernSideItCannotCall_IsNotConstructible()
+    public void Probe_APrivateModernSide_IsReachedAndSaysHowItsInputsWereBuilt()
     {
         CSharpCompilation legacy = Compile(Greeter, "Greeter");
         CSharpCompilation modern = Compile(Greeter.Replace("public string Greet", "private string Greet", StringComparison.Ordinal), "Greeter");
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
 
-        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], directory);
+        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], receiver: null, directory);
 
-        Assert.Equal("modern: not public (private)", plan.Reason);
+        Assert.Empty(plan.Reason);
+        ReplayInput[] expected = [new("this", "constructor N.Greeter.Greeter()"), new("name", "value")];
+        Assert.Equal(expected, plan.Inputs.Legacy);
+        Assert.Equal(expected, plan.Inputs.Modern);
     }
 
     [Fact]
@@ -442,8 +453,8 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
 
-        Assert.Throws<ArgumentNullException>(() => factory.Probe(null!, [], directory));
-        Assert.Throws<ArgumentNullException>(() => factory.Probe(pair, null!, directory));
+        Assert.Throws<ArgumentNullException>(() => factory.Probe(null!, [], receiver: null, directory));
+        Assert.Throws<ArgumentNullException>(() => factory.Probe(pair, null!, receiver: null, directory));
     }
 
     [Theory]
@@ -457,7 +468,7 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         CSharpCompilation modern = legacyBroken ? good : broken;
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
 
-        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], directory);
+        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], receiver: null, directory);
 
         Assert.Null(plan.Drivers);
         Assert.StartsWith(reason, plan.Reason, StringComparison.Ordinal);

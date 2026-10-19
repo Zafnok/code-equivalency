@@ -194,14 +194,14 @@ public sealed class DriverFactory : IExecutionDriverFactory
     }
 
     /// <summary>A window (<c>IWin32Window</c>, which every <c>Control</c> is) or a window message.</summary>
-    private static bool IsWindow(ITypeSymbol type) =>
+    internal static bool IsWindow(ITypeSymbol type) =>
         type.ToDisplayString() is WindowInterface or "System.Windows.Forms.Message"
         || type.AllInterfaces.Any(static i => string.Equals(i.ToDisplayString(), WindowInterface, StringComparison.Ordinal));
 
     private const string WindowInterface = "System.Windows.Forms.IWin32Window";
 
     /// <summary>A type whose static members run or post to a message loop, or act on the user's desktop session.</summary>
-    private static bool IsDesktopSession(INamedTypeSymbol type) => type.ToDisplayString() is
+    internal static bool IsDesktopSession(INamedTypeSymbol type) => type.ToDisplayString() is
         "System.Windows.Forms.Application" or "System.Windows.Forms.Clipboard" or "System.Windows.Forms.Cursor" or "System.Windows.Forms.MessageBox" or "System.Windows.Forms.SendKeys";
 
     /// <summary>A parameter, with an enum's defined values taken from both runtimes, since a runtime may add members.</summary>

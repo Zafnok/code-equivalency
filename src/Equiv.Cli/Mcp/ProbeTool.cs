@@ -38,7 +38,10 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
                 + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036). "
                 + "equal is absent, and reason says why, when either side's outcome has no comparable form. "
                 + "With config, the pair is analysed under that equiv.config.json (its runtimes, renames and other "
-                + "declarations), as compare --config does.",
+                + "declarations), as compare --config does. A private or protected member is called too, bound by its exact "
+                + "signature. inputs says, per side, how the receiver and each argument were built: value, constructor "
+                + "<signature>, uninitialized <fields> (created without a constructor, a state no constructor need reach) "
+                + "or delegate.",
             ReadOnly = false,
         });
 
@@ -46,9 +49,10 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
         [Description("Path to the modern solution (.sln or .slnx).")] string modern,
         [Description("The matched pair's normalised identity, as compare's SARIF logical locations report it.")] string identity,
-        [Description("The method's own arguments, in order (its receiver excluded), as JSON values; null for a reference-typed one, an object by field name for a struct of plain fields. A constructor is called like a static method that returns the new object.")] JsonElement[] arguments,
+        [Description("The method's own arguments, in order (its receiver excluded), as JSON values: a number, string or bool for a scalar; an array as a JSON array; a struct as an object by field name; a CancellationToken as \"cancelled\" or \"live\"; a delegate as {\"returns\": value}, answering every call with it; an object as null, {\"constructor\": \"<parameter types>\", \"arguments\": [...]} or {\"fields\": {...}, \"type\": \"<metadata name>\"} (a solution type created without a constructor). A constructor is called like a static method that returns the new object.")] JsonElement[] arguments,
         [Description("Culture to run the case under; the invariant culture when omitted.")] string? culture = null,
-        [Description("Path to the pair's equiv.config.json, as compare's config takes it; the default config when omitted.")] string? config = null)
+        [Description("Path to the pair's equiv.config.json, as compare's config takes it; the default config when omitted.")] string? config = null,
+        [Description("An instance method's receiver, as an object argument is given: {\"constructor\": ..., \"arguments\": [...]} or {\"fields\": {...}}. When omitted, new T() if T has a public parameterless constructor, else a solution type created without one.")] JsonElement? receiver = null)
     {
         if (!File.Exists(legacy) || !File.Exists(modern))
         {
@@ -95,14 +99,14 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         string directory = Directory.CreateTempSubdirectory("equiv-probe-").FullName;
         try
         {
-            ReplayPlan plan = factory.Probe(pair, arguments, directory);
+            ReplayPlan plan = factory.Probe(pair, arguments, receiver, directory);
             if (plan.Drivers is null)
             {
                 return Failure($"error: {plan.Reason}");
             }
 
             (ExecutionOutcome legacyOutcome, ExecutionOutcome modernOutcome) = new Replayer(execution.Host.Within(directory)).Run(plan, culture ?? Replayer.Culture);
-            return Success(legacyOutcome, modernOutcome);
+            return Success(legacyOutcome, modernOutcome, plan.Inputs ?? new ReplayInputs([], []));
         }
         finally
         {
@@ -150,9 +154,10 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
 
     /// <summary>
     /// Both outcomes, and <c>equal</c> when both have a canonical form; otherwise no <c>equal</c>, and a <c>reason</c> naming
-    /// the side that cannot be compared (ticket P2-242), since two outcomes with no canonical form say nothing about the values.
+    /// the side that cannot be compared (ticket P2-242), since two outcomes with no canonical form say nothing about the values;
+    /// and how each side's inputs were built (ADR 0062 decision 5; ticket P2-245).
     /// </summary>
-    private static CallToolResult Success(ExecutionOutcome legacy, ExecutionOutcome modern)
+    private static CallToolResult Success(ExecutionOutcome legacy, ExecutionOutcome modern, ReplayInputs inputs)
     {
         (bool? equal, string? reason) = Replayer.Compare(legacy, modern);
         string json = JsonSerializer.Serialize(new
@@ -161,6 +166,11 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
             modern = new { kind = Name(modern.Kind), canonical = modern.Canonical },
             equal,
             reason,
+            inputs = new
+            {
+                legacy = inputs.Legacy.Select(static i => new { name = i.Name, built = i.Built }),
+                modern = inputs.Modern.Select(static i => new { name = i.Name, built = i.Built }),
+            },
         }, OmitNulls);
         return new CallToolResult { Content = [new TextContentBlock { Text = json }] };
     }

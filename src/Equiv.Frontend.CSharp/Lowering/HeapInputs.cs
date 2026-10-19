@@ -160,7 +160,7 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     public static bool IsWritable(string name) =>
         name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal) || name.StartsWith("thrown.", StringComparison.Ordinal);
 
-    private static string Part(string name) =>
+    internal static string Part(string name) =>
         string.Concat(name.Select(static c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' ? c : '_'));
 
     private IrVar Input(string name, IrType type)

@@ -644,7 +644,9 @@ public static class SarifReportWriter
     /// <summary>
     /// A Divergent's replay on both real runtimes (ADR 0035 decision 2; ticket M4-009): <c>replay</c> is <c>reproduced</c>,
     /// <c>not-reproduced</c> or (an EQ006 Divergent's, ticket P2-038) <c>not-applicable</c> with both canonical outcomes as
-    /// <c>replayOutcomes</c>, or <c>not-constructible</c> with <c>replayReason</c>. Left out when the run did not replay.
+    /// <c>replayOutcomes</c>, or <c>not-constructible</c> with <c>replayReason</c>; and, once its drivers ran,
+    /// <c>replayInputs</c>: per side, how each input was built (ADR 0062 decision 5; ticket P2-245). Left out when the run did
+    /// not replay.
     /// </summary>
     private static void SetReplayProperties(Result sarifResult, ReplayResult? replay)
     {
@@ -668,7 +670,20 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("replayReason", replay.Reason);
                 break;
         }
+
+        if (replay.Inputs is { } inputs)
+        {
+            sarifResult.SetProperty("replayInputs", new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacyKey] = Describe(inputs.Legacy),
+                [ModernKey] = Describe(inputs.Modern),
+            });
+        }
     }
+
+    /// <summary>One side's inputs, in call order, each as its <c>name</c> and how it was <c>built</c>.</summary>
+    private static List<Dictionary<string, string>> Describe(IReadOnlyList<ReplayInput> inputs) =>
+        [.. inputs.Select(static i => new Dictionary<string, string>(StringComparer.Ordinal) { ["name"] = i.Name, ["built"] = i.Built })];
 
     /// <summary>
     /// An Unknown's run on generated inputs (ADR 0035 decision 3; ticket P1-008): <c>differentialTesting</c> is the input
