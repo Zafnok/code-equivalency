@@ -74,3 +74,19 @@ and structs (P2-242).
 - Decision: the integration test is `probe` on a new sample, `samples/package-runtime-asset` (`System.Management` 4.7.0 on
   the modern side, the framework's on the legacy side): ADR 0002 and THIRD-PARTY-NOTICES gain its samples-only row. With
   the build before this change the modern side threw `FileNotFoundException` there; with it both return the query text.
+- Criterion 3 (2026-10-18, Release build of this branch, `equiv mcp --execute`'s `probe` over stdio on P2-237's
+  checkouts): `Duplicati.Library.Utility.Power.WindowsPowerSupplyState::GetSource()` with no arguments returns `0` on
+  both sides (legacy on .NET Framework 4.8, modern on .NET 5.0), `equal: true`. P2-237 saw the modern side throw
+  `FileNotFoundException`. The real difference P2-237's row 8 claims needs power hardware, so the row stays undetermined.
+- Criterion 4 (2026-10-18, `-Compare <slug> -Mode quick -Tag execute -CompareArgs '--jobs', '4', '--execute'`, one
+  Release build of this branch, against the same checkouts P2-237 ran): `gitextensions-8522` 384 s and `duplicati-3124`
+  616 s. No replay changed because of this ticket. Every `reproduced` replay is still `reproduced`: GitExtensions 2
+  (`AppSettings::GetDictionaryDir()`, `GetGitExtensionsDirectory()`), Duplicati 8 (`SystemIOLinux::PathGetFullPath`, and
+  `SystemIOWindows`'s `DirectoryCreate`, `DirectoryDelete`, `FileDelete`, `FileCreate`, `GetFileAttributes`,
+  `PathGetFileName`, `PathGetFullPath`). No `not-reproduced` result appeared. No result is `emit-failed` or names a
+  package. Six results kept `not-constructible` but now give another reason, each from a ticket merged since P2-237:
+  P2-242's constructors (`ThemeLoader::.ctor`, `LocalizationContext::.ctor` now stop at the model's field constraints,
+  and `TempFile::.ctor()` at a result that cannot be compared), and model changes in `ThemeFileReader::ReadThemeFile`
+  and `Rclone::Delete`/`Get` (the model now constrains casts and fields). Rule ids moved for the same reason (P2-238's
+  EQ007), so the comparison is over `replay`, `replayReason` and `differentialTesting` only. OpenRA was not rerun:
+  the criterion names only these two pairs.
