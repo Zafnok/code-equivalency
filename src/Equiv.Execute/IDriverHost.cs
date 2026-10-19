@@ -7,8 +7,9 @@ public interface IDriverHost
     IDriverSession Start(string driver);
 
     /// <summary>
-    /// A host whose drivers each start in a fresh working directory under <paramref name="directory"/>, so a relative write
-    /// by the code under test lands there and is deleted with it instead of next to the caller (ticket P2-040).
+    /// A host whose drivers start in one working directory under <paramref name="directory"/>, so a relative write by the
+    /// code under test lands there and is deleted with it instead of next to the caller (ticket P2-040), and both sides of a
+    /// case see the same working directory path (ticket P2-254).
     /// </summary>
     IDriverHost Within(string directory);
 }

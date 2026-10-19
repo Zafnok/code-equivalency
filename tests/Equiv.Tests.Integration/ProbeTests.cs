@@ -13,7 +13,8 @@ namespace Equiv.Tests.Integration;
 /// <see cref="ReplayTests"/> observes through <c>--execute</c>'s replay: the legacy side throws
 /// <c>ArgumentNullException</c> on .NET Framework 4.8 and the modern side throws <c>NullReferenceException</c> on .NET 10.
 /// Windows only, like the rest of this project. Ticket P2-242 adds <c>samples/float-arithmetic</c>'s struct arguments, struct
-/// result and constructor, on the same two runtimes; ticket P2-240, <c>samples/package-runtime-asset</c>'s package runtime asset.
+/// result and constructor, on the same two runtimes; ticket P2-240, <c>samples/package-runtime-asset</c>'s package runtime asset;
+/// ticket P2-254, <c>samples/relative-full-path</c>'s path that holds the working directory.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("Console")]
@@ -74,6 +75,25 @@ public sealed class ProbeTests
 
         Assert.Equal(("Returned", "\"select * from Win32_Battery\""), Outcome(document, "legacy"));
         Assert.Equal(("Returned", "\"select * from Win32_Battery\""), Outcome(document, "modern"));
+        Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
+    }
+
+    /// <summary>
+    /// Ticket P2-254: <c>samples/relative-full-path</c>'s <c>Full</c> returns <c>Path.GetFullPath</c> of a relative path, which
+    /// holds the working directory. Both drivers start in the same one, under the probe's own temporary folder, so both
+    /// runtimes return the same path, where each side used to return its own <c>cwd-&lt;random&gt;</c> folder.
+    /// </summary>
+    [Fact]
+    public async Task Probe_RelativeFullPath_BothSidesSeeOneWorkingDirectory()
+    {
+        using JsonDocument document = await ProbeAsync(
+            "relative-full-path", "RelativeFullPath", "Equiv.Samples.RelativeFullPath.Paths::Full(string)", ["s1\\s2\\"]).ConfigureAwait(true);
+
+        (string? kind, string? canonical) = Outcome(document, "legacy");
+        Assert.Equal("Returned", kind);
+        Assert.Contains("\\\\cwd-", canonical, StringComparison.Ordinal);
+        Assert.EndsWith("\\\\s1\\\\s2\\\\\"", canonical, StringComparison.Ordinal);
+        Assert.Equal(("Returned", canonical), Outcome(document, "modern"));
         Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
     }
 

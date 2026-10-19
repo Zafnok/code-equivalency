@@ -157,9 +157,10 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   (ADR 0027). It cannot be combined with `--baseline` or `--fail-on` (exit 3).
 - `--execute` replays every Divergent's model on both real runtimes (ADR 0035 decision 2; ticket
   M4-009). It prints a note on stderr that code from both solutions runs on this machine, in a
-  temporary working directory, and is not sandboxed. Every driver process starts in a fresh
+  temporary working directory, and is not sandboxed. Every driver process starts in one
   `cwd-*` folder under the run's `equiv-execute-*` temporary folder, so a relative write is
-  deleted with it (P2-040); absolute paths, the registry and the network stay reachable. Once both
+  deleted with it (P2-040) and both sides of a case see the same working directory path (P2-254);
+  the folder is emptied whenever a driver starts there while none runs. Absolute paths, the registry and the network stay reachable. Once both
   solutions are loaded, a project on .NET Framework off Windows stops the run with exit 3, naming the
   project and its runtime (ADR 0040 decision 3; P2-056); a pair whose sides are all .NET runs on any OS.
   The frontend's analysis carries an `IReplayDriverFactory` (`Equiv.Core.Execution`) over the
