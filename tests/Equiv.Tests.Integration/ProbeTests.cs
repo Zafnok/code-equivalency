@@ -13,7 +13,7 @@ namespace Equiv.Tests.Integration;
 /// <see cref="ReplayTests"/> observes through <c>--execute</c>'s replay: the legacy side throws
 /// <c>ArgumentNullException</c> on .NET Framework 4.8 and the modern side throws <c>NullReferenceException</c> on .NET 10.
 /// Windows only, like the rest of this project. Ticket P2-242 adds <c>samples/float-arithmetic</c>'s struct arguments, struct
-/// result and constructor, on the same two runtimes.
+/// result and constructor, on the same two runtimes; ticket P2-240, <c>samples/package-runtime-asset</c>'s package runtime asset.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("Console")]
@@ -58,6 +58,22 @@ public sealed class ProbeTests
 
         Assert.Equal("[\"0x8000000000000000\"]", document.RootElement.GetProperty("legacy").GetProperty("canonical").GetString());
         Assert.Equal("[\"0x8000000000000000\"]", document.RootElement.GetProperty("modern").GetProperty("canonical").GetString());
+        Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
+    }
+
+    /// <summary>
+    /// Ticket P2-240: <c>samples/package-runtime-asset</c>'s modern project compiles against <c>System.Management</c>
+    /// 4.7.0's reference assembly. Its driver runs the package's Windows runtime asset, as the project's build output
+    /// would, so both runtimes build the same query, where the modern side used to throw <c>FileNotFoundException</c>.
+    /// </summary>
+    [Fact]
+    public async Task Probe_PackageRuntimeAsset_RunsThePackagesImplementation()
+    {
+        using JsonDocument document = await ProbeAsync(
+            "package-runtime-asset", "PackageRuntimeAsset", "Equiv.Samples.PackageRuntimeAsset.Wmi::Query(string)", ["Win32_Battery"]).ConfigureAwait(true);
+
+        Assert.Equal(("Returned", "\"select * from Win32_Battery\""), Outcome(document, "legacy"));
+        Assert.Equal(("Returned", "\"select * from Win32_Battery\""), Outcome(document, "modern"));
         Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
     }
 

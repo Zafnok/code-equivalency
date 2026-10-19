@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 using Equiv.Core;
 using Equiv.Core.ApiEquivalences;
@@ -131,7 +132,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
             LegacyRuntimes = Reported(legacy.Runtimes),
             ModernRuntimes = Reported(modern.Runtimes),
             GeneratedProcedures = (GeneratedProcedures(legacy.Compilations), GeneratedProcedures(modern.Compilations)),
-            Replay = new ReplayDriverFactory(Targets(legacyByIdentity, legacy.Runtimes), Targets(modernByIdentity, modern.Runtimes), DriverReferences.Installed().Host),
+            Replay = new ReplayDriverFactory(Targets(legacyByIdentity, legacy), Targets(modernByIdentity, modern), DriverReferences.Installed().Host),
         };
     }
 
@@ -142,15 +143,16 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <summary>
     /// Each procedure's symbol, compilation and its project's runtime, for replay under <c>--execute</c> (tickets M4-009,
     /// P2-056). A project hosted on several runtimes runs on the first in runtime order, as <c>run.properties.runtimes</c>
-    /// lists them; an unhosted one has none.
+    /// lists them; an unhosted one has none. Each carries the side's package runtime assets for this machine (ticket P2-240).
     /// </summary>
-    private static Dictionary<ProcedureIdentity, ReplayTarget> Targets(Dictionary<ProcedureIdentity, SideProcedure> byIdentity, ImmutableArray<ProjectRuntime> runtimes)
+    private static Dictionary<ProcedureIdentity, ReplayTarget> Targets(Dictionary<ProcedureIdentity, SideProcedure> byIdentity, LoadedSolution side)
     {
-        Dictionary<string, TargetRuntime?> byProject = runtimes.DistinctBy(static r => r.Project, StringComparer.Ordinal)
+        Dictionary<string, TargetRuntime?> byProject = side.Runtimes.DistinctBy(static r => r.Project, StringComparer.Ordinal)
             .ToDictionary(static r => r.Project, static r => r.Runtimes.FirstOrDefault(), StringComparer.Ordinal);
+        RuntimeAssets assets = RuntimeAssets.Of(side.Solution, RuntimeInformation.RuntimeIdentifier);
         return byIdentity.ToDictionary(
             static p => p.Key,
-            p => new ReplayTarget(p.Value.Symbol, p.Value.Compilation, byProject.GetValueOrDefault(p.Value.Compilation.AssemblyName!)));
+            p => new ReplayTarget(p.Value.Symbol, p.Value.Compilation, byProject.GetValueOrDefault(p.Value.Compilation.AssemblyName!)) { Assets = assets });
     }
 
     /// <summary>

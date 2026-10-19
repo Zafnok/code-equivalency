@@ -147,4 +147,5 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 |---|---|---|
 | Microsoft.AspNet.WebApi.Core | 5.3.0 | MS .NET Library EULA |
 | Microsoft.AspNetCore.Mvc.Core | 2.3.13 | Apache-2.0 |
+| System.Management | 4.7.0 | MIT |
 

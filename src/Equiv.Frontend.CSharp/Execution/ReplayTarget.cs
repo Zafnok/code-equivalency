@@ -7,5 +7,9 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <summary>
 /// A procedure's symbol, the compilation of the project that declares it, and that project's detected runtime, which its
 /// replay driver runs on (tickets M4-009, P2-056); null when the project has none, such as an unhosted <c>netstandard</c> one.
+/// <see cref="Assets"/> are the runtime assets of the packages its side's projects restored (ticket P2-240).
 /// </summary>
-internal sealed record ReplayTarget(IMethodSymbol Method, Compilation Compilation, TargetRuntime? Runtime);
+internal sealed record ReplayTarget(IMethodSymbol Method, Compilation Compilation, TargetRuntime? Runtime)
+{
+    public RuntimeAssets Assets { get; init; } = RuntimeAssets.None;
+}
