@@ -1434,8 +1434,9 @@ P2-249 (M, filed 2026-10-19 by P2-245's size guard) carries the model's answers 
 counterexample, so that a replay builds a delegate the model's runs call, as ADR 0062 decision 3 says; P2-245 builds one
 only where no run calls it.
 P2-250 (M, filed 2026-10-19 by P2-245's re-adjudication, no dependency) makes a framework `static readonly` field of a
-value or string type (`IntPtr.Zero`, `String.Empty`) one value both sides read, not a free input per side: four false
-EQ002 on Git Extensions and nine `not-constructible` replays rest on it.
+value or string type (`IntPtr.Zero`, `String.Empty`) one value both sides read, not a free input per side: nine
+`not-constructible` replays rest on it. The four Git Extensions EQ002 it was filed for are real behaviour changes
+(the modern copy compiles its native calls out), which P2-250's run file re-adjudicates.
 P2-251 (S, filed 2026-10-19 by P2-245) builds an enum argument or field from its sort element, so the six replays whose
 model holds an enum run.
 P2-252 (S, filed 2026-10-19 by P2-245) awaits a returned `Task` or `ValueTask`, so an `async` member's outcome is its
@@ -1448,6 +1449,8 @@ directory path: three `reproduced` replays differ only in the `cwd-<random>` fol
 P2-255 (S, filed 2026-10-19 by P2-253, no dependency) gives the two drivers of a replay or `probe` case one executable
 path, or refuses an outcome that reads it: two `reproduced` `AppSettings` replays on Git Extensions differ only in the
 legacy driver's own folder against the `dotnet` host's.
+P2-256 (S, filed 2026-10-19 by P2-250) builds an `IntPtr` argument or field from its sort element, element 0 being
+`IntPtr.Zero`, so the two EasyHook EQ002 replays it blocks can run or say why not.
 
 P2-247 (L, filed 2026-10-18) is the second execution re-adjudication, after P2-240, P2-241, P2-242, P2-245 and
 P2-246: the five large pairs in `full --execute` at one commit, every EQ002 and EQ006 adjudicated (68 at `b0f56ff8`, no

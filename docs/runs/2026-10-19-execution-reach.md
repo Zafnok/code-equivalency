@@ -192,6 +192,10 @@ at most 68.1% (81 of 119), against P2-237's 73.9% (88 of 119): the ceiling falls
 positives. EQ002's precision falls: six of the seven false positives are EQ002, and none of the 51's EQ002 is
 confirmed; four of the six rest on one modelling gap (P2-250).
 
+- Correction (P2-250, 2026-10-19): Git Extensions rows 0, 3, 7 and 18 are confirmed, not false positives. The modern
+  side of those members is GitUI's copy of EasyHook, which compiles their native calls out, so migration precision here
+  is 55.8% (43 of 77) and the ceiling 71.4%; `docs/runs/2026-10-19-framework-static-fields.md` has the trace and the
+  corrected table.
 - Decision: the scoreboard is not changed here. Its migration row is P2-237's last column, a measurement over the
   results its runs reported; this file re-adjudicates part of the same sample on later runs, and P2-247 is the second
   execution re-adjudication that refreshes the scoreboard (ROADMAP). The 50.6% stands here beside the 35.4%.
