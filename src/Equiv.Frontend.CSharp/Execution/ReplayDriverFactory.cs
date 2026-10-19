@@ -78,8 +78,13 @@ internal sealed class ReplayDriverFactory(
             return ReplayPlan.NotConstructible(oldCase.Input is null ? $"legacy: {oldCase.Reason}" : $"modern: {newCase.Reason}");
         }
 
-        DriverSource.Receiver mode = ReplayArguments.Mode(oldCase, newCase);
         DriverSource.Access access = DriverSource.Reach(old.Method, @new.Method);
+        if ((access == DriverSource.Access.Direct ? null : DriverSource.Unbound(old.Method) ?? DriverSource.Unbound(@new.Method)) is { } unbound)
+        {
+            return ReplayPlan.NotConstructible(unbound);
+        }
+
+        DriverSource.Receiver mode = ReplayArguments.Mode(oldCase, newCase);
         int number = ++drivers;
         (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(
             old,

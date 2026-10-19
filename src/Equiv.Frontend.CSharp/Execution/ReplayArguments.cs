@@ -120,7 +120,7 @@ internal static class ReplayArguments
     /// of either side but the receiver, and <paramref name="model"/> the model's runs, which say whether a delegate is
     /// called and a token cancelled.
     /// </summary>
-    public static SideCase Case(IMethodSymbol method, Compilation compilation, IrProcedure body, Dictionary<string, IrValue> values, IReadOnlyDictionary<string, IrValue> heap, Counterexample? model = null)
+    public static SideCase Case(IMethodSymbol method, Compilation compilation, IrProcedure body, Dictionary<string, IrValue> values, IReadOnlyDictionary<string, IrValue> heap, Counterexample model)
     {
         if (CallObstacle(method, reach: true) is { } obstacle)
         {
@@ -129,8 +129,8 @@ internal static class ReplayArguments
 
         DriverHeap driver = new();
         (ModelObjects? objects, string constrained) = ModelObjects.Over(compilation, heap, model, driver);
-        IrValue self = values.GetValueOrDefault(IrParameterNames.Receiver) ?? Unconstrained(method.ContainingType);
-        if (objects is null || (self is IrSortValue receiver && IsNull(receiver, heap)))
+        IrSortValue self = values.GetValueOrDefault(IrParameterNames.Receiver) as IrSortValue ?? Unconstrained(method.ContainingType);
+        if (objects is null || IsNull(self, heap))
         {
             return new SideCase(Input: null, objects is null ? constrained : "the model's receiver is null");
         }
@@ -232,17 +232,15 @@ internal static class ReplayArguments
         return (byRef, reach, !DriverFactory.HasReceiver(method) || Constructible(method.ContainingType)) switch
         {
             ({ } parameter, _, _) => $"{parameter.Name} is passed by reference",
-            (null, true, _) => Reached(method),
+            (null, true, _) when Windowed(method) => DriverFactory.NeedsWindow,
             (null, false, false) => $"{method.ContainingType.ToDisplayString()} has no public parameterless constructor",
             _ => null,
         };
     }
 
-    /// <summary>What still keeps a replay or <c>probe</c> driver from <paramref name="method"/>: a window, or a signature no driver can bind.</summary>
-    private static string? Reached(IMethodSymbol method) =>
-        DriverFactory.IsDesktopSession(method.ContainingType) || (DriverFactory.HasReceiver(method) && DriverFactory.IsWindow(method.ContainingType)) || method.Parameters.Any(static p => DriverFactory.IsWindow(p.Type))
-            ? DriverFactory.NeedsWindow
-            : DriverSource.Unbound(method);
+    /// <summary>Whether <paramref name="method"/> drives the desktop session, or its receiver or a parameter is a window (ADR 0035).</summary>
+    private static bool Windowed(IMethodSymbol method) =>
+        DriverFactory.IsDesktopSession(method.ContainingType) || method.Parameters.Select(static p => p.Type).Prepend(method.ContainingType).Any(DriverFactory.IsWindow);
 
     private static bool Constructible(INamedTypeSymbol type) => !type.IsAbstract && (type.IsValueType || PublicParameterless(type) is not null);
 

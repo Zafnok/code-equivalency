@@ -61,7 +61,7 @@ public sealed class ReplayArgumentsTests
     private static IrBitVecValue Bv(int width, long value) => IrBitVecValue.FromSigned(width, value);
 
     private static ReplayArguments.SideCase Case(string type, string method, string ir, Dictionary<string, IrValue> values) =>
-        ReplayArguments.Case(Method(Project, type, method), Project, IrText.Parse(ir), values, ReplayArguments.Heap(values));
+        ReplayArguments.Case(Method(Project, type, method), Project, IrText.Parse(ir), values, ReplayArguments.Heap(values), Counterexample());
 
     [Fact]
     public void EveryBuildableTypeBecomesItsWireValue()
@@ -211,7 +211,7 @@ public sealed class ReplayArgumentsTests
             string ir = $"proc \"X\" (%{parameter}: {irType}) entry B0 B0: ret";
             Dictionary<string, IrValue> values = new(StringComparer.Ordinal) { [parameter] = value };
 
-            ReplayArguments.SideCase built = ReplayArguments.Case(Method(Project, type, method), Project, IrText.Parse(ir), values, ReplayArguments.Heap(values));
+            ReplayArguments.SideCase built = ReplayArguments.Case(Method(Project, type, method), Project, IrText.Parse(ir), values, ReplayArguments.Heap(values), Counterexample());
 
             if (built.Input is null)
             {
@@ -247,7 +247,8 @@ public sealed class ReplayArgumentsTests
                 project,
                 IrText.Parse("proc \"X\" (%s: sort \"System.String\") entry B0 B0: ret"),
                 values,
-                ReplayArguments.Heap(values));
+                ReplayArguments.Heap(values),
+                Counterexample());
             return built.Input!.Arguments;
         }
     }

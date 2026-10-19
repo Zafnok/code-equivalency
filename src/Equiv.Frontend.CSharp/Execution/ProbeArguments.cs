@@ -66,21 +66,24 @@ internal static class ProbeArguments
     /// <summary>One side's inputs from JSON, into one driver's heap, with how each was built.</summary>
     private sealed class Builder(IAssemblySymbol assembly, DriverHeap heap)
     {
-        private bool uninitialized;
+        private readonly List<string> written = [];
 
-        private string? constructor;
+        private readonly List<string> constructors = [];
+
+        private readonly List<string> failures = [];
+
+        private bool uninitialized;
 
         private bool isDelegate;
 
-        private readonly List<string> written = [];
-
         public DriverHeap Heap { get; } = heap;
 
-        public string Reason { get; private set; } = string.Empty;
+        /// <summary>Why the input cannot be built, the first thing that failed; empty while it can.</summary>
+        public string Reason => string.Concat(failures.Take(1));
 
         /// <summary>
-        /// The receiver: the given object, or with none a solution type created without a constructor, beside the
-        /// <c>new T()</c> its public parameterless constructor builds when it has one.
+        /// The receiver, of a solution type: the given object, or with none an instance created without a constructor,
+        /// beside the <c>new T()</c> its public parameterless constructor builds when it has one.
         /// </summary>
         public (ModelObjects.Built? Self, string? New) Receiver(INamedTypeSymbol type, JsonElement? given)
         {
@@ -89,34 +92,29 @@ internal static class ProbeArguments
                 return (Input(type, value, IrParameterNames.Receiver), null);
             }
 
-            string? @new = ReplayArguments.PublicParameterless(type)?.ToDisplayString();
-            ModelObjects.Built? self = (IsSolution(type), type.IsValueType, @new) switch
+            ModelObjects.Built? self = type switch
             {
-                (true, true, _) => new ModelObjects.Built(Heap.Struct(type, []), "uninitialized"),
-                (true, false, _) when type is { IsAbstract: false, TypeKind: TypeKind.Class } => new ModelObjects.Built(Heap.Uninitialized(Heap.Id(), type, []), "uninitialized"),
-                (_, _, { } constructed) when Heap.Constructor(ReplayArguments.PublicParameterless(type)!) is { } maker => new ModelObjects.Built(DriverHeap.Made(Heap.Id(), maker, []), $"constructor {constructed}"),
-                _ => null,
+                { IsValueType: true } => new ModelObjects.Built(Heap.Struct(type, []), "uninitialized"),
+                { IsAbstract: false } => new ModelObjects.Built(Heap.Uninitialized(Heap.Id(), type, []), "uninitialized"),
+                _ => Fail<ModelObjects.Built>($"{type.ToDisplayString()} is abstract: give the receiver by a constructor or by its fields, of a type that derives from it"),
             };
-            if (self is null)
-            {
-                Fail($"{type.ToDisplayString()} has no public parameterless constructor and is not built without one: give the receiver by a constructor or by its fields");
-            }
-
-            return (self, @new);
+            return (self, ReplayArguments.PublicParameterless(type)?.ToDisplayString());
         }
 
         /// <summary><paramref name="value"/> as an input of <paramref name="type"/> named <paramref name="name"/>, or null (<see cref="Reason"/> says why).</summary>
         public ModelObjects.Built? Input(ITypeSymbol type, JsonElement value, string name)
         {
-            (uninitialized, constructor, isDelegate) = (false, null, false);
+            (uninitialized, isDelegate) = (false, false);
             written.Clear();
+            constructors.Clear();
             return Value(type, value, name) is { } wire ? new ModelObjects.Built(wire, How) : null;
         }
 
-        private string How => (uninitialized, constructor, isDelegate) switch
+        private string How => (uninitialized, constructors.Count, isDelegate) switch
         {
-            (true, _, _) => written.Count == 0 ? "uninitialized" : $"uninitialized {string.Join(", ", written)}",
-            (_, { } signature, _) => $"constructor {signature}",
+            (true, _, _) when written.Count == 0 => "uninitialized",
+            (true, _, _) => $"uninitialized {string.Join(", ", written)}",
+            (_, > 0, _) => $"constructor {constructors[0]}",
             (_, _, true) => "delegate",
             _ => "value",
         };
@@ -190,7 +188,7 @@ internal static class ProbeArguments
                 if (built is null)
                 {
                     // P2-242's message names the struct, whichever of its fields did not fit.
-                    Reason = $"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}";
+                    failures.Insert(0, $"no {type.ToDisplayString()} argument can be built for {name} from {value.GetRawText()}");
                 }
 
                 return built;
@@ -269,6 +267,7 @@ internal static class ProbeArguments
                 return Fail($"{name}: {type.ToDisplayString()} has no visible constructor ({wanted}) taking {arguments.Length} argument(s)");
             }
 
+            constructors.Add(chosen.ToDisplayString());
             List<string> wires = [];
             foreach ((IParameterSymbol parameter, JsonElement argument) in chosen.Parameters.Zip(arguments))
             {
@@ -280,7 +279,6 @@ internal static class ProbeArguments
                 wires.Add(wire);
             }
 
-            constructor ??= chosen.ToDisplayString();
             return DriverHeap.Made(Heap.Id(), maker, wires);
         }
 
@@ -350,13 +348,12 @@ internal static class ProbeArguments
 
         private static bool IsSolution(ITypeSymbol type) => type.Locations.Any(static l => l.IsInSource);
 
-        private string? Fail(string reason)
-        {
-            if (Reason.Length == 0)
-            {
-                Reason = reason;
-            }
+        private string? Fail(string reason) => Fail<string>(reason);
 
+        private T? Fail<T>(string reason)
+            where T : class
+        {
+            failures.Add(reason);
             return null;
         }
     }
