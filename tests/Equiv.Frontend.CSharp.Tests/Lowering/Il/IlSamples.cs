@@ -15,7 +15,8 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering.Il;
 /// here, so the few web types <c>webapi-basic</c> uses, and the remoting <c>CallContext</c> members .NET Framework has and
 /// this framework does not (<c>callee-replacement</c>, ticket P2-192), and the Windows Forms tree and image list types a
 /// Windows Forms project's targeting pack gives it (<c>runtime-row-indexer-getter</c>, ticket P2-163;
-/// <c>runtime-row-call-cannot-reach</c>, ticket P2-216), come from a stub compilation it references. A side that does not
+/// <c>runtime-row-call-cannot-reach</c>, ticket P2-216), and the <c>System.Management</c> query <c>package-runtime-asset</c>
+/// builds (ticket P2-240), come from a stub compilation it references. A side that does not
 /// compile here (<see cref="DoesNotCompile"/>) is left out: it emits no IL.
 /// </summary>
 internal static class IlSamples
@@ -56,6 +57,14 @@ internal static class IlSamples
             {
                 public static object LogicalGetData(string name) => null;
                 public static void LogicalSetData(string name, object data) { }
+            }
+        }
+        namespace System.Management
+        {
+            public class SelectQuery
+            {
+                public SelectQuery(string queryOrClassName) { }
+                public string QueryString => null;
             }
         }
         namespace System.Windows.Forms

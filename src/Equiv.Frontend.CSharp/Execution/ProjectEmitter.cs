@@ -89,14 +89,15 @@ internal static class ProjectEmitter
     /// Deploys the file <paramref name="path"/> that <paramref name="compilation"/> references: a package's runtime assets
     /// in its place, else the file itself unless it is in a <paramref name="pack"/>.
     /// </summary>
-    private static string? Deploy(Compilation compilation, string path, bool referenceAssembly, bool pack, Deployment deployment) =>
-        deployment.Assets.For(deployment.Deployed, compilation, path, referenceAssembly) switch
+    private static string? Deploy(Compilation compilation, string path, bool referenceAssembly, bool pack, Deployment deployment)
+    {
+        if (deployment.Assets.For(deployment.Deployed, compilation, path, referenceAssembly) is not { } package)
         {
-            { Error: { } error } => $"{compilation.AssemblyName}: {error}",
-            { Files: var files } => Copy(files, deployment),
-            null when !pack => Copy(path, deployment),
-            null => null,
-        };
+            return pack ? null : Copy(path, deployment);
+        }
+
+        return package.Error is { } error ? $"{compilation.AssemblyName}: {error}" : Copy(package.Files, deployment);
+    }
 
     /// <summary>
     /// Every project is emitted as <c>&lt;assembly&gt;.dll</c>, an executable one too: both runtimes probe the application
