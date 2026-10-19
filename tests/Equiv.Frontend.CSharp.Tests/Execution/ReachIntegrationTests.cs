@@ -81,8 +81,11 @@ public sealed class ReachIntegrationTests : IDisposable
                 }
             }
 
+            public struct F2 { public readonly float X, Y; public F2(float x, float y) { X = x; Y = y; } }
+
             public static class Kinds
             {
+                public static float Sum(F2 a, F2 b) => a.X + b.Y;
                 public static int Run(int[] xs, System.Threading.CancellationToken token, System.Func<int, int> f, Packet p) =>
                     xs.Length + (token.IsCancellationRequested ? 10 : 0) + (f == null ? 0 : 1000) + p.Data.Length + p.Name.Length + (p.Tag == null ? 0 : 50);
                 public static int Call(System.Func<int, int> f) => f(2);
@@ -154,6 +157,36 @@ public sealed class ReachIntegrationTests : IDisposable
         Assert.Equal(
             [new ReplayInput("this", "uninitialized Holder.head, Node.Next, Node.Value, Holder.items, Holder.other, Holder.shape, Derived.d, Base.B")],
             result.Inputs!.Legacy);
+    }
+
+    /// <summary>A solution struct with <c>float</c> fields, created without a constructor from the model's field values, on both runtimes.</summary>
+    [Fact]
+    public void AStructFromTheModelsFloatFields_IsTheModelsState()
+    {
+        (CSharpCompilation legacy, CSharpCompilation modern, TargetRuntime legacyRuntime, DriverReferences installed) = Projects();
+        const string ir = """
+            proc "X" (%a: sort "N.F2", %b: sort "N.F2", %field.N.F2.X: map<sort "N.F2", sort "System.Single">, %field.N.F2.Y: map<sort "N.F2", sort "System.Single">)
+                entry B0 B0: ret
+            """;
+        IrSortValue a = new("N.F2", 1), b = new("N.F2", 2);
+        IrValue[] inputs =
+        [
+            a,
+            b,
+            new IrMapValue(new IrMap(new IrSort("N.F2"), new IrSort("System.Single")), IrFloat.Of(0f), ImmutableDictionary<IrValue, IrValue>.Empty.Add(a, IrFloat.Of(1.5f))),
+            new IrMapValue(new IrMap(new IrSort("N.F2"), new IrSort("System.Single")), IrFloat.Of(0f), ImmutableDictionary<IrValue, IrValue>.Empty.Add(b, IrFloat.Of(-2f))),
+        ];
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(
+            legacyRuntime, Self, installed.Host, legacy, Method(legacy, "N.Kinds", "Sum"), ir, modern, Method(modern, "N.Kinds", "Sum"), ir);
+        Counterexample model = new(new IrInputs([.. inputs]), new IrRun(new IrReturned(Bv(1)), [], []), new IrRun(new IrReturned(Bv(2)), [], []));
+
+        ReplayPlan plan = factory.Create(pair, model, directory);
+        ReplayResult result = Replayer().Replay(plan, model, pair.OldBody!, pair.NewBody!);
+
+        Assert.True(plan.Reason.Length == 0, plan.Reason);
+        Assert.True(result.Status == ReplayStatus.NotReproduced, $"{result.Status} {result.Reason}");
+        Assert.Equal("\"0xBF000000\"", result.Legacy!.Canonical);
+        Assert.Equal("\"0xBF000000\"", result.Modern!.Canonical);
     }
 
     private (ExecutionOutcome Legacy, ExecutionOutcome Modern, ReplayPlan Plan) Probe(string type, string member, string? receiver, string arguments)

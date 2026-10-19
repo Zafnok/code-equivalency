@@ -31,6 +31,7 @@ public sealed class DriverReachTests
                 private static int Grid(Secret[,] s) => 0;
                 private static int Lists(System.Collections.Generic.List<Secret>[] s) => 0;
                 public static int Wrapped(Outer o) => 0;
+                public static int Vectors(System.Numerics.Vector2 v, Outer o) => 0;
                 private static int Wide(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j, int k, int l, int m, int n, int o, int p, int q) => 0;
                 public static int Open() => 0;
                 public static int Dynamic(dynamic d) => 0;
@@ -138,6 +139,19 @@ public sealed class DriverReachTests
             "global::N.Outer p0 = new global::N.Outer { Inner = new global::N.In { X = R.F(R.At(R.At(a[1], 0), 0)), Data = (int[])V.Value(R.At(R.At(a[1], 0), 1), typeof(int[])) }, Name = R.S(R.At(a[1], 1)) };",
             Driver(Member("N.C", "Wrapped"), Shape(DriverSource.Receiver.New, DriverSource.Access.Direct)),
             StringComparison.Ordinal);
+
+    /// <summary>
+    /// A replay builds a solution struct without a constructor, so its driver reads one through the value builder, while a
+    /// framework struct is still built in source from its fields (ADR 0062 decision 2).
+    /// </summary>
+    [Fact]
+    public void AReplaysSolutionStruct_IsReadByTheValueBuilder()
+    {
+        string source = Driver(Member("N.C", "Vectors"), Shape(DriverSource.Receiver.New, DriverSource.Access.Direct) with { Uninitializes = true });
+
+        Assert.Contains("global::System.Numerics.Vector2 p0 = new global::System.Numerics.Vector2 { X = R.F(R.At(a[1], 0)), Y = R.F(R.At(a[1], 1)) };", source, StringComparison.Ordinal);
+        Assert.Contains("global::N.Outer p1 = (global::N.Outer)V.Value(a[2], typeof(global::N.Outer));", source, StringComparison.Ordinal);
+    }
 
     /// <summary>A driver whose inputs are no replay's or probe's has no value builder, so a reference-typed argument is only <c>null</c>, cast.</summary>
     [Fact]

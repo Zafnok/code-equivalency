@@ -75,13 +75,20 @@ internal static class DriverSource
         /// builder, which builds an object, an array or a delegate as well as <c>null</c>; otherwise it is only <c>null</c>.
         /// </summary>
         public bool Builds { get; init; }
+
+        /// <summary>
+        /// Whether a struct declared in the solution comes as the value builder's instance created without a constructor,
+        /// as a replay builds the model's state (decision 2), even where it is flat; a probe sends a flat one as the array of
+        /// its fields, built in source as ticket P2-242 builds it.
+        /// </summary>
+        public bool Uninitializes { get; init; }
     }
 
     /// <summary>The driver for <paramref name="method"/>, shaped by <paramref name="shape"/> (<see cref="Shape.Member"/> when null).</summary>
     public static string Generate(IMethodSymbol method, Shape? shape = null)
     {
         shape ??= Shape.Member;
-        Writer writer = new(shape.Heap, shape.Builds);
+        Writer writer = new(shape.Heap, shape.Builds, shape.Uninitializes);
         List<string> arguments = [];
         string? receiver = null;
         int slot = 1;
@@ -293,7 +300,7 @@ internal static class DriverSource
     }
 
     /// <summary>One driver's declarations, as they are written: the receiver and arguments, and the binding of a hidden member.</summary>
-    private sealed class Writer(DriverHeap heap, bool builds)
+    private sealed class Writer(DriverHeap heap, bool builds, bool uninitializes)
     {
         private readonly List<string> declarations = [];
 
@@ -328,7 +335,7 @@ internal static class DriverSource
         {
             string name = $"p{(slot - 1).ToString(CultureInfo.InvariantCulture)}";
             string wire = $"a[{slot.ToString(CultureInfo.InvariantCulture)}]";
-            string value = Decode(type, wire, builds) ?? (DriverStruct.Of(type) is { Buildable: true } flat ? FromFields(type.ToDisplayString(Qualified), flat, wire) : Built(type, wire));
+            string value = Decode(type, wire, builds) ?? (Flat(type) is { } flat ? FromFields(type.ToDisplayString(Qualified), flat, wire) : Built(type, wire));
             declarations.Add($"{Variable(type)} {name} = {value};");
             return name;
         }
@@ -355,7 +362,11 @@ internal static class DriverSource
 
         /// <summary>A field of a struct a driver builds, which is therefore a scalar, a buildable struct or a value builder's input.</summary>
         private string Field(ITypeSymbol type, string value) =>
-            Decode(type, value, builds) ?? (DriverStruct.Of(type) is { } nested ? FromFields(type.ToDisplayString(Qualified), nested, value) : Built(type, value));
+            Decode(type, value, builds) ?? (Flat(type) is { } nested ? FromFields(type.ToDisplayString(Qualified), nested, value) : Built(type, value));
+
+        /// <summary><paramref name="type"/> as a struct built in source from its fields' array, or null when the value builder reads it.</summary>
+        private DriverStruct? Flat(ITypeSymbol type) =>
+            uninitializes && type.Locations.Any(static l => l.IsInSource) ? null : DriverStruct.Of(type) is { Buildable: true } flat ? flat : null;
 
         /// <summary>
         /// The value builder's reading of <paramref name="wire"/> as <paramref name="type"/>, cast to it where it can be named.

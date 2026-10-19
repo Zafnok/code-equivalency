@@ -63,7 +63,7 @@ internal sealed class ReplayDriverFactory(
         Dictionary<string, IrValue> heap = ReplayArguments.Heap(oldValues, newValues);
         ReplayArguments.SideCase oldCase = ReplayArguments.Case(old.Method, old.Compilation, pair.OldBody!, oldValues, heap, counterexample);
         ReplayArguments.SideCase newCase = ReplayArguments.Case(@new.Method, @new.Compilation, pair.NewBody!, newValues, heap, counterexample);
-        ReplayPlan plan = Runnable(old, @new, oldCase, newCase, directory);
+        ReplayPlan plan = Runnable(old, @new, oldCase, newCase, directory, uninitializes: true);
         return plan.Drivers is null ? plan : plan with { AlikeReason = AlikeReason(counterexample) };
     }
 
@@ -71,7 +71,7 @@ internal sealed class ReplayDriverFactory(
     /// The plan that runs <paramref name="oldCase"/> and <paramref name="newCase"/>: both sides' receivers built alike and
     /// both members reached by one mechanism (ADR 0062 decisions 1 and 2), with how each input was built (decision 5).
     /// </summary>
-    private ReplayPlan Runnable(ReplayTarget old, ReplayTarget @new, ReplayArguments.SideCase oldCase, ReplayArguments.SideCase newCase, string directory)
+    private ReplayPlan Runnable(ReplayTarget old, ReplayTarget @new, ReplayArguments.SideCase oldCase, ReplayArguments.SideCase newCase, string directory, bool uninitializes)
     {
         if (oldCase.Input is null || newCase.Input is null)
         {
@@ -91,8 +91,8 @@ internal sealed class ReplayDriverFactory(
             @new,
             directory,
             number,
-            new DriverSource.Shape(mode, access, oldCase.Heap, Formatter: false) { Builds = true },
-            new DriverSource.Shape(mode, access, newCase.Heap, Formatter: false) { Builds = true });
+            new DriverSource.Shape(mode, access, oldCase.Heap, Formatter: false) { Builds = true, Uninitializes = uninitializes },
+            new DriverSource.Shape(mode, access, newCase.Heap, Formatter: false) { Builds = true, Uninitializes = uninitializes });
         return pairDrivers is null
             ? ReplayPlan.NotConstructible(problem)
             : ReplayPlan.Runnable(pairDrivers, oldCase.For(mode), newCase.For(mode)) with { Inputs = new ReplayInputs(oldCase.Provenance(mode), newCase.Provenance(mode)) };
@@ -138,7 +138,7 @@ internal sealed class ReplayDriverFactory(
 
         ReplayTarget old = legacy[pair.Old];
         ReplayTarget @new = modern[pair.New];
-        return Runnable(old, @new, ProbeArguments.Case(old.Method, arguments, receiver), ProbeArguments.Case(@new.Method, arguments, receiver), directory);
+        return Runnable(old, @new, ProbeArguments.Case(old.Method, arguments, receiver), ProbeArguments.Case(@new.Method, arguments, receiver), directory, uninitializes: false);
     }
 
     /// <summary>A differential-testing driver's shape: <c>new T()</c>, the member called directly, inputs from the generators.</summary>
