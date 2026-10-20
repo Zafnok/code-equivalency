@@ -62,8 +62,8 @@ internal sealed class ReplayDriverFactory(
         }
 
         Dictionary<string, IrValue> heap = ReplayArguments.Heap(oldValues, newValues);
-        ReplayArguments.SideCase oldCase = ReplayArguments.Case(old.Method, old.Compilation, pair.OldBody!, oldValues, heap, counterexample);
-        ReplayArguments.SideCase newCase = ReplayArguments.Case(@new.Method, @new.Compilation, pair.NewBody!, newValues, heap, counterexample);
+        ReplayArguments.SideCase oldCase = ReplayArguments.Case(old.Method, old.Compilation, pair.OldBody!, oldValues, heap, counterexample, @new.Compilation);
+        ReplayArguments.SideCase newCase = ReplayArguments.Case(@new.Method, @new.Compilation, pair.NewBody!, newValues, heap, counterexample, old.Compilation);
         ReplayPlan plan = Runnable(old, @new, oldCase, newCase, directory, uninitializes: true);
         return plan.Drivers is null ? plan : plan with { AlikeReason = AlikeReason(counterexample) };
     }
@@ -129,7 +129,7 @@ internal sealed class ReplayDriverFactory(
             : TestingPlan.Runnable(
                 pairDrivers,
                 [.. @new.Method.Parameters.Zip(old.Method.Parameters, static (n, l) => DriverFactory.Parameter(n.Type, RefKind.None, l.Type))],
-                Seeds(pair, old, candidate));
+                Seeds(pair, old, @new, candidate));
     }
 
     public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, JsonElement? receiver, string directory)
@@ -174,14 +174,14 @@ internal sealed class ReplayDriverFactory(
     private static string Types(IMethodSymbol method) => string.Join(", ", method.Parameters.Select(static p => p.Type.ToDisplayString()));
 
     /// <summary>The legacy case <paramref name="candidate"/>'s inputs give, when the model can be built as arguments at all.</summary>
-    private static List<ExecutionInput> Seeds(ProcedurePair pair, ReplayTarget old, Counterexample? candidate)
+    private static List<ExecutionInput> Seeds(ProcedurePair pair, ReplayTarget old, ReplayTarget @new, Counterexample? candidate)
     {
         if (candidate is null || ReplayArguments.Bind(pair.OldBody!, pair.NewBody!, candidate.Inputs) is not var (oldValues, newValues))
         {
             return [];
         }
 
-        ReplayArguments.SideCase seed = ReplayArguments.Case(old.Method, old.Compilation, pair.OldBody!, oldValues, ReplayArguments.Heap(oldValues, newValues), candidate);
+        ReplayArguments.SideCase seed = ReplayArguments.Case(old.Method, old.Compilation, pair.OldBody!, oldValues, ReplayArguments.Heap(oldValues, newValues), candidate, @new.Compilation);
         return seed.Input is null || seed.Arguments.Any(static a => a.Built.Wire.StartsWith("[\"@", StringComparison.Ordinal)) ? [] : [seed.For(DriverSource.Receiver.New)];
     }
 

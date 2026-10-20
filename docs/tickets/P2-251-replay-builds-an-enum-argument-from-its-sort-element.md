@@ -1,5 +1,5 @@
 # P2-251 Execution reach: a replay builds an enum argument, which the model holds as a sort element
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-245
