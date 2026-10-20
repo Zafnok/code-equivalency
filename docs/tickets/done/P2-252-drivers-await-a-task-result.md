@@ -1,5 +1,5 @@
 # P2-252 Execution reach: a driver awaits a `Task` result, so an `async` member's outcome is observed
-Status: in-progress
+Status: done (PR #556)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-245

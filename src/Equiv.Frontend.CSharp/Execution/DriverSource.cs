@@ -115,20 +115,14 @@ internal static class DriverSource
         ITypeSymbol? returned = Result(method);
         bool named = returned is null || DriverHeap.Nameable(returned);
         Awaited? awaited = named ? Awaiting(returned) : null;
-        ITypeSymbol? result = awaited is null ? returned : awaited.Result;
+        ITypeSymbol? result = awaited is null ? returned : awaited.Yields;
         string call = shape.Access == Access.Direct ? Call(method, receiver, arguments) : writer.Bind(method, receiver, arguments, shape.Access);
         string value = (returned, named, shape.Access) switch
         {
             (not null, true, Access.Invoke) => $"({returned.ToDisplayString(Qualified)}){call}",
             _ => call,
         };
-        string invoke = (returned, awaited) switch
-        {
-            (null, _) => $"{call};",
-            (_, { Result: null }) => $"A.Wait({awaited.Task(value)});",
-            (_, not null) => $"r = A.Get({awaited.Task(value)});",
-            _ => $"r = {value};",
-        };
+        string invoke = Invocation(returned, awaited, call, value);
         string declareResult = result is null ? string.Empty : $"{(named ? result.ToDisplayString(Qualified) : "object")} r;";
         string answer = (result, named) switch
         {
@@ -146,13 +140,25 @@ internal static class DriverSource
     }
 
     /// <summary>
+    /// The statement that makes the call: the call alone for a <c>void</c> member, a wait for a returned task (keeping its
+    /// result in <c>r</c> when it has one), or <paramref name="value"/> kept in <c>r</c>.
+    /// </summary>
+    private static string Invocation(ITypeSymbol? returned, Awaited? awaited, string call, string value) => (returned, awaited) switch
+    {
+        (null, _) => $"{call};",
+        (_, { Yields: null }) => $"A.Wait({awaited.Completion(value)});",
+        (_, not null) => $"r = A.Get({awaited.Completion(value)});",
+        _ => $"r = {value};",
+    };
+
+    /// <summary>
     /// A task a driver waits for (ticket P2-252): the type of its result, null for a <c>Task</c> or <c>ValueTask</c>, and
     /// whether it is a <c>ValueTask</c>, which the driver waits for as its <c>AsTask()</c>.
     /// </summary>
-    private sealed record Awaited(ITypeSymbol? Result, bool Value)
+    private sealed record Awaited(ITypeSymbol? Yields, bool Value)
     {
         /// <summary>The <c>Task</c> that <paramref name="value"/>, an expression of the awaited type, completes with.</summary>
-        public string Task(string value) => Value ? $"({value}).AsTask()" : value;
+        public string Completion(string value) => Value ? $"({value}).AsTask()" : value;
     }
 
     /// <summary>
@@ -161,8 +167,8 @@ internal static class DriverSource
     /// </summary>
     private static Awaited? Awaiting(ITypeSymbol? type) => type?.OriginalDefinition.ToDisplayString() switch
     {
-        "System.Threading.Tasks.Task" => new Awaited(Result: null, Value: false),
-        "System.Threading.Tasks.ValueTask" => new Awaited(Result: null, Value: true),
+        "System.Threading.Tasks.Task" => new Awaited(Yields: null, Value: false),
+        "System.Threading.Tasks.ValueTask" => new Awaited(Yields: null, Value: true),
         "System.Threading.Tasks.Task<TResult>" => new Awaited(((INamedTypeSymbol)type).TypeArguments[0], Value: false),
         "System.Threading.Tasks.ValueTask<TResult>" => new Awaited(((INamedTypeSymbol)type).TypeArguments[0], Value: true),
         _ => null,
