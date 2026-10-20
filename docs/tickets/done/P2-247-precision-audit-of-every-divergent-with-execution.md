@@ -1,5 +1,5 @@
 # P2-247 Precision audit with execution: every Divergent of the five large pairs, P2-237's 71 undetermined and a fresh sample of runtime exposures
-Status: in-progress
+Status: done (PR #558)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-240, P2-241, P2-242, P2-245, P2-246
