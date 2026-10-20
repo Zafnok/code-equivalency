@@ -129,6 +129,32 @@ internal sealed class DriverHeap
     }
 
     /// <summary>
+    /// A maker for a delegate of <paramref name="type"/> that answers from the model's table (ticket P2-249), its wire
+    /// argument 0 the answer's default and argument 1 the rows <see cref="Row"/> writes: a call whose arguments equal a row's
+    /// answers that row's result, or throws <c>System.Exception</c>, the type the lowering gives an open call's throw, where
+    /// the row threw; any other call answers the default. Null as <see cref="Delegate"/> is.
+    /// </summary>
+    public int? Table(INamedTypeSymbol type)
+    {
+        IMethodSymbol invoke = type.DelegateInvokeMethod!;
+        if (!Nameable(type) || invoke.Parameters.Select(static p => p.RefKind).Append(invoke.RefKind).Any(static k => k != RefKind.None))
+        {
+            return null;
+        }
+
+        string parameters = string.Join(", ", invoke.Parameters.Select(static (_, i) => $"x{i.ToString(CultureInfo.InvariantCulture)}"));
+        string typed = string.Join(", ", invoke.Parameters.Select(static p => $"typeof({p.Type.ToDisplayString(Qualified)})"));
+        string call = $"a(new object[] {{ {parameters} }})";
+        string returns = invoke.ReturnsVoid ? "void" : invoke.ReturnType.ToDisplayString(Qualified);
+        string body = invoke.ReturnsVoid ? $"{{ {call}; }}" : $"({returns}){call}";
+        return Maker($"Table(w, new Type[] {{ {typed} }}, typeof({returns}), a => new {type.ToDisplayString(Qualified)}(({parameters}) => {body}))");
+    }
+
+    /// <summary>One row of a <see cref="Table"/>: the call's arguments past the delegate, and its result or that it threw.</summary>
+    public static string Row(IEnumerable<string> arguments, string result, bool threw) =>
+        $"[[{string.Join(',', arguments)}],{result},{(threw ? "true" : "false")}]";
+
+    /// <summary>
     /// The C# expression that is <paramref name="type"/>'s <c>System.Type</c> in a driver: <c>typeof</c> where the friend
     /// assembly can name it, else its metadata name in its assembly, or a one-dimensional array of such a type; null for a
     /// type no driver names (a pointer, a type parameter, a generic or multi-dimensional array over a hidden type).

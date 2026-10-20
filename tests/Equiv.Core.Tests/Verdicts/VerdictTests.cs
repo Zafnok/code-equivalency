@@ -35,6 +35,40 @@ public sealed class VerdictTests
         Assert.Equal(a, b);
     }
 
+    /// <summary>Ticket P2-249: the model's answers to a delegate input's calls ride along, and take no part in equality.</summary>
+    [Fact]
+    public void ACounterexamplesAnswersTakeNoPartInItsEquality()
+    {
+        CallAnswer answer = new(new CallIdentity("System.Func`2::Invoke(int)"), [new IrSortValue("System.Func`2", 1), new IrBitVecValue(32, 2)], new IrBitVecValue(32, 3), Threw: false, Writes: false);
+        Counterexample a = new(new IrInputs([new IrBitVecValue(32, 1)]), SampleRun, SampleRun);
+        Counterexample b = a with { Answers = [answer] };
+        IrRun other = new(new IrReturned(new IrBitVecValue(32, 2)), [], []);
+
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+        Assert.Equal([answer], b.Answers);
+        Assert.Empty(a.Answers);
+        Assert.NotEqual(a, b with { Inputs = new IrInputs([]) });
+        Assert.NotEqual(a, b with { Old = other });
+        Assert.NotEqual(a, b with { New = other });
+        Assert.False(a.Equals(Null.Of<Counterexample>()));
+    }
+
+    [Fact]
+    public void ACallAnswerComparesEveryPart()
+    {
+        CallAnswer answer = new(new CallIdentity("F::Invoke(int)"), [new IrBitVecValue(32, 2)], new IrBitVecValue(32, 3), Threw: false, Writes: false);
+
+        Assert.Equal(answer, answer with { Arguments = [new IrBitVecValue(32, 2)] });
+        Assert.Equal(answer.GetHashCode(), (answer with { Arguments = [new IrBitVecValue(32, 2)] }).GetHashCode());
+        Assert.NotEqual(answer, answer with { Callee = new CallIdentity("G::Invoke(int)") });
+        Assert.NotEqual(answer, answer with { Arguments = [new IrBitVecValue(32, 1)] });
+        Assert.NotEqual(answer, answer with { Result = null });
+        Assert.NotEqual(answer, answer with { Threw = true });
+        Assert.NotEqual(answer, answer with { Writes = true });
+        Assert.False(answer.Equals(Null.Of<CallAnswer>()));
+    }
+
     [Fact]
     public void UnknownCarriesAReasonAndDetail()
     {

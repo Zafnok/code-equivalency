@@ -1,5 +1,5 @@
 # P2-249 Execution reach: a replay builds a delegate argument the model's runs call, answering each call as the model does
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-245

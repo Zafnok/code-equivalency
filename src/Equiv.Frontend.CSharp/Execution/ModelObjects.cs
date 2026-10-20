@@ -24,8 +24,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <see cref="EnumElements"/> says (ticket P2-251), an array from its length and
 /// elements, a solution struct like an object but by value, any other struct from its fields (<see cref="DriverStruct"/>),
 /// a <c>CancellationToken</c> as cancelled exactly when a model's run ends in <c>OperationCanceledException</c>, and a
-/// delegate only where neither run calls through it, since the counterexample carries none of the model's answers to such a
-/// call. Anything else, a window among them (ADR 0035), is not constructible, and <see cref="Reason"/> says why.
+/// delegate as a table of the model's answers to the runs' calls of it (<see cref="Counterexample.Answers"/>; ticket
+/// P2-249). Anything else, a window among them (ADR 0035), is not constructible, and <see cref="Reason"/> says why.
 /// </summary>
 internal sealed class ModelObjects
 {
@@ -377,24 +377,113 @@ internal sealed class ModelObjects
         return DriverHeap.Made(instance.Id, maker, []);
     }
 
-    /// <summary>A delegate the model's runs never call: called anyway, it throws, which no run of the model does.</summary>
+    /// <summary>
+    /// A delegate: one the model's runs never call throws if called anyway, which no run of the model does; one they call
+    /// answers from the model's answers to those calls (<see cref="Table"/>; ticket P2-249). Either is built as
+    /// <c>delegate</c>: an object its table holds is an input's, which says how it was built. A run that hands the
+    /// delegate to another call, which may call it in ways the model does not give, leaves it not constructible.
+    /// </summary>
     private string? Delegate(INamedTypeSymbol type, IrSortValue root, string name)
     {
-        if (model.Old.Trace.Concat(model.New.Trace).Any(r => r.Arguments.OfType<IrSortValue>().Any(a => Find(a) == root)))
+        List<CallAnswer> answers = [.. model.Answers.Where(a => Find((IrSortValue)a.Arguments[0]) == root)];
+        if (model.Old.Trace.Concat(model.New.Trace).FirstOrDefault(r => r.Arguments.OfType<IrSortValue>().Any(a => Find(a) == root) && !answers.Exists(a => Answers(a, r))) is { } handed)
         {
-            return Fail($"the model's runs call {name}, and the counterexample holds none of the model's answers to that call");
+            return Fail($"the model's runs hand {name} to {handed.Callee.Value}, which may call it in ways the model does not give");
         }
 
-        if (heap.Delegate(type, answers: false) is not { } maker)
+        IMethodSymbol invoke = type.DelegateInvokeMethod!;
+        if (answers.Count > 0 && Unanswerable(invoke, answers) is { } reason)
+        {
+            return Fail($"the model's runs call {name}, {reason}, which no driver builds");
+        }
+
+        if ((answers.Count == 0 ? heap.Delegate(type, answers: false) : heap.Table(type)) is not { } maker)
         {
             return Fail($"no {type.ToDisplayString()} delegate can be built for {name}");
         }
 
         Instance instance = Begin(root);
         open.Peek().Delegate = true;
+        open.Push(new Provenance());
+        if ((answers.Count == 0 ? [] : Table(invoke, answers, name)) is not { } rows)
+        {
+            return null;
+        }
+
+        open.Pop();
         End(instance);
-        return DriverHeap.Made(instance.Id, maker, []);
+        return DriverHeap.Made(instance.Id, maker, answers.Count == 0 ? [] : [Fallback(invoke)!, $"[{string.Join(',', rows)}]"]);
     }
+
+    /// <summary>
+    /// Why the model's answers to a delegate's calls are no delegate a driver builds, or null when they are: a <c>ref</c>
+    /// or <c>out</c> output, a heap write, or an object result that is neither null nor an input's object (ticket P2-249).
+    /// </summary>
+    private string? Unanswerable(IMethodSymbol invoke, List<CallAnswer> answers) =>
+        invoke.Parameters.Select(static p => p.RefKind).Append(invoke.RefKind).Any(static k => k != RefKind.None) ? "whose answers have a ref or out output"
+        : answers.Exists(static a => a.Writes) ? "and the model's answer writes the heap"
+        : Fallback(invoke) is null || (!invoke.ReturnsVoid && !IsScalar(invoke.ReturnType) && !answers.TrueForAll(a => a.Threw || Held((IrSortValue)a.Result!))) ? "and the model's answer is an object"
+        : null;
+
+    /// <summary>What a delegate answers a tuple the model's runs never call it on: its return type's default.</summary>
+    private static string? Fallback(IMethodSymbol invoke) => invoke.ReturnsVoid ? "null" : Default(invoke.ReturnType);
+
+    /// <summary>
+    /// The rows of a delegate's table: per argument tuple the runs called it on, the model's result or its throw. Any other
+    /// tuple, which no run of the model makes, answers the return type's default. A tuple the model answers two ways (at
+    /// two positions, or on the two sides) is no function of the arguments, so no delegate a driver builds; null, with the
+    /// reason, then or when an argument or result cannot be built.
+    /// </summary>
+    private List<string>? Table(IMethodSymbol invoke, List<CallAnswer> answers, string name)
+    {
+        Dictionary<string, string> answered = new(StringComparer.Ordinal);
+        List<string> rows = [];
+        foreach (CallAnswer answer in answers)
+        {
+            List<string> arguments = [];
+            List<string> key = [];
+            foreach ((IParameterSymbol parameter, IrValue argument) in invoke.Parameters.Zip(answer.Arguments.Skip(1)))
+            {
+                if (Value(parameter.Type, argument, $"an argument of {name}") is not { } wire)
+                {
+                    return null;
+                }
+
+                arguments.Add(wire);
+                key.Add(argument is IrSortValue element && built.ContainsKey(Find(element)) ? $"#{Find(element)}" : wire);
+            }
+
+            string? result = answer.Threw || invoke.ReturnsVoid ? "null" : Value(invoke.ReturnType, answer.Result, $"an answer of {name}");
+            if (result is null)
+            {
+                return null;
+            }
+
+            string tuple = string.Join(',', key);
+            string what = answer.Threw ? "threw" : result;
+            if (answered.TryGetValue(tuple, out string? earlier))
+            {
+                if (!string.Equals(earlier, what, StringComparison.Ordinal))
+                {
+                    Fail($"the model's runs call {name} twice on ({tuple}) and the model answers them differently, which no function of its arguments does");
+                    return null;
+                }
+
+                continue;
+            }
+
+            answered.Add(tuple, what);
+            rows.Add(DriverHeap.Row(arguments, result, answer.Threw));
+        }
+
+        return rows;
+    }
+
+    /// <summary>Whether <paramref name="answer"/>, the trace's call <paramref name="call"/>, is the model's answer to it.</summary>
+    private static bool Answers(CallAnswer answer, IrCallRecord call) => answer.Callee == call.Callee && answer.Arguments.SequenceEqual(call.Arguments);
+
+    /// <summary>Whether a call's object result is one a driver builds: null, or an object an input holds.</summary>
+    private bool Held(IrSortValue result) => IsNull(result) || reached.ContainsKey(result);
 
     /// <summary>Each of <paramref name="given"/>'s fields at <paramref name="element"/>, written; null when a value cannot be built.</summary>
     private List<string>? Written(List<(IFieldSymbol Field, IrMapValue Map)> given, IrSortValue element, string name)
