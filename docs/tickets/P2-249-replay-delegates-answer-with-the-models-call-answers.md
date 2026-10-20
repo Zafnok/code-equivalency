@@ -57,3 +57,36 @@ heap writes of a delegate call.
 ## Notes
 - Filed 2026-10-19 by P2-245, whose size guard forbids the `Equiv.Verify.*` change this needs (ADR 0062 decision 3 as
   accepted).
+- Decision: the decoder takes a call as a delegate input's when its identity's member is `::Invoke(` and its first
+  argument is an element the inputs hold (directly, or in an input map). Alternative: a delegate flag on `IrCall`, set
+  by the lowering. Rule: 2 (the IR has no such flag, and adding one touches every layer for a fact the identity
+  already carries; a non-delegate method named `Invoke` is recorded and never read, since a replay reads the table only
+  for a delegate it builds).
+- Decision: the answers ride on `Counterexample.Answers` (Core `CallAnswer`), an `init` property outside the record's
+  equality, so the counterexample's equality, `CounterexampleText` and every fingerprint are unchanged. Rule: criterion 1.
+- Deviation: "the model's default for a tuple the table does not hold" is the return type's default (`null` for a void
+  delegate). The model's function also takes the call's position and the heap (ADR 0018), so its `else` is not a
+  function of the arguments and Z3 may give it as a term over them; no run of the model makes such a tuple, so any
+  answer is the model's, as ADR 0062 decision 3 already says of a delegate the runs never call.
+- Decision: one argument tuple the model answers two ways (two positions, or the two sides) is `not-constructible`
+  ("the model's runs call f twice on (...) and the model answers them differently, which no function of its arguments
+  does"). Alternative: answer in call order, a stateful delegate. Rule: the ticket's Design (a lookup of the call's
+  arguments) and ADR 0019 (one table on both sides).
+- Decision: a delegate a run of the model hands to another call (any trace event that carries it and is not one of its
+  recorded `Invoke` calls) is `not-constructible` with its own reason ("the model's runs hand f to <callee>, which may
+  call it in ways the model does not give"), where P2-245 said "the model's runs call f". Rule: soundness first (that
+  callee's calls of it are not the model's).
+- Decision: an object result is built when the model makes it null or it is an object an input holds (built or
+  referred to as replay builds that input); any other object result is "the model's answer is an object". A key
+  argument that is an object compares by reference to the object the case built. Rule: criterion 2 (an object result
+  is left only where no driver builds it).
+- Decision: the fixed exception is `System.Exception`, the type the lowering gives an open call's throw
+  (`IrLowerer.ThrowIf(..., known: false)`), so a `catch` of a narrower type does not take it. Rule: 1 (mirror the
+  lowering).
+- Decision: a table delegate's `replayInputs` is `delegate`: the table's objects are built in a frame of their own, so
+  an object it holds is reported by the input that holds it. Rule: criterion 2 ("`replayInputs` says `delegate`").
+- Decision: criterion 3 has no pair to rerun. P2-245's runs count no replay under "the model's runs call ...", and no
+  SARIF of the 2026-10-19 runs on those checkouts holds the phrase (`docs/runs/2026-10-20-delegate-answers.md`), so a
+  rerun would show nothing this ticket changes. Rule: the criterion's own scope.
+- Note: the in-process `DriverTableTests` load the generated driver into a collectible `AssemblyLoadContext` and call
+  its `Case` directly; `Main` writes the protocol to the process's standard output handle, which a test cannot capture.
