@@ -419,11 +419,21 @@ internal sealed class ModelObjects
     /// Why the model's answers to a delegate's calls are no delegate a driver builds, or null when they are: a <c>ref</c>
     /// or <c>out</c> output, a heap write, or an object result that is neither null nor an input's object (ticket P2-249).
     /// </summary>
-    private string? Unanswerable(IMethodSymbol invoke, List<CallAnswer> answers) =>
-        invoke.Parameters.Select(static p => p.RefKind).Append(invoke.RefKind).Any(static k => k != RefKind.None) ? "whose answers have a ref or out output"
-        : answers.Exists(static a => a.Writes) ? "and the model's answer writes the heap"
-        : Fallback(invoke) is null || (!invoke.ReturnsVoid && !IsScalar(invoke.ReturnType) && !answers.TrueForAll(a => a.Threw || Held((IrSortValue)a.Result!))) ? "and the model's answer is an object"
-        : null;
+    private string? Unanswerable(IMethodSymbol invoke, List<CallAnswer> answers)
+    {
+        if (invoke.Parameters.Select(static p => p.RefKind).Append(invoke.RefKind).Any(static k => k != RefKind.None))
+        {
+            return "whose answers have a ref or out output";
+        }
+
+        if (answers.Exists(static a => a.Writes))
+        {
+            return "and the model's answer writes the heap";
+        }
+
+        bool objects = !invoke.ReturnsVoid && !IsScalar(invoke.ReturnType) && !answers.TrueForAll(a => a.Threw || Held((IrSortValue)a.Result!));
+        return Fallback(invoke) is null || objects ? "and the model's answer is an object" : null;
+    }
 
     /// <summary>What a delegate answers a tuple the model's runs never call it on: its return type's default.</summary>
     private static string? Fallback(IMethodSymbol invoke) => invoke.ReturnsVoid ? "null" : Default(invoke.ReturnType);
@@ -440,30 +450,14 @@ internal sealed class ModelObjects
         List<string> rows = [];
         foreach (CallAnswer answer in answers)
         {
-            List<string> arguments = [];
-            List<string> key = [];
-            foreach ((IParameterSymbol parameter, IrValue argument) in invoke.Parameters.Zip(answer.Arguments.Skip(1)))
-            {
-                if (Value(parameter.Type, argument, $"an argument of {name}") is not { } wire)
-                {
-                    return null;
-                }
-
-                arguments.Add(wire);
-                key.Add(argument is IrSortValue element && built.ContainsKey(Find(element)) ? $"#{Find(element)}" : wire);
-            }
-
-            string? result = answer.Threw || invoke.ReturnsVoid ? "null" : Value(invoke.ReturnType, answer.Result, $"an answer of {name}");
-            if (result is null)
+            if (Row(invoke, answer, name) is not var (tuple, what, row))
             {
                 return null;
             }
 
-            string tuple = string.Join(',', key);
-            string what = answer.Threw ? "threw" : result;
-            if (answered.TryGetValue(tuple, out string? earlier))
+            if (!answered.TryAdd(tuple, what))
             {
-                if (!string.Equals(earlier, what, StringComparison.Ordinal))
+                if (!string.Equals(answered[tuple], what, StringComparison.Ordinal))
                 {
                     Fail($"the model's runs call {name} twice on ({tuple}) and the model answers them differently, which no function of its arguments does");
                     return null;
@@ -472,11 +466,34 @@ internal sealed class ModelObjects
                 continue;
             }
 
-            answered.Add(tuple, what);
-            rows.Add(DriverHeap.Row(arguments, result, answer.Threw));
+            rows.Add(row);
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// One answer as a table row: the argument tuple it is keyed by (an object by the instance built for it), what it
+    /// answers (its result's wire, or <c>threw</c>), and the row's wire; null, with the reason, when an argument or the
+    /// result cannot be built.
+    /// </summary>
+    private (string Tuple, string What, string Row)? Row(IMethodSymbol invoke, CallAnswer answer, string name)
+    {
+        List<string> arguments = [];
+        List<string> key = [];
+        foreach ((IParameterSymbol parameter, IrValue argument) in invoke.Parameters.Zip(answer.Arguments.Skip(1)))
+        {
+            if (Value(parameter.Type, argument, $"an argument of {name}") is not { } wire)
+            {
+                return null;
+            }
+
+            arguments.Add(wire);
+            key.Add(argument is IrSortValue element && built.ContainsKey(Find(element)) ? $"#{Find(element)}" : wire);
+        }
+
+        string? result = answer.Threw || invoke.ReturnsVoid ? "null" : Value(invoke.ReturnType, answer.Result, $"an answer of {name}");
+        return result is null ? null : (string.Join(',', key), answer.Threw ? "threw" : result, DriverHeap.Row(arguments, result, answer.Threw));
     }
 
     /// <summary>Whether <paramref name="answer"/>, the trace's call <paramref name="call"/>, is the model's answer to it.</summary>
