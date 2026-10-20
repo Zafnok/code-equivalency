@@ -47,12 +47,8 @@ internal sealed class EnumElements(Counterexample model, IReadOnlyDictionary<str
         Int128 last = signed && !flags ? mask >> 1 : mask;
         long[] fresh = [.. Ids(element.Sort).Where(id => !known.ContainsKey(id)).Append(element.Id).Distinct().Order()];
         Int128 chosen = first + Array.IndexOf(fresh, element.Id);
-        if (chosen > last)
-        {
-            return null;
-        }
-
-        return Text(signed && chosen > mask >> 1 ? chosen - mask - 1 : chosen);
+        Int128 number = signed && chosen > mask >> 1 ? chosen - mask - 1 : chosen;
+        return chosen > last ? null : Text(number);
     }
 
     /// <summary>The other side's enum of <paramref name="type"/>'s metadata name, when it has one.</summary>
