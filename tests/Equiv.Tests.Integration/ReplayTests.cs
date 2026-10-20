@@ -88,35 +88,7 @@ public sealed class ReplayTests
     [Fact]
     public void Replay_APrivateMethodOnAReceiverBuiltFromTheModel_Reproduces()
     {
-        string sample = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "private-field-receiver"));
-        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-245-{Guid.NewGuid():N}.sarif");
-        TextWriter originalOut = Console.Out;
-        TextWriter originalError = Console.Error;
-        using StringWriter output = new();
-        using StringWriter error = new();
-        Console.SetOut(output);
-        Console.SetError(error);
-        SarifLog log;
-        int exitCode;
-        try
-        {
-            exitCode = Program.Main(
-            [
-                "compare",
-                "--legacy", Path.Combine(sample, "legacy", "Equiv.Samples.PrivateFieldReceiver.Legacy.sln"),
-                "--modern", Path.Combine(sample, "modern", "Equiv.Samples.PrivateFieldReceiver.Modern.slnx"),
-                "--out", outPath,
-                "--execute",
-                "--verbosity", "quiet",
-            ]);
-            log = SarifLog.Load(outPath);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-            File.Delete(outPath);
-        }
+        (int exitCode, SarifLog log) = Execute("private-field-receiver", "PrivateFieldReceiver");
 
         Assert.Equal(ExitCodes.Divergent, exitCode);
         Result result = Assert.Single(log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ002", StringComparison.Ordinal));
@@ -125,5 +97,60 @@ public sealed class ReplayTests
         Assert.All(
             [inputs["legacy"], inputs["modern"]],
             static side => Assert.Equal(("this", "uninitialized Account.balance, Account.owner"), (Assert.Single(side)["name"], side[0]["built"])));
+    }
+
+    /// <summary>
+    /// Ticket P2-249: <c>samples/delegate-argument-answers</c>'s Divergent passes a delegate the model's runs call. The
+    /// counterexample carries the model's answer to that call, a negative unit price, and the replay builds the delegate
+    /// as that answer on .NET Framework 4.8 and on .NET 10: legacy throws, modern returns, and the Divergent reproduces,
+    /// <c>replayInputs</c> saying the delegate was built as one (ADR 0062 decision 3).
+    /// </summary>
+    [Fact]
+    public void Replay_ADelegateTheModelCalls_AnswersAsTheModelAndReproduces()
+    {
+        (int exitCode, SarifLog log) = Execute("delegate-argument-answers", "DelegateArgumentAnswers");
+
+        Assert.Equal(ExitCodes.Divergent, exitCode);
+        Result result = Assert.Single(log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ002", StringComparison.Ordinal));
+        Assert.Equal("reproduced", result.GetProperty<string>("replay"));
+        Dictionary<string, List<Dictionary<string, string>>> inputs = result.GetProperty<Dictionary<string, List<Dictionary<string, string>>>>("replayInputs");
+        Assert.All(
+            [inputs["legacy"], inputs["modern"]],
+            static side => Assert.Equal([("price", "delegate"), ("count", "value")], side.Select(static i => (i["name"], i["built"]))));
+    }
+
+    /// <summary>
+    /// <c>equiv compare --execute</c> on the sample <paramref name="sample"/>, whose solutions are named after
+    /// <paramref name="name"/>: its exit code and its SARIF.
+    /// </summary>
+    private static (int ExitCode, SarifLog Log) Execute(string sample, string name)
+    {
+        string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", sample));
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-{sample}-{Guid.NewGuid():N}.sarif");
+        TextWriter originalOut = Console.Out;
+        TextWriter originalError = Console.Error;
+        using StringWriter output = new();
+        using StringWriter error = new();
+        Console.SetOut(output);
+        Console.SetError(error);
+        try
+        {
+            int exitCode = Program.Main(
+            [
+                "compare",
+                "--legacy", Path.Combine(root, "legacy", $"Equiv.Samples.{name}.Legacy.sln"),
+                "--modern", Path.Combine(root, "modern", $"Equiv.Samples.{name}.Modern.slnx"),
+                "--out", outPath,
+                "--execute",
+                "--verbosity", "quiet",
+            ]);
+            return (exitCode, SarifLog.Load(outPath));
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+            File.Delete(outPath);
+        }
     }
 }
