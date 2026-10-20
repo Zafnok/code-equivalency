@@ -771,6 +771,54 @@ internal static class DriverSource
             {
                 return make(w.Count > 0 ? w[0] : null);
             }
+
+            private static object Table(List<object> w, Type[] p, Type r, Func<Func<object[], object>, object> make)
+            {
+                object fallback = r == typeof(void) ? null : V.Value(w[0], r);
+                List<object[]> keys = new List<object[]>();
+                List<object> results = new List<object>();
+                List<bool> threw = new List<bool>();
+                foreach (object o in (List<object>)w[1])
+                {
+                    List<object> row = (List<object>)o;
+                    List<object> xs = (List<object>)row[0];
+                    object[] key = new object[xs.Count];
+                    for (int i = 0; i < xs.Count; i++) { key[i] = V.Value(xs[i], p[i]); }
+                    keys.Add(key);
+                    threw.Add((bool)row[2]);
+                    results.Add((bool)row[2] || r == typeof(void) ? null : V.Value(row[1], r));
+                }
+
+                return make(x =>
+                {
+                    for (int k = 0; k < keys.Count; k++)
+                    {
+                        if (!Same(keys[k], x)) { continue; }
+                        if (threw[k]) { throw new Exception("the model's answer to this call is that it throws"); }
+                        return results[k];
+                    }
+
+                    return fallback;
+                });
+            }
+
+            private static bool Same(object[] a, object[] b)
+            {
+                for (int i = 0; i < a.Length; i++) { if (!Same(a[i], b[i])) { return false; } }
+                return true;
+            }
+
+            private static bool Same(object a, object b)
+            {
+                if (a == null || b == null) { return a == b; }
+                if ((a is double || a is float) && (b is double || b is float))
+                {
+                    double x = Convert.ToDouble(a, CultureInfo.InvariantCulture), y = Convert.ToDouble(b, CultureInfo.InvariantCulture);
+                    return double.IsNaN(x) ? double.IsNaN(y) : BitConverter.DoubleToInt64Bits(x) == BitConverter.DoubleToInt64Bits(y);
+                }
+
+                return a is string || a.GetType().IsValueType ? a.Equals(b) : ReferenceEquals(a, b);
+            }
         }
 
         internal static class H

@@ -189,7 +189,7 @@ public sealed class ModelDecoderTests
         Assert.Equal(Status.SATISFIABLE, solver.Check());
         ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
 
-        IrCallResult result = decoder.Oracle(ProductEncoder.Side.Old).Answer(new CallIdentity("F"), [], resultType: null, 0, [new IrHeapSlice("field.C.x", Heap)], []);
+        IrCallResult result = decoder.Oracle(ProductEncoder.Side.Old, new IrInputs([])).Answer(new CallIdentity("F"), [], resultType: null, 0, [new IrHeapSlice("field.C.x", Heap)], []);
 
         Assert.Equal([Heap], result.Heap);
     }
@@ -438,6 +438,109 @@ public sealed class ModelDecoderTests
         Assert.Equal(1, second.Id);
         Assert.Equal(2, third.Id);
     }
+
+    /// <summary>
+    /// Ticket P2-249: the counterexample carries the model's answer to each call of a delegate input's <c>Invoke</c>, its
+    /// result here, from both sides, and nothing for a call of another callee, of a static <c>Invoke</c>, or of a delegate
+    /// no input holds.
+    /// </summary>
+    [Fact]
+    public void ADelegateInputsCallsAnswerIsRecordedAndOnlyThat()
+    {
+        Divergent divergent = Assert.IsType<Divergent>(Verify(
+            """
+            proc "T::M(F,int)" (%f: sort "System.Func`2", %a: bv32) -> bv32 entry B0
+            B0:
+              %g: sort "System.Func`3" = call "T::Make()"()
+              %u: bv32 = call "System.Func`3::Invoke(int)"(%g, %a)
+              call "T::Log(F,int)"(%f, %a)
+              call "T::Invoke(int)"(%a)
+              %r: bv32 = call "System.Func`2::Invoke(int)"(%f, %a)
+              ret %r
+            """,
+            """
+            proc "T::M(F,int)" (%f: sort "System.Func`2", %a: bv32) -> bv32 entry B0
+            B0:
+              %g: sort "System.Func`3" = call "T::Make()"()
+              %u: bv32 = call "System.Func`3::Invoke(int)"(%g, %a)
+              call "T::Log(F,int)"(%f, %a)
+              call "T::Invoke(int)"(%a)
+              %r: bv32 = call "System.Func`2::Invoke(int)"(%f, %a)
+              %zero: bv32 = const bv32 0
+              ret %zero
+            """));
+        Counterexample model = divergent.Counterexample;
+        IrValue f = model.Inputs.Arguments[0];
+        IrValue a = model.Inputs.Arguments[1];
+
+        CallAnswer answer = new(new CallIdentity("System.Func`2::Invoke(int)"), [f, a], ((IrReturned)model.Old.Outcome).Value, Threw: false, Writes: false);
+        Assert.Equal([answer, answer], model.Answers);
+        Assert.NotEqual(Bv(0), answer.Result);
+    }
+
+    /// <summary>A delegate input's call the model answers by throwing is recorded as threw, from both sides.</summary>
+    [Fact]
+    public void ADelegateInputsThrowIsRecorded()
+    {
+        const string Called = """
+            %r: bv32 = call "System.Func`2::Invoke(int)"(%f, %a) threw %t: bool
+            br %t, B1, B2
+            """;
+        Divergent divergent = Assert.IsType<Divergent>(Verify(
+            $$"""
+            proc "T::M(F,int)" (%f: sort "System.Func`2", %a: bv32) -> bv32 entry B0
+            B0:
+              {{Called}}
+            B1:
+              %one: bv32 = const bv32 1
+              ret %one
+            B2:
+              %zero: bv32 = const bv32 0
+              ret %zero
+            """,
+            $$"""
+            proc "T::M(F,int)" (%f: sort "System.Func`2", %a: bv32) -> bv32 entry B0
+            B0:
+              {{Called}}
+            B1:
+              %zero: bv32 = const bv32 0
+              ret %zero
+            B2:
+              %zero2: bv32 = const bv32 0
+              ret %zero2
+            """));
+
+        Assert.Equal(2, divergent.Counterexample.Answers.Length);
+        Assert.All(divergent.Counterexample.Answers, static a => Assert.True(a.Threw));
+        Assert.All(divergent.Counterexample.Answers, static a => Assert.False(a.Writes));
+    }
+
+    /// <summary>A delegate input's call whose answer gives a heap map it reads a new version is recorded as writing.</summary>
+    [Fact]
+    public void ADelegateInputsHeapWriteIsRecorded()
+    {
+        Divergent divergent = Assert.IsType<Divergent>(Verify(
+            """
+            proc "T::M(F,C)" (%f: sort "System.Action`1", %c: sort "C", ref %field.C.x: map<sort "C", bv32>) -> bv32 entry B0
+            B0:
+              call "System.Action`1::Invoke(C)"(%f, %c) heap("field.C.x" %field.C.x -> %x1: map<sort "C", bv32>)
+              %v: bv32 = mapread %x1, %c
+              ret %v outs(%field.C.x = %x1)
+            """,
+            """
+            proc "T::M(F,C)" (%f: sort "System.Action`1", %c: sort "C", ref %field.C.x: map<sort "C", bv32>) -> bv32 entry B0
+            B0:
+              call "System.Action`1::Invoke(C)"(%f, %c) heap("field.C.x" %field.C.x -> %x1: map<sort "C", bv32>)
+              %v: bv32 = mapread %field.C.x, %c
+              ret %v outs(%field.C.x = %x1)
+            """));
+
+        Assert.Equal(2, divergent.Counterexample.Answers.Length);
+        Assert.All(divergent.Counterexample.Answers, static a => Assert.True(a.Writes));
+        Assert.All(divergent.Counterexample.Answers, static a => Assert.Null(a.Result));
+    }
+
+    private static Verdict Verify(string old, string @new) => new Z3Backend().Verify(IrText.Parse(old), IrText.Parse(@new), new VerificationOptions(3, 10_000, []));
 
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);
 

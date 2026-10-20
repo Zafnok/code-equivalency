@@ -32,6 +32,9 @@ internal sealed class ModelDecoder
     /// <summary>The identity prefix of a shared opaque fragment's call (ADR 0024), an abstraction the replay taints.</summary>
     public const string OpaquePrefix = "opaque:";
 
+    /// <summary>What a delegate's <c>Invoke</c> call identity holds: its member, as <c>T::Invoke(...)</c> (ticket P2-249).</summary>
+    private const string DelegateInvoke = "::Invoke(";
+
     private readonly Context context;
     private readonly SolverModel model;
     private readonly ProductEncoding encoding;
@@ -100,11 +103,11 @@ internal sealed class ModelDecoder
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        ModelOracle oldOracle = decoder.Oracle(Side.Old);
-        ModelOracle newOracle = decoder.Oracle(Side.New);
+        ModelOracle oldOracle = decoder.Oracle(Side.Old, inputs);
+        ModelOracle newOracle = decoder.Oracle(Side.New, inputs);
         IrRun oldRun = Interpret(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, Budget(old));
         IrRun newRun = Interpret(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, Budget(@new));
-        return (new Counterexample(inputs, oldRun, newRun), oldOracle, newOracle);
+        return (Answered(new Counterexample(inputs, oldRun, newRun), oldOracle, newOracle), oldOracle, newOracle);
     }
 
     /// <summary>Whether <paramref name="callee"/> is a shared fragment's call, an abstraction the replay taints on either side.</summary>
@@ -121,13 +124,19 @@ internal sealed class ModelDecoder
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        ModelOracle oldOracle = decoder.Oracle(Side.Old);
-        ModelOracle newOracle = decoder.Oracle(Side.New);
+        ModelOracle oldOracle = decoder.Oracle(Side.Old, inputs);
+        ModelOracle newOracle = decoder.Oracle(Side.New, inputs);
         IrRun oldRun = Interpret(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget);
         IrRun newRun = Interpret(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
-        return complete && Diverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
+        return complete && Diverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls)
+            ? Answered(new Counterexample(inputs, oldRun, newRun), oldOracle, newOracle)
+            : null;
     }
+
+    /// <summary><paramref name="counterexample"/> with the answers both oracles gave a delegate input's calls (ticket P2-249).</summary>
+    private static Counterexample Answered(Counterexample counterexample, ModelOracle old, ModelOracle @new) =>
+        counterexample with { Answers = [.. old.Answers, .. @new.Answers] };
 
     /// <summary>
     /// A model whose replay agrees on every compared observable is an encoder bug: fail loudly, never report it as
@@ -228,7 +237,8 @@ internal sealed class ModelDecoder
         _ => encoding.Sorts.Literal(value),
     };
 
-    public ModelOracle Oracle(Side side) => new(this, side);
+    /// <summary>The oracle of <paramref name="side"/>, whose runs start from <paramref name="inputs"/>.</summary>
+    public ModelOracle Oracle(Side side, IrInputs inputs) => new(this, side, inputs);
 
     /// <summary>
     /// Replays <paramref name="procedure"/> with <paramref name="oracle"/> answering its calls and pure functions, with taint
@@ -390,7 +400,8 @@ internal sealed class ModelDecoder
     /// the call pairs, else <see cref="Threaded"/>'s version, which starts at the shared input and takes each call's new
     /// version, as the encoder threads it. A closed callee (ADR 0041) is given no heap and changes none. A map the call pairs that the encoding's heap does not range over (a replay of
     /// the original procedures from a fragment's model) is left as it is. A pure function is answered from its result and
-    /// flag functions applied to the arguments (ticket M4-002).
+    /// flag functions applied to the arguments (ticket M4-002). Each answer to a delegate input's call is kept as a
+    /// <see cref="CallAnswer"/> (<see cref="Answers"/>; ticket P2-249).
     /// </summary>
     internal sealed class ModelOracle : ICallOracle, IPureOracle
     {
@@ -399,13 +410,23 @@ internal sealed class ModelDecoder
         private readonly IrValue[] threaded;
         private readonly List<ImmutableArray<IrHeapSlice>> reads = [];
         private readonly List<RuntimeChangedAnswer> runtimeChanged = [];
+        private readonly HashSet<IrSortValue> held;
+        private readonly List<CallAnswer> answers = [];
 
-        public ModelOracle(ModelDecoder decoder, Side side)
+        public ModelOracle(ModelDecoder decoder, Side side, IrInputs inputs)
         {
             this.decoder = decoder;
             this.side = side;
             threaded = [.. Heap.Select(m => decoder.Decode(decoder.model.Eval(decoder.encoding.Inputs.First(i => Is(m, i.Shared.Var)).Term, completion: true), m.Type))];
+            held = [.. inputs.Arguments.SelectMany(Elements)];
         }
+
+        /// <summary>
+        /// The answers this oracle gave the calls of a delegate input, in call order: each call of a delegate's
+        /// <c>Invoke</c> whose receiver, its first argument, is an element the inputs hold (ADR 0062 decision 3; ticket
+        /// P2-249). The IR marks no call as a delegate's, so the callee's member name says it.
+        /// </summary>
+        public IReadOnlyList<CallAnswer> Answers => answers;
 
         /// <summary>The version of each heap map threaded through this side's calls so far.</summary>
         public IReadOnlyDictionary<HeapMap, IrValue> Threaded => Heap.Zip(threaded).ToDictionary(static e => e.First, static e => e.Second);
@@ -461,6 +482,11 @@ internal sealed class ModelDecoder
             }
 
             reads.Add([.. read.Select((v, i) => new IrHeapSlice(Heap[i].Name, v))]);
+            if (callee.Value.Contains(DelegateInvoke, StringComparison.Ordinal) && arguments is [IrSortValue receiver, ..] && held.Contains(receiver))
+            {
+                answers.Add(new CallAnswer(callee, arguments, value, threw, Writes: read.Where((v, i) => v != threaded[i]).Any()));
+            }
+
             IrCallResult result = new(value, threw)
             {
                 RefOuts = [.. refOuts.Select((type, i) => decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.RefOutFunction(side, callee, types, i, type), applied), completion: true), type))],
@@ -486,6 +512,14 @@ internal sealed class ModelDecoder
                 ? completed
                 : completed with { Taint = run.Taint with { Trace = [.. Enumerable.Range(0, run.Trace.Length)] } };
         }
+
+        /// <summary>Every element <paramref name="value"/> holds: itself, or a map's keys, values and default, recursively.</summary>
+        private static IEnumerable<IrSortValue> Elements(IrValue value) => value switch
+        {
+            IrSortValue element => [element],
+            IrMapValue map => map.Entries.SelectMany(static e => new[] { e.Key, e.Value }).Append(map.Default).SelectMany(Elements),
+            _ => [],
+        };
 
         private static bool Is(HeapMap map, IrVar var) => string.Equals(map.Name, var.Name, StringComparison.Ordinal) && map.Type == var.Type;
 

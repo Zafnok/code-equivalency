@@ -1258,7 +1258,12 @@ elements; a solution struct is built like an object but by value, any other stru
 framework or third-party object only by its public parameterless constructor, and only when the model
 gives it no field; a `CancellationToken` is cancelled exactly when a run of the model ends in
 `OperationCanceledException`; and a delegate, where neither run of the model calls through it, throws
-if called. The receiver is `new T()` when on both sides the model gives its object no field, names no
+if called, and where a run does, answers from the model's table (P2-249): the decoder records, from the model it
+already holds, its answer to each call of a delegate input's `Invoke` (`Counterexample.Answers`, outside the
+counterexample's equality, text and fingerprint), and the delegate answers a call whose arguments equal a recorded
+tuple's (bits for a `float` or `double`, the same object for a reference) with that result, or throws
+`System.Exception`, the type the lowering gives an open call's throw, where the answer is `threw`, and any other
+tuple, which no run of the model makes, with its return type's default. The receiver is `new T()` when on both sides the model gives its object no field, names no
 type derived from `T`, and no other input refers to it, and `T` has a public parameterless
 constructor; otherwise both sides' receivers are created without a constructor. A static method is
 called directly, and an instance method on that receiver. Each side's project is emitted with its
@@ -1297,8 +1302,10 @@ result type no driver can name is not waited for (P2-252). Differential testing'
   exact signature`); the model makes the receiver null; an input is of a kind no driver builds (an
   abstract or interface type whose concrete type the model does not name, a framework or third-party
   type with no public parameterless constructor or with a field the model gives, a generic solution
-  type, a framework struct that is not flat, a window, a delegate a run of the model calls, a
-  delegate with a by-reference parameter, an array longer than 65,536); the model's casts make two
+  type, a framework struct that is not flat, a window, a delegate a run of the model hands to
+  another call, a delegate with a by-reference parameter, an array longer than 65,536); the model's
+  answers to a delegate's calls are no function a driver builds (a `ref` or `out` output, a heap write, an
+  object result that is neither null nor an input's object, or one argument tuple answered two ways); the model's casts make two
   references of one sort one object, a type test names a type the side does not resolve, a body's
   fresh array is an input's reference (`new.*`), or the model constrains a static field, a field the
   side does not declare, `typeof`, `caller.*` or `thrown.*` (`the model constrains ...`); a project does not emit

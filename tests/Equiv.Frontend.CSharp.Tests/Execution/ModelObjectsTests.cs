@@ -67,6 +67,11 @@ public sealed class ModelObjectsTests
                 public static int Structs(P p, ThirdParty.Flat f, ThirdParty.Nest n) => 0;
                 public static int Others(Gen<int> g, System.DateTime d) => 0;
                 public static int Delegates(System.Func<int, int> f, ByRef r) => 0;
+                public static int Calls(System.Func<int, int> f) => 0;
+                public static int Visits(System.Action<Node> a, Node n) => 0;
+                public static int Makes(System.Func<int, Node> g, Node n) => 0;
+                public static int Pairs(System.Func<int, P> p) => 0;
+                public static int Refs(ByRef r) => 0;
                 public static int Token(System.Threading.CancellationToken t) => 0;
                 public static unsafe int Pointer(int* p) => 0;
                 public static int Grid(int[,] g) => 0;
@@ -321,20 +326,90 @@ public sealed class ModelObjectsTests
             Built(Case("Structs", values)));
     }
 
-    /// <summary>A delegate the model's runs never call throws if called; one they call is not built, nor one with a by-reference parameter.</summary>
+    /// <summary>A delegate the model's runs never call throws if called; one with a by-reference parameter or a hidden type is not built.</summary>
     [Fact]
-    public void Delegates_AreBuiltOnlyWhereTheModelNeverCallsThem()
+    public void Delegates_TheModelsRunsNeverCall_Throw()
     {
         IrSortValue f = S("System.Func`2", 1);
         Dictionary<string, IrValue> values = Values(("f", f), ("r", S("N.ByRef", 2)), ("null.N.ByRef", Nulls("N.ByRef", 2)));
-        Counterexample called = new(new IrInputs([]), new IrRun(new IrThrew("A"), [], [new IrCallRecord(new CallIdentity("System.Func`2::Invoke(int)"), [S("Other", 1), f, Bv(2)])]), new IrRun(new IrThrew("B"), [], []));
 
         Assert.Equal([("[\"@c\",\"1\",0,[]]", "delegate"), ("null", "value")], Built(Case("Delegates", values)));
-        Assert.Equal("the model's runs call f, and the counterexample holds none of the model's answers to that call", Case("Delegates", values, called).Reason);
         values.Remove("null.N.ByRef");
         Assert.Equal("no N.ByRef delegate can be built for r", Case("Delegates", values).Reason);
         Assert.Equal("no N.Kinds.Hush delegate can be built for h", Case("Hidden", Values(("h", S("N.Kinds+Hush", 1)))).Reason);
     }
+
+    /// <summary>
+    /// Ticket P2-249: a delegate the model's runs call is the table of the model's answers, one row per argument tuple:
+    /// a result, or a throw; a tuple called twice with one answer is one row, and any other tuple answers the default.
+    /// </summary>
+    [Fact]
+    public void ADelegateTheModelsRunsCall_AnswersFromTheModelsTable()
+    {
+        IrSortValue f = S("System.Func`2", 1);
+        Counterexample model = Answered(Answer(f, Bv(2), Bv(5)), Answer(f, Bv(3), result: null, threw: true), Answer(f, Bv(2), Bv(5)));
+
+        Assert.Equal([("[\"@c\",\"1\",0,[0,[[[2],5,false],[[3],null,true]]]]", "delegate")], Built(Case("Calls", Values(("f", f)), model)));
+    }
+
+    /// <summary>
+    /// An object argument is keyed by the object an input holds, a void delegate's answer is its throw, and an object
+    /// result is built when it is null or an input's object.
+    /// </summary>
+    [Fact]
+    public void ADelegatesObjects_AreTheInputsObjects()
+    {
+        IrSortValue a = S("System.Action`1", 1);
+        IrSortValue g = S("System.Func`2", 1);
+        IrSortValue n = S("N.Node", 2);
+        IrSortValue none = S("N.Node", 3);
+        Dictionary<string, IrValue> nulls = Values(("g", g), ("n", n), ("null.N.Node", Nulls("N.Node", 3)));
+
+        Assert.Equal(
+            [("[\"@c\",\"1\",0,[null,[[[[\"@u\",\"2\",0,[]]],null,true],[[null],null,false]]]]", "delegate"), ("[\"@r\",\"2\"]", "uninitialized")],
+            Built(Case("Visits", Values(("a", a), ("n", n), ("null.N.Node", Nulls("N.Node", 3))), Answered(Answer(a, n, result: null, threw: true), Answer(a, n, result: null, threw: true), Answer(a, none, result: null)))));
+        Assert.Equal(
+            [("[\"@c\",\"1\",0,[null,[[[4],null,false],[[5],[\"@u\",\"2\",0,[]],false],[[6],null,true]]]]", "delegate"), ("[\"@r\",\"2\"]", "uninitialized")],
+            Built(Case("Makes", nulls, Answered(Answer(g, Bv(4), none), Answer(g, Bv(5), n), Answer(g, Bv(6), result: null, threw: true)))));
+    }
+
+    /// <summary>Each answer no driver builds, and a tuple the model answers two ways, leaves the delegate not constructible, saying why.</summary>
+    [Fact]
+    public void ADelegatesAnswersNoDriverBuilds_AreNotConstructible()
+    {
+        IrSortValue f = S("System.Func`2", 1);
+        IrSortValue a = S("System.Action`1", 1);
+        IrSortValue r = S("N.ByRef", 1);
+        IrSortValue h = S("N.Kinds+Hush", 1);
+        CallAnswer five = Answer(f, Bv(2), Bv(5));
+        Counterexample handed = Answered(five) with { New = new IrRun(new IrThrew("B"), [], [new IrCallRecord(new CallIdentity("Other::G(F)"), [f])]) };
+        const string Twice = "the model's runs call f twice on (2) and the model answers them differently, which no function of its arguments does";
+
+        Assert.Equal("the model's runs hand f to Other::G(F), which may call it in ways the model does not give", Case("Calls", Values(("f", f)), handed).Reason);
+        Assert.Equal(Twice, Case("Calls", Values(("f", f)), Answered(five, Answer(f, Bv(2), Bv(6)))).Reason);
+        Assert.Equal(Twice, Case("Calls", Values(("f", f)), Answered(five, Answer(f, Bv(2), result: null, threw: true))).Reason);
+        Assert.Equal("the model's runs call f, and the model's answer writes the heap, which no driver builds", Case("Calls", Values(("f", f)), Answered(five with { Writes = true })).Reason);
+        Assert.Equal("no int argument can be built for an answer of f from the model", Case("Calls", Values(("f", f)), Answered(Answer(f, Bv(2), S("Other", 1)))).Reason);
+        Assert.Equal("the model's runs call r, whose answers have a ref or out output, which no driver builds", Case("Refs", Values(("r", r)), Answered(Answer(r, Bv(2), Bv(5)))).Reason);
+        Assert.Equal("the model's runs call p, and the model's answer is an object, which no driver builds", Case("Pairs", Values(("p", f)), Answered(Answer(f, Bv(2), result: null, threw: true))).Reason);
+        Assert.Equal("the model's runs call g, and the model's answer is an object, which no driver builds", Case("Makes", Values(("g", f), ("n", S("N.Node", 2))), Answered(Answer(f, Bv(2), S("N.Node", 7)))).Reason);
+        Assert.Equal("the model names no type an argument of a can be built as", Case("Visits", Values(("a", a), ("n", S("N.Node", 2))), Answered(Answer(a, S("N.Node", 7), result: null))).Reason);
+        Assert.Equal("no N.Kinds.Hush delegate can be built for h", Case("Hidden", Values(("h", h)), Answered(Answer(h, Bv(2), Bv(5)))).Reason);
+    }
+
+    /// <summary>The model's answer to a call of <paramref name="receiver"/> on <paramref name="argument"/>.</summary>
+    private static CallAnswer Answer(IrSortValue receiver, IrValue argument, IrValue? result, bool threw = false) =>
+        new(new CallIdentity("D::Invoke"), [receiver, argument], result, threw, Writes: false);
+
+    /// <summary>A model whose legacy run makes exactly the calls <paramref name="answers"/> answer, and whose modern run calls no delegate.</summary>
+    private static Counterexample Answered(params CallAnswer[] answers) =>
+        new(
+            new IrInputs([]),
+            new IrRun(new IrThrew("A"), [], [.. answers.Select(static a => new IrCallRecord(a.Callee, a.Arguments))]),
+            new IrRun(new IrThrew("B"), [], [new IrCallRecord(new CallIdentity("Other::Log(int)"), [Bv(1)])]))
+        {
+            Answers = [.. answers],
+        };
 
     /// <summary>A receiver the model leaves free, of a type with no public parameterless constructor, is created without one.</summary>
     [Fact]
