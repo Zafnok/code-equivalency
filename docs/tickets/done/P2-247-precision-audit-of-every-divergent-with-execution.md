@@ -1,5 +1,5 @@
 # P2-247 Precision audit with execution: every Divergent of the five large pairs, P2-237's 71 undetermined and a fresh sample of runtime exposures
-Status: todo
+Status: done (PR #558)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-240, P2-241, P2-242, P2-245, P2-246
@@ -110,3 +110,36 @@ here moves a criterion. The opaque and solver-budget counts (P2-248). A README e
 - Decision: exposure sample split 15 witnessed and 15 unwitnessed per migration -> the 30 adjudicated so far are all
   witnessed, so an even split measures the 596 unwitnessed ones without losing a comparison with the 15 of 30.
 - .NET 5.0.17 is installed on this machine on 2026-10-18 (`dotnet --list-runtimes`).
+- 2026-10-20, done at equiv `4b2e0df6` (`docs/runs/2026-10-20-precision-execute-verdict-2.md`): migration Divergent
+  precision 52.2% (24 of 46) over every EQ002 and EQ006, upgrades 100% (6 of 6); P2-237's 71: 40 confirmed, 4 false
+  positives, 27 undetermined; exposures witnessed 70.8% (17 of 24), unwitnessed 21.4% (6 of 28).
+- Runtimes: the machine lacked `Microsoft.NETCore.App` 8.0 and 9.0 and `Microsoft.WindowsDesktop.App` 5.0 and 6.0. Asked,
+  the user chose a private `dotnet` root in the session scratch folder over a machine-wide install (P2-253's method):
+  Microsoft's runtime zips 8.0.32, 9.0.21 and Windows Desktop 6.0.36 (SHA512 equal to the release metadata's) and
+  Windows Desktop 5.0.17 (no published hash; all 280 binaries Authenticode-signed by Microsoft). The machine install is
+  unchanged.
+- Decision: `gitextensions-8522`'s first run crashed (exit 5, no SARIF, P2-258), so it was rerun right after the other
+  four from the same build without `Microsoft.WindowsDesktop.App` 5.0 (criterion 1's "execution unavailable"), and the
+  verdict rests on the rerun. Alternative: write the verdict from four pairs. Rule: 2 (criterion 1 allows a side without
+  a runtime; the audit loses 3 replays instead of a pair).
+- Decision: an exposure is one result whatever its rule id (EQ006 in P2-212's sample, EQ007 or observed EQ006 now), as
+  P2-245 matched them. Rule: 1 (criterion 4 matches by procedure identity and rule; ADR 0060 renamed the rule).
+- Decision: a witnessed exposure is confirmed by the model's input where one can be built, else by the runtime row's own
+  witness (no model input of the 35 could be built), and the appendix says which. Alternative: leave them undetermined.
+  Rule: 1 (P2-237's 15 confirmed exposures, the comparison criterion 7 asks for, were confirmed the same way).
+- Decision: a contradiction (criterion 4) includes an execution outside equiv that removes a kept confirmation's basis:
+  P2-237's `SystemIOWindows::GetFileAttributes(string)` is a false positive now (P2-259, P2-260). Rule: 1.
+- Decision: the scoreboard counts an observed EQ006 where a default run counts it, as a witnessed exposure. Rule: 1
+  (`equiv-scoreboard`: a row rests on what the default mode reports; P2-238 did the same).
+- Decision: Duplicati `SystemIOWindows::PathGetFileName(string)` is undetermined, not its sub-agent's false positive (a
+  second runtime difference was seen under the harness and not checked). Rule: 1 (a false positive needs the claimed
+  difference shown impossible, and the result's own difference is not shown absent).
+- The sub-agents' brief: `brief.md` in the session scratch folder
+  (`C:\Users\Zafno\AppData\Local\Temp\claude\D--code-equivalency--claude-worktrees-precision-audit-divergent-execution-fb5955\863d2093-4e51-42fc-98c0-450be77a8dc8\scratchpad\brief.md`),
+  six sub-agents (one per migration for the Divergent and P2-237 rows, one per migration for the exposures), 174 `probe`
+  calls.
+- Surprises: the legacy replay driver runs .NET Framework's legacy path handling, so every `\\?\` path fails on its side
+  (P2-259), which made 9 replays `reproduced` and 2 of P2-237's confirmations false; `probe`'s constructor key is the
+  parameter types only (the brief had it wrong at first); OpenRA has only 5 witnessed exposures outside P2-212's sample;
+  ICU ignores every C0 control but tab, line feed, vertical tab, form feed and carriage return.
+- Filed P2-258 to P2-273 (the verdict's findings table).

@@ -101,10 +101,10 @@ Every number is measured on public code, and every row says when. The runs are i
 | Proved Equivalent | 97.3% (56,920 of 58,477) | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
 | Equivalent by congruence (no solver) | 96.0% (56,120 of 58,477) | [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md) |
 | Changed pairs the solver proves | 33.9% (800 of 2,357) | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
-| Unknown | 1.1% of pairs (658), 27.9% of changed pairs. Opaque construct 416, abstraction 91, solver budget 129, unaligned loop 18, recursion 4 | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
-| Divergent | 0.1% of pairs (68), 2.9% of changed pairs | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
-| Runtime exposure (an unedited body a runtime change reaches) | 1.4% of pairs (831), 35.3% of changed pairs. 235 with a witness input, 596 without. Of the sampled migration exposures, 15 confirmed and 15 false positive | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
-| Divergent precision (a Divergent is a real behaviour change) | Migrations 11.1% (2 of 18). Upgrades 85.7% (6 of 7). Cleanups: none left to decide (2 Divergent, both one build-generated commit constant that differs between any two commits) | [2026-10-13](docs/runs/2026-10-13-cleanup-verdict.md), [2026-10-15](docs/runs/2026-10-15-precision-verdict.md), [2026-10-17](docs/runs/2026-10-17-precision-execute-verdict.md), [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
+| Unknown | 1.1% of pairs (655), 27.8% of changed pairs. Opaque construct 417, abstraction 90, solver budget 126, unaligned loop 18, recursion 4 | [2026-10-20](docs/runs/2026-10-20-precision-execute-verdict-2.md) |
+| Divergent | 0.1% of pairs (71), 3.0% of changed pairs | [2026-10-20](docs/runs/2026-10-20-precision-execute-verdict-2.md) |
+| Runtime exposure (an unedited body a runtime change reaches) | 1.4% of pairs (831), 35.3% of changed pairs. 237 with a witness input, 594 without. Of 80 migration exposures drawn at random, 23 confirmed and 29 false positive: with a witness input 17 and 7, without 6 and 22 | [2026-10-20](docs/runs/2026-10-20-precision-execute-verdict-2.md) |
+| Divergent precision (a Divergent is a real behaviour change) | Migrations 52.2% (24 of 46), every Divergent counted. Upgrades 100% (6 of 6). Cleanups: none left to decide (2 Divergent, both one build-generated commit constant that differs between any two commits) | [2026-10-13](docs/runs/2026-10-13-cleanup-verdict.md), [2026-10-20](docs/runs/2026-10-20-precision-execute-verdict-2.md) |
 | Left for a reviewer (Unknown, Divergent and runtime exposure) | 2.7% of pairs (1,557) | [2026-10-17](docs/runs/2026-10-17-runtime-exposure-verdict.md) |
 | Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. No open soundness ticket | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
 | Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
@@ -120,21 +120,21 @@ Every number is measured on public code, and every row says when. The runs are i
 | Matched procedure pairs | 13,592 | 14,073 | 14,398 | 6,294 | 10,120 | 58,477 |
 | Equivalent by congruence (both bodies lower to the same IR and no runtime change applies; no solver) | 93.8% | 96.2% | 99.2% | 89.8% | 97.8% | **96.0%** |
 | Equivalent by the solver | 1.1% (155) | 2.3% (324) | 0.4% (63) | 3.6% (224) | 0.3% (34) | **1.4%** |
-| Divergent | 0.3% (34) | under 0.1% (5) | under 0.1% (1) | 0.4% (27) | under 0.1% (1) | **0.1%** |
+| Divergent | 0.3% (36) | under 0.1% (5) | under 0.1% (1) | 0.4% (28) | under 0.1% (1) | **0.1%** |
 | Runtime exposure (unedited body; EQ007) | 3.3% (442) | under 0.1% (6) | under 0.1% (10) | 3.5% (221) | 1.5% (152) | **1.4%** |
-| Unknown | 1.5% (206) | 1.4% (198) | 0.3% (48) | 2.7% (168) | 0.4% (38) | **1.1%** |
+| Unknown | 1.5% (204) | 1.4% (198) | 0.3% (48) | 2.7% (167) | 0.4% (38) | **1.1%** |
 | Wall-clock | 6 min | 5 min | 3 min | 10 min | 4 min | **mean 6 min** |
 
 So a reviewer is spared about 97% of the procedures and is handed the rest, grouped by cause.
 
 **The changed pairs are where the work is left.** Of the 2,357 pairs that are not congruent, the
-solver proves 800 (33.9%) Equivalent: 18.5%, 60.8%, 51.6%, 35.0% and 15.1% on the five runs. 27.9% are
-Unknown, 2.9% are Divergent, and 35.3% are runtime exposures: a body nobody edited that a documented runtime change
-reaches, 235 of them with an input on which it decides the outcome. Most changed pairs on the two upgrades are in files the pull request did not
+solver proves 800 (33.9%) Equivalent: 18.5%, 60.8%, 51.6%, 35.0% and 15.1% on the five runs. 27.8% are
+Unknown, 3.0% are Divergent, and 35.3% are runtime exposures: a body nobody edited that a documented runtime change
+reaches, 237 of them with an input on which it decides the outcome. Most changed pairs on the two upgrades are in files the pull request did not
 touch: a runtime rule or a rebound call took them out of congruence.
 
-The Unknowns of the five runs by reason: opaque construct 416, abstraction 91, solver budget
-129, unaligned loop 18, recursion 4.
+The Unknowns of the five runs by reason: opaque construct 417, abstraction 90, solver budget
+126, unaligned loop 18, recursion 4.
 
 Other pairs, for range:
 
@@ -172,7 +172,7 @@ The rest cannot yet:
 
 | What is needed | Today |
 |---|---|
-| A Divergent is usually a real behaviour change | Of those audited and decided: 6 of 7 on the upgrades (85.7%), where the fixes for both causes of the last audit removed 8 of its 9 false positives; 2 of 18 on the three migrations (11.1%), counting EQ002 and EQ006 only, whose 16 false ones each have a ticket. Running the sampled results on both real runtimes confirmed 16 that a hand trace could not decide, and 15 of them are runtime exposures, bodies nobody edited that a runtime change reaches, which are now reported apart (15 confirmed, 15 false); and none left to decide on cleanups, where the three pull requests now report 2 Divergent, from 52, both one build-generated commit constant. On the migrations, 71 of the 119 sampled that are still flagged are undetermined, most because no test driver can call them yet. |
+| A Divergent is usually a real behaviour change | Of those audited and decided: every one on the upgrades (6 of 6); 24 of 46 on the three migrations (52.2%), counting every EQ002 and EQ006 the runs report rather than a sample, and each of the 22 false ones has a ticket. Of 80 runtime exposures drawn at random, bodies nobody edited that a runtime change reaches, those with a witness input are usually real (17 of 24) and those without usually not (6 of 28); and none left to decide on cleanups, where the three pull requests now report 2 Divergent, from 52, both one build-generated commit constant. On the migrations, 19 of the 65 Divergent are undetermined, most because no test driver can safely run them (a window, a process or the network) or compare what they return. |
 | The solver decides most changed pairs | 33.9% proved on the five large runs, 58.3% on cleanups |
 | Every large pair completes | Five of five. The five runs in the table above have no crashed pair |
 | The same run gives the same results | 13,734 of 13,742 results agree between two runs |

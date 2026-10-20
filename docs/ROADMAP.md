@@ -1459,6 +1459,7 @@ P2-247 (L, filed 2026-10-18) is the second execution re-adjudication, after P2-2
 P2-246: the five large pairs in `full --execute` at one commit, every EQ002 and EQ006 adjudicated (68 at `b0f56ff8`, no
 sample), P2-237's 71 undetermined re-adjudicated, and 15 witnessed and 15 unwitnessed exposures per migration (none of
 the 596 unwitnessed ones has been adjudicated). It refreshes the scoreboard and names "Scoreboard milestone 4".
+  Done 2026-10-20 by P2-247: see "Scoreboard milestone 4".
 P2-248 (M, filed 2026-10-18, no dependency) counts the opaque reasons behind the 416 opaque Unknowns after ADR 0060,
 alone, in combination and by marginal unlock with the open owners (P2-214, P2-215, P2-183), files a ticket for each
 reason at 5%, and splits the 129 `timeout` and 91 `abstraction` Unknowns by edited and unedited body; it may run while
@@ -1468,6 +1469,51 @@ Not on it: P2-191's one false positive is congruent since P2-197's config, so it
 the 1,298 Unknowns are unedited bodies a runtime rule keeps out of congruence (`runtime-rule`), mostly path and culture
 rows (`Path.Combine` 79, `String.StartsWith` 68, `File.Delete` 26); the valid-path tickets take some, and what is left
 of them is the next measurement (P2-248's section 6). `timeout` (326) is the solver budget.
+
+### Scoreboard milestone 4 (2026-10-20)
+
+From P2-247, at equiv `4b2e0df6`, verdict `docs/runs/2026-10-20-precision-execute-verdict-2.md`: the five large pairs in
+`full --execute` at one commit, every EQ002 and EQ006 adjudicated with execution (no sample), P2-237's 71 re-adjudicated
+and 80 fresh exposures drawn at random. Migration Divergent precision is 52.2% (24 of 46), from 11.1% (2 of 18) over
+P2-212's sample, and the upgrades' 100% (6 of 6); of P2-237's 71, 40 are confirmed, 4 false and 27 undetermined; witnessed
+exposures are 70.8% precise (17 of 24) and unwitnessed ones 21.4% (6 of 28). Execution found its own three faults: a
+driver that dies on an assertion ends a run (exit 5 on `gitextensions-8522`), a .NET Framework driver runs with the
+quirks of no target framework (9 `reproduced` replays and 2 of P2-237's confirmations were the harness), and the
+trigonometric row may be too narrow. Ranked by the false positives (Divergent and sampled exposures), undetermined
+results and Unknowns that verdict counts against each (Unknowns: the changed pairs carrying the owner's opaque reason in
+these runs' `changedReasonSets`, P2-248 not being done), the open tickets come in this order:
+
+1. P2-272 (S), ahead of the list as a soundness check: `Math.Sin`/`Math.Cos` differ in the low bits between .NET
+   Framework 4.8 and .NET 10 on ordinary angles (measured outside equiv), which the runtime table does not cover; if .NET
+   5 to 9 differ too, an unedited body that computes with them is a false Equivalent. Nothing counted yet.
+2. P2-259 (S) then P2-260 (M), the extended path: 10 false positives (4 EQ002, 6 exposures a replay reproduced) and 1
+   undetermined, all Duplicati's `SystemIOWindows`, whose `\\?\` paths neither runtime checks; P2-259 makes the legacy
+   driver run as the solution's host does, so no replay reproduces on the harness again.
+3. P2-261 (M): 8 false positives (2 EQ006, 6 exposures), a path the runtime, a special or temp folder, or the solution
+   itself made.
+4. P2-262 (M): 5 false exposures, the `Math.Min`/`Max`/`Ceiling` signed-zero rows where no operand can be `-0` or NaN.
+5. P2-214 (M): 2 false exposures (an `extern` marshalled alike), and 78 changed pairs carry `no-body`.
+6. P2-229 (M): 3 false positives (1 EQ006, 2 exposures), a path from a directory listing.
+7. P2-223: 3 false exposures (one of P2-237's 71), a path row whose throw a catch-all swallows.
+8. P2-269 (M): 3 false EQ002, a framework fact the side's runtime fixes left free (P2-245's three refuted rows).
+9. P2-273 (S): 3 undetermined, a generic collection argument no driver builds. P2-258 (S): the crash, and 2 undetermined
+   whose driver fails an assertion.
+10. Two each: P2-185 and P2-186 (EQ002, P2-212's causes), P2-264 (a version test both runtimes answer alike), P2-266
+    (`FieldInfo.SetValue` on a field that is not `static readonly`), P2-267 (a call only in a handler the body
+    subscribes), P2-268 (a `null`-argument row on an array literal or a boxed struct).
+11. One each: P2-097, P2-187, P2-205, P2-206, P2-243 and P2-271 (EQ002); P2-225 and P2-270 (EQ006); P2-219, P2-224,
+    P2-263 and P2-265 (exposures).
+12. Unknown, by changed pairs carrying the reason: P2-215 (`Conversion`, 109), P2-102 (`InterpolatedString`, 93), P2-178
+    (`LocalFunction`, 91), P2-183 (`ArrayElementReference`, 39); P2-248 counts them alone, in combination and by marginal
+    unlock before any of these is built.
+
+Not on it: P2-255, P2-256 and P2-257 have no undetermined result of this verdict against them (their replays are of
+results already decided or of exposures outside the sample). Of the verdict's 63 undetermined Divergent, P2-237 and
+exposure results, 6 have an owner above (P2-273 3, P2-258 2, P2-259 1). Of the other 57, 26 are so by design: a window,
+a dialog or a message loop (ADR 0035's desktop rule, 12), a member not safe to run (11), an `extern` member (3); the
+rest are a result no driver compares (8), a difference only in a field, the call trace or console output (10), the
+host's own files, settings or hardware (9), and an argument or receiver of another kind no driver builds (4:
+`XmlElement`, `ExCSS.StyleRule`, `out` parameters, a static a probe cannot set).
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
