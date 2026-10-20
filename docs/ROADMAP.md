@@ -1451,6 +1451,9 @@ path, or refuses an outcome that reads it: two `reproduced` `AppSettings` replay
 legacy driver's own folder against the `dotnet` host's.
 P2-256 (S, filed 2026-10-19 by P2-250) builds an `IntPtr` argument or field from its sort element, element 0 being
 `IntPtr.Zero`, so the two EasyHook EQ002 replays it blocks can run or say why not.
+P2-257 (S, filed 2026-10-19 by P2-251) builds a framework struct (`DateTime`, `Color`) the model leaves free, distinct
+elements as distinct values, so the two replays it blocks (Duplicati's `CreateFile`, Git Extensions' `CreateBrushForSide`)
+can run or say why not.
 
 P2-247 (L, filed 2026-10-18) is the second execution re-adjudication, after P2-240, P2-241, P2-242, P2-245 and
 P2-246: the five large pairs in `full --execute` at one commit, every EQ002 and EQ006 adjudicated (68 at `b0f56ff8`, no

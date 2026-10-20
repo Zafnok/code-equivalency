@@ -13,7 +13,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// Turns a Divergent's model into one driver case per side (ADR 0035 decision 2; ticket M4-009). The model's inputs are the
 /// product's shared inputs (ADR 0021), so they are bound back to each side's parameters by the rule
 /// <c>ProductEncoder.Pair</c> uses. A C# parameter of a type the M3-032 generators build becomes its wire value: a
-/// <c>bool</c>, an integer, a <c>char</c> or an enum from its bitvector; a <c>string</c> from its sort element, <c>null</c>
+/// <c>bool</c>, an integer, a <c>char</c> or an enum from its bitvector, an enum also from its sort element as
+/// <see cref="EnumElements"/> says (ticket P2-251); a <c>string</c> from its sort element, <c>null</c>
 /// when the model's <c>null.&lt;Sort&gt;</c> map says so and otherwise <c>"s&lt;id&gt;"</c>, so that equal elements are
 /// equal strings; a <c>float</c>, <c>double</c> or <c>decimal</c> as the number <c>id</c>. A receiver, an object, an
 /// array, a struct, a <c>CancellationToken</c> and a delegate are built from the model's heap by
@@ -118,9 +119,10 @@ internal static class ReplayArguments
     /// The case that calls <paramref name="method"/>, lowered as <paramref name="body"/>, of a project compiled as
     /// <paramref name="compilation"/>, with <paramref name="values"/>; <paramref name="heap"/> holds every synthesised input
     /// of either side but the receiver, and <paramref name="model"/> the model's runs, which say whether a delegate is
-    /// called and a token cancelled.
+    /// called and a token cancelled; <paramref name="counterpart"/> is the other side's compilation, whose enum members an
+    /// enum element is built over too.
     /// </summary>
-    public static SideCase Case(IMethodSymbol method, Compilation compilation, IrProcedure body, Dictionary<string, IrValue> values, IReadOnlyDictionary<string, IrValue> heap, Counterexample model)
+    public static SideCase Case(IMethodSymbol method, Compilation compilation, IrProcedure body, Dictionary<string, IrValue> values, IReadOnlyDictionary<string, IrValue> heap, Counterexample model, Compilation? counterpart = null)
     {
         if (CallObstacle(method, reach: true) is { } obstacle)
         {
@@ -128,7 +130,7 @@ internal static class ReplayArguments
         }
 
         DriverHeap driver = new();
-        (ModelObjects? objects, string constrained) = ModelObjects.Over(compilation, heap, model, driver);
+        (ModelObjects? objects, string constrained) = ModelObjects.Over(compilation, heap, model, driver, counterpart);
         IrSortValue self = values.GetValueOrDefault(IrParameterNames.Receiver) as IrSortValue ?? Unconstrained(method.ContainingType);
         if (objects is null || IsNull(self, heap))
         {

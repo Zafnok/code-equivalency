@@ -20,7 +20,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// and cycles are the model's. A solution type's object is created without a constructor and given every field the model
 /// gives any of its elements, a field the model does not give staying at its default, which the model allows. A framework
 /// or third-party type is built only by its public parameterless constructor, and only when the model gives it no field. A
-/// string, enum or primitive is built as replay builds it (<see cref="ReplayArguments"/>), an array from its length and
+/// string or primitive is built as replay builds it (<see cref="ReplayArguments"/>), an enum from its sort element as
+/// <see cref="EnumElements"/> says (ticket P2-251), an array from its length and
 /// elements, a solution struct like an object but by value, any other struct from its fields (<see cref="DriverStruct"/>),
 /// a <c>CancellationToken</c> as cancelled exactly when a model's run ends in <c>OperationCanceledException</c>, and a
 /// delegate only where neither run calls through it, since the counterexample carries none of the model's answers to such a
@@ -43,6 +44,8 @@ internal sealed class ModelObjects
 
     private readonly DriverHeap heap;
 
+    private readonly EnumElements enums;
+
     private readonly Dictionary<string, List<(IFieldSymbol Field, IrMapValue Map)>> fields = new(StringComparer.Ordinal);
 
     private readonly Dictionary<IrSortValue, ITypeSymbol> reached = [];
@@ -55,12 +58,13 @@ internal sealed class ModelObjects
 
     private readonly List<string> failures = [];
 
-    private ModelObjects(Compilation compilation, IReadOnlyDictionary<string, IrValue> maps, Counterexample model, DriverHeap heap)
+    private ModelObjects(Compilation compilation, IReadOnlyDictionary<string, IrValue> maps, Counterexample model, DriverHeap heap, Compilation? counterpart)
     {
         this.compilation = compilation;
         this.maps = maps;
         this.model = model;
         this.heap = heap;
+        enums = new EnumElements(model, maps, counterpart);
     }
 
     /// <summary>Why the inputs cannot be built, the first thing that failed; empty while they can.</summary>
@@ -110,12 +114,13 @@ internal sealed class ModelObjects
 
     /// <summary>
     /// The builder over <paramref name="maps"/>, every synthesised input of both sides by name, for a side that resolves
-    /// types in <paramref name="compilation"/>; null, with the reason, when the model constrains a static field, a field
-    /// this side does not declare, or an input no driver builds (<c>typeof.*</c>, <c>caller.*</c>, <c>thrown.*</c>).
+    /// types in <paramref name="compilation"/>, whose other side, when there is one, is <paramref name="counterpart"/>; null,
+    /// with the reason, when the model constrains a static field, a field this side does not declare, or an input no driver
+    /// builds (<c>typeof.*</c>, <c>caller.*</c>, <c>thrown.*</c>).
     /// </summary>
-    public static (ModelObjects? Objects, string Reason) Over(Compilation compilation, IReadOnlyDictionary<string, IrValue> maps, Counterexample model, DriverHeap heap)
+    public static (ModelObjects? Objects, string Reason) Over(Compilation compilation, IReadOnlyDictionary<string, IrValue> maps, Counterexample model, DriverHeap heap, Compilation? counterpart)
     {
-        ModelObjects objects = new(compilation, maps, model, heap);
+        ModelObjects objects = new(compilation, maps, model, heap, counterpart);
         List<string> constrained = [];
         foreach ((string name, IrValue value) in maps.OrderBy(static m => m.Key, StringComparer.Ordinal))
         {
@@ -244,6 +249,7 @@ internal sealed class ModelObjects
     private string? Value(ITypeSymbol type, IrValue? value, string name) => (value, type) switch
     {
         (null, _) when IsScalar(type) => Fail($"the model gives no value for {name}"),
+        (IrSortValue element, INamedTypeSymbol { TypeKind: TypeKind.Enum } enumType) => enums.Wire(enumType, element) ?? Fail($"no {type.ToDisplayString()} argument can be built for {name} from the model: past its members, its underlying type has no value left"),
         ({ } scalar, _) when IsScalar(type) => ReplayArguments.Wire(type, scalar, maps) ?? Fail($"no {type.ToDisplayString()} argument can be built for {name} from the model"),
         _ when string.Equals(type.ToDisplayString(), CancellationToken, StringComparison.Ordinal) => DriverHeap.Token(Cancelled()),
         _ when DriverFactory.IsWindow(type) => Fail($"{name}: {DriverFactory.NeedsWindow}"),
