@@ -1276,7 +1276,11 @@ with a trace showing some constructor and calls of the solution reach that state
 project may name a friend only by public key, so its driver is signed with a key generated for the
 run and the attribute carries that key (P2-052). A driver calls each side's method once on that side's project's detected
 runtime (`run.properties.runtimes`; ADR 0040 decision 3, P2-056), under the invariant culture, and also under `tr-TR` when either body
-calls a member of the runtime-changes table, as differential testing does (P2-038). The result carries
+calls a member of the runtime-changes table, as differential testing does (P2-038). A member that returns a `Task`,
+`Task<T>`, `ValueTask` or `ValueTask<T>` is waited for, within the per-case timeout, and its outcome is the task's: its
+result's canonical form (`null` for a task with no result), the type of the first inner exception when it faults, and
+`System.Threading.Tasks.TaskCanceledException` when it is cancelled, whichever exception cancelled it; a task whose
+result type no driver can name is not waited for (P2-252). Differential testing's drivers do the same. The result carries
 `properties.replay`:
 - `reproduced`: the two canonical outcomes (M3-032's canonical form) differ under some culture;
 - `not-reproduced`: they are equal under every culture, and `properties.replayOutcomes` gives both
