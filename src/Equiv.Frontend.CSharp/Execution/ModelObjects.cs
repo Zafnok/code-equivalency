@@ -493,7 +493,13 @@ internal sealed class ModelObjects
         }
 
         string? result = answer.Threw || invoke.ReturnsVoid ? "null" : Value(invoke.ReturnType, answer.Result, $"an answer of {name}");
-        return result is null ? null : (string.Join(',', key), answer.Threw ? "threw" : result, DriverHeap.Row(arguments, result, answer.Threw));
+        if (result is null)
+        {
+            return null;
+        }
+
+        string what = answer.Threw ? "threw" : result;
+        return (string.Join(',', key), what, DriverHeap.Row(arguments, result, answer.Threw));
     }
 
     /// <summary>Whether <paramref name="answer"/>, the trace's call <paramref name="call"/>, is the model's answer to it.</summary>
