@@ -21,7 +21,10 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// constructor's result is the new object. The expression that canonicalises the result is chosen from the member's static
 /// return type. An exception that is, or wraps, a Windows Desktop assembly that did not load (<c>L.Desktop</c>) is
 /// <c>NotConstructible</c>, never <c>Threw</c>: it says the driver's runtime lacks that assembly, not what the member does
-/// (ticket P2-253). The source is C# 7.3, the newest a .NET Framework side compiles by default, so one template serves every
+/// (ticket P2-253). A returned <c>Task</c>, <c>Task&lt;T&gt;</c>, <c>ValueTask</c> or <c>ValueTask&lt;T&gt;</c> is waited
+/// for, and the outcome is the task's: its result's canonical form (<c>null</c> for one with none), the first inner
+/// exception's type when it faults, and <c>System.Threading.Tasks.TaskCanceledException</c> when it is cancelled (ticket
+/// P2-252). The source is C# 7.3, the newest a .NET Framework side compiles by default, so one template serves every
 /// runtime (ticket P2-056).
 /// <para>
 /// A replay or <c>probe</c> driver (ADR 0062; ticket P2-245) may also reach a member its friend assembly cannot name, bound
@@ -109,14 +112,22 @@ internal static class DriverSource
             arguments.Add(writer.Declare(parameter.Type, slot++));
         }
 
-        ITypeSymbol? result = Result(method);
-        bool named = result is null || DriverHeap.Nameable(result);
+        ITypeSymbol? returned = Result(method);
+        bool named = returned is null || DriverHeap.Nameable(returned);
+        Awaited? awaited = named ? Awaiting(returned) : null;
+        ITypeSymbol? result = awaited is null ? returned : awaited.Result;
         string call = shape.Access == Access.Direct ? Call(method, receiver, arguments) : writer.Bind(method, receiver, arguments, shape.Access);
-        string invoke = (result, named, shape.Access) switch
+        string value = (returned, named, shape.Access) switch
         {
-            (null, _, _) => $"{call};",
-            (_, true, Access.Invoke) => $"r = ({result.ToDisplayString(Qualified)}){call};",
-            _ => $"r = {call};",
+            (not null, true, Access.Invoke) => $"({returned.ToDisplayString(Qualified)}){call}",
+            _ => call,
+        };
+        string invoke = (returned, awaited) switch
+        {
+            (null, _) => $"{call};",
+            (_, { Result: null }) => $"A.Wait({awaited.Task(value)});",
+            (_, not null) => $"r = A.Get({awaited.Task(value)});",
+            _ => $"r = {value};",
         };
         string declareResult = result is null ? string.Empty : $"{(named ? result.ToDisplayString(Qualified) : "object")} r;";
         string answer = (result, named) switch
@@ -130,8 +141,32 @@ internal static class DriverSource
             .Replace("/*RESULT*/", declareResult, StringComparison.Ordinal)
             .Replace("/*CALL*/", invoke, StringComparison.Ordinal)
             .Replace("/*ANSWER*/", answer, StringComparison.Ordinal)
+            .Replace("/*TASKS*/", awaited is null ? string.Empty : TaskTemplate, StringComparison.Ordinal)
             .Replace("/*HELPERS*/", writer.UsesHelpers ? Helpers(shape) : string.Empty, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A task a driver waits for (ticket P2-252): the type of its result, null for a <c>Task</c> or <c>ValueTask</c>, and
+    /// whether it is a <c>ValueTask</c>, which the driver waits for as its <c>AsTask()</c>.
+    /// </summary>
+    private sealed record Awaited(ITypeSymbol? Result, bool Value)
+    {
+        /// <summary>The <c>Task</c> that <paramref name="value"/>, an expression of the awaited type, completes with.</summary>
+        public string Task(string value) => Value ? $"({value}).AsTask()" : value;
+    }
+
+    /// <summary>
+    /// <paramref name="type"/> as a task a driver waits for, or null when it is none: <c>Task</c>, <c>Task&lt;T&gt;</c>,
+    /// <c>ValueTask</c> and <c>ValueTask&lt;T&gt;</c> of <c>System.Threading.Tasks</c>.
+    /// </summary>
+    private static Awaited? Awaiting(ITypeSymbol? type) => type?.OriginalDefinition.ToDisplayString() switch
+    {
+        "System.Threading.Tasks.Task" => new Awaited(Result: null, Value: false),
+        "System.Threading.Tasks.ValueTask" => new Awaited(Result: null, Value: true),
+        "System.Threading.Tasks.Task<TResult>" => new Awaited(((INamedTypeSymbol)type).TypeArguments[0], Value: false),
+        "System.Threading.Tasks.ValueTask<TResult>" => new Awaited(((INamedTypeSymbol)type).TypeArguments[0], Value: true),
+        _ => null,
+    };
 
     /// <summary>What a call yields: a constructor its type, a method its return type, and a <c>void</c> method nothing.</summary>
     private static ITypeSymbol? Result(IMethodSymbol method) => method switch
@@ -675,7 +710,33 @@ internal static class DriverSource
             }
         }
 
+        /*TASKS*/
         /*HELPERS*/
+        """;
+
+    /// <summary>
+    /// How a driver waits for a returned task (ticket P2-252): <c>A.Wait</c> blocks until it completes, the per-case timeout
+    /// bounding the wait from the parent, and throws what its outcome is, the first inner exception of a faulted task and a
+    /// <c>TaskCanceledException</c> for a cancelled one, whatever exception cancelled it; <c>A.Get</c> then gives the
+    /// result. A null task throws <c>NullReferenceException</c>, as <c>await</c> on it does.
+    /// </summary>
+    private const string TaskTemplate = """
+        internal static class A
+        {
+            public static void Wait(System.Threading.Tasks.Task t)
+            {
+                try { t.Wait(); }
+                catch (AggregateException) { }
+                if (t.IsCanceled) { throw new System.Threading.Tasks.TaskCanceledException(); }
+                if (t.IsFaulted) { throw t.Exception.InnerExceptions[0]; }
+            }
+
+            public static T Get<T>(System.Threading.Tasks.Task<T> t)
+            {
+                Wait(t);
+                return t.Result;
+            }
+        }
         """;
 
     /// <summary>
