@@ -1242,8 +1242,11 @@ they are.
 With `equiv compare --execute`, every Divergent is also replayed on the two real runtimes, the
 second oracle of ADR 0035 (decision 2; ticket M4-009). Its model's inputs are bound back to each
 side's parameters by the product's pairing rule (ADR 0021) and become C# arguments of the M3-032
-generator types: a `bool`, an integer, a `char` or an enum from its bitvector; a `string` from its
-sort element, `null` where the model's `null.<Sort>` map holds it and otherwise `"s<id>"`, so that
+generator types: a `bool`, an integer, a `char` or an enum from its bitvector; an enum from its sort element (P2-251),
+the member whose constant element it is (or `0`, whose element `default` is), and otherwise a value no member of
+either side has, the largest member plus one (for a `[Flags]` enum, every member's bits together plus one) and the
+model's other such elements of the sort the values after it in id order, so equal elements are equal values; a
+`string` from its sort element, `null` where the model's `null.<Sort>` map holds it and otherwise `"s<id>"`, so that
 equal elements are equal strings; a `float`, `double` or `decimal` as the number `id`; any other
 reference type as the model's object (ADR 0062; P2-245). The receiver and every other input are built
 from both sides' synthesised inputs together, so the two sides get one state: an object of a solution
