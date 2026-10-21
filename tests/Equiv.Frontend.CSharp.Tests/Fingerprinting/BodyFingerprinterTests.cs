@@ -171,6 +171,27 @@ public sealed class BodyFingerprinterTests
     }
 
     /// <summary>
+    /// Ticket P2-272: Math.Sin, Cos and Tan of an ordinary angle differ in the last bit or two between .NET Framework 4.8
+    /// and every .NET from 5 to 10, which agree with one another bit for bit, as their MathF forms do
+    /// (docs/runs/2026-10-20-trigonometry-runtimes.md). An unedited call is runtime-sensitive across the boundary only.
+    /// </summary>
+    [Theory]
+    [InlineData("double M(double a) => System.Math.Tan(a);", "net48", "net5.0", true)]
+    [InlineData("double M(double a) => System.Math.Sin(a);", "net48", "net5.0", true)]
+    [InlineData("double M(double a) => System.Math.Cos(a);", "net48", "net5.0", true)]
+    [InlineData("double M(double a) => System.Math.Tan(a);", "net5.0", "net9.0", false)]
+    [InlineData("double M(double a) => System.Math.Sin(a);", "net5.0", "net9.0", false)]
+    [InlineData("float M(float a) => System.MathF.Tan(a);", "net5.0", "net9.0", false)]
+    public void ATrigonometricCallIsRuntimeSensitiveAcrossTheFrameworkBoundaryOnly(string member, string legacy, string modern, bool sensitive)
+    {
+        Compilation compilation = Compile(member);
+
+        Assert.Equal(
+            sensitive,
+            BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, Runtimes.Between(legacy, modern))!.RuntimeSensitive);
+    }
+
+    /// <summary>
     /// Ticket P2-073: the fingerprint reads a row's precondition as the lowering does, so a body whose only table call
     /// has constants that cannot reach the row's change is not runtime-sensitive, and can be congruent across runtimes.
     /// </summary>

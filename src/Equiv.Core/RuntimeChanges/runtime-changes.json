@@ -3300,7 +3300,7 @@
       "member": "System.Math::Cos(double)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
-      "reason": "Cos of a large argument is range-reduced correctly on .NET 10 (the C runtime's IEEE-compliant implementation), where .NET Framework's x87 fcos returns the argument unchanged beyond 2^63.",
+      "reason": "Cos of an ordinary argument differs between .NET Framework's x87 code and .NET, which gives the same bits on .NET 5 to 10: in [-2pi, 2pi] about 3 in 100 results differ, by an ulp or two, or by many near a zero of the function; from about 2^19 nearly every result differs, and beyond 2^63 fcos returns the argument unchanged (P2-272).",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.cos",
       "witness": { "input": ["0x7FEFFFFFFFFFFFFF"], "culture": "invariant", "legacy": "0x7FEFFFFFFFFFFFFF", "modern": "0xBFEFFFE62ECFAB75" }
     },
@@ -3340,9 +3340,17 @@
       "member": "System.Math::Sin(double)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
-      "reason": "Sin of a large argument is range-reduced correctly on .NET 10 (the C runtime's IEEE-compliant implementation), where .NET Framework's x87 fsin returns the argument unchanged beyond 2^63.",
+      "reason": "Sin of an ordinary argument differs between .NET Framework's x87 code and .NET, which gives the same bits on .NET 5 to 10: in [-2pi, 2pi] about 3 in 100 results differ, by an ulp or two, or by many near a zero of the function; from about 2^19 nearly every result differs, and beyond 2^63 fsin returns the argument unchanged (P2-272).",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.sin",
       "witness": { "input": ["0x7FEFFFFFFFFFFFFF"], "culture": "invariant", "legacy": "0x7FEFFFFFFFFFFFFF", "modern": "0x3F7452FC98B34E97" }
+    },
+    {
+      "member": "System.Math::Tan(double)",
+      "source": "measured",
+      "changedIn": "netcoreapp1.0",
+      "reason": "Tan of an ordinary argument differs between .NET Framework's x87 code and .NET, which gives the same bits on .NET 5 to 10: in [-2pi, 2pi] about 4 in 100 results differ, by an ulp or two, or by many near a zero of the function; from about 2^19 nearly every result differs (P2-272).",
+      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.tan",
+      "witness": { "input": ["0xBFE66E8086EE4788"], "culture": "invariant", "legacy": "0xBFEB01E355B9AB1B", "modern": "0xBFEB01E355B9AB1C" }
     },
     {
       "member": "System.Net.Http.Headers.AuthenticationHeaderValue::.ctor(string,string)",
