@@ -1,5 +1,5 @@
 # P2-254 Execution bug: the two drivers of a replay or `probe` start in different working directories, so an outcome that holds the working directory is `reproduced` on any runtime pair
-Status: in-progress
+Status: done (PR #553)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
