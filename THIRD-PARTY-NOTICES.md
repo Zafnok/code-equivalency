@@ -102,7 +102,7 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | DiffEngine | 20.8.2 | MIT |
 | EmptyFiles | 8.20.1 | MIT |
 | JetBrains.Annotations | 2026.2.0 | MIT |
-| Meziantou.Analyzer | 3.0.303 | MIT |
+| Meziantou.Analyzer | 3.0.316 | MIT |
 | Microsoft.ApplicationInsights | 2.23.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 6.0.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 10.0.13 | MIT |
