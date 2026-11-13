@@ -4,9 +4,9 @@
     "net10.0": {
       "Meziantou.Analyzer": {
         "type": "Direct",
-        "requested": "[3.0.303, )",
-        "resolved": "3.0.303",
-        "contentHash": "IBcDi9Gq15J7F7Akw/KCVrxMsms13e7rgA6ssVhoqn+3BWDvCg3RAhzPMK8foJapDMgz5tG4cDHO/JImrnn1cw=="
+        "requested": "[3.0.339, )",
+        "resolved": "3.0.339",
+        "contentHash": "oB0KVTYO0CkqscgCp2Fce6Q4G9gIVvVy39ULQLU2eOJfTNWS63Lk7VZbgerx6XMdUxPC4bprv87r8f7EZfp6gQ=="
       },
       "Microsoft.Z3": {
         "type": "Direct",
@@ -38,14 +38,14 @@
       "equiv.core": {
         "type": "Project",
         "dependencies": {
-          "Sarif.Sdk": "[5.8.0, )"
+          "Sarif.Sdk": "[5.9.0, )"
         }
       },
       "Sarif.Sdk": {
         "type": "CentralTransitive",
-        "requested": "[5.8.0, )",
-        "resolved": "5.8.0",
-        "contentHash": "7twZQxftcjxGvz2sQ9DysTdMFAm0PWGYzHibN+O25TenFDtJtCWxKLTzoWtX+jXx7biFh9+QzOqh3WwEJtSu8A==",
+        "requested": "[5.9.0, )",
+        "resolved": "5.9.0",
+        "contentHash": "9eA7ZL6HtDzJyAhCMKw8O/v8ZnEcH2Lg9p5LUtr/6jCbJO0arGGqb9QKkKOuctgcUADe5tUcvGxuecFooc7OPA==",
         "dependencies": {
           "Microsoft.Diagnostics.Tracing.EventRegister": "1.1.28",
           "Microsoft.Diagnostics.Tracing.TraceEvent": "3.1.3",
