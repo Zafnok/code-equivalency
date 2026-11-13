@@ -14,7 +14,7 @@ These packages are linked into the `equiv` binaries and container image, so thei
 | Component | Version | Licence |
 |---|---|---|
 | Humanizer.Core | 2.14.1 | MIT |
-| ICSharpCode.Decompiler | 11.1.0.9782 | MIT |
+| ICSharpCode.Decompiler | 11.2.0.10050 | MIT |
 | Microsoft.Build.Framework | 17.11.48 | MIT |
 | Microsoft.CodeAnalysis.Analyzers | 5.9.0-1.26328.17 | MIT |
 | Microsoft.CodeAnalysis.CSharp | 5.9.0 | MIT |
@@ -51,7 +51,7 @@ These packages are linked into the `equiv` binaries and container image, so thei
 | ModelContextProtocol.Core | 2.2.0 | Apache-2.0 |
 | Newtonsoft.Json | 13.0.3 | MIT |
 | Newtonsoft.Json | 13.0.4 | MIT |
-| Sarif.Sdk | 5.8.0 | MIT |
+| Sarif.Sdk | 5.9.0 | MIT |
 | System.CommandLine | 2.0.12 | MIT |
 | System.Composition | 10.0.1 | MIT |
 | System.Composition.AttributedModel | 10.0.1 | MIT |
@@ -102,7 +102,7 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | DiffEngine | 20.8.2 | MIT |
 | EmptyFiles | 8.20.1 | MIT |
 | JetBrains.Annotations | 2026.2.0 | MIT |
-| Meziantou.Analyzer | 3.0.303 | MIT |
+| Meziantou.Analyzer | 3.0.339 | MIT |
 | Microsoft.ApplicationInsights | 2.23.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 6.0.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 10.0.13 | MIT |
@@ -111,10 +111,10 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | Microsoft.Extensions.Configuration.Json | 10.0.12 | MIT |
 | Microsoft.Extensions.FileProviders.Physical | 10.0.12 | MIT |
 | Microsoft.Extensions.FileSystemGlobbing | 10.0.12 | MIT |
-| Microsoft.Testing.Extensions.Telemetry | 2.5.1 | MIT |
-| Microsoft.Testing.Extensions.TrxReport.Abstractions | 2.5.1 | MIT |
-| Microsoft.Testing.Platform | 2.5.1 | MIT |
-| Microsoft.Testing.Platform.MSBuild | 2.5.1 | MIT |
+| Microsoft.Testing.Extensions.Telemetry | 2.5.2 | MIT |
+| Microsoft.Testing.Extensions.TrxReport.Abstractions | 2.5.2 | MIT |
+| Microsoft.Testing.Platform | 2.5.2 | MIT |
+| Microsoft.Testing.Platform.MSBuild | 2.5.2 | MIT |
 | Microsoft.Win32.Registry | 5.0.0 | MIT |
 | MinVer | 8.0.0 | Apache-2.0 |
 | Mono.Cecil | 0.11.6 | MIT |
@@ -127,17 +127,17 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | Verify.XunitV3 | 33.3.4 | MIT |
 | coverlet.MTP | 10.1.0 | MIT |
 | dotnet-sonarscanner | 11.3.0 | LGPL-3.0 |
-| dotnet-stryker | 5.0.0 | Apache-2.0 |
+| dotnet-stryker | 5.1.0 | Apache-2.0 |
 | nuget-license | 4.0.18 | Apache-2.0 |
-| xunit.analyzers | 2.2.0 | Apache-2.0 |
-| xunit.v3 | 4.0.2 | Apache-2.0 |
-| xunit.v3.assert | 4.0.2 | Apache-2.0 |
-| xunit.v3.common | 4.0.2 | Apache-2.0 |
-| xunit.v3.core.mtp-v2 | 4.0.2 | Apache-2.0 |
-| xunit.v3.extensibility.core | 4.0.2 | Apache-2.0 |
-| xunit.v3.mtp-v2 | 4.0.2 | Apache-2.0 |
-| xunit.v3.runner.common | 4.0.2 | Apache-2.0 |
-| xunit.v3.runner.inproc.console | 4.0.2 | Apache-2.0 |
+| xunit.analyzers | 2.3.0 | Apache-2.0 |
+| xunit.v3 | 4.0.3 | Apache-2.0 |
+| xunit.v3.assert | 4.0.3 | Apache-2.0 |
+| xunit.v3.common | 4.0.3 | Apache-2.0 |
+| xunit.v3.core.mtp-v2 | 4.0.3 | Apache-2.0 |
+| xunit.v3.extensibility.core | 4.0.3 | Apache-2.0 |
+| xunit.v3.mtp-v2 | 4.0.3 | Apache-2.0 |
+| xunit.v3.runner.common | 4.0.3 | Apache-2.0 |
+| xunit.v3.runner.inproc.console | 4.0.3 | Apache-2.0 |
 
 ## Samples only — not redistributed
 
