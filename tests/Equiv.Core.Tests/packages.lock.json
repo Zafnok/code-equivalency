@@ -16,9 +16,9 @@
       },
       "CsCheck": {
         "type": "Direct",
-        "requested": "[4.9.1, )",
-        "resolved": "4.9.1",
-        "contentHash": "rEmuFiG19sF8U4Ef/S79cu9HW4pUGraoCTkmYs0z7SvsGqGAVO3wCjxQPS0KQvPa1g2/w1wBbnAP6cDZKBFEcA=="
+        "requested": "[5.0.1, )",
+        "resolved": "5.0.1",
+        "contentHash": "dsWFbaTkF7SdDlKTbnZWeQbNRLVKubJmIRJ/xDPR/ydMTLL1iSHMna9JfJqyC22siT7Tq9tKiQZyfxUOl9RRzA=="
       },
       "Meziantou.Analyzer": {
         "type": "Direct",
@@ -341,7 +341,7 @@
       "equiv.testsupport": {
         "type": "Project",
         "dependencies": {
-          "CsCheck": "[4.9.1, )",
+          "CsCheck": "[5.0.1, )",
           "Equiv.Core": "[1.0.0, )",
           "Equiv.Corpus.Seeder": "[1.0.0, )"
         }
