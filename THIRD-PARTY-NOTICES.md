@@ -97,7 +97,7 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | Component | Version | Licence |
 |---|---|---|
 | Argon | 0.38.2 | MIT |
-| CsCheck | 4.9.1 | Apache-2.0 |
+| CsCheck | 5.0.1 | Apache-2.0 |
 | CycleDetection | 2.0.0 | MIT |
 | DiffEngine | 20.8.2 | MIT |
 | EmptyFiles | 8.20.1 | MIT |
@@ -126,7 +126,7 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | Verify | 33.3.4 | MIT |
 | Verify.XunitV3 | 33.3.4 | MIT |
 | coverlet.MTP | 10.1.0 | MIT |
-| dotnet-sonarscanner | 11.3.0 | LGPL-3.0 |
+| dotnet-sonarscanner | 12.1.0 | LGPL-3.0 |
 | dotnet-stryker | 5.0.0 | Apache-2.0 |
 | nuget-license | 4.0.18 | Apache-2.0 |
 | xunit.analyzers | 2.2.0 | Apache-2.0 |
